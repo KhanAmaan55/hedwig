@@ -1,0 +1,66 @@
+/**
+ * Design tokens.
+ *
+ * Every colour, space and type value in the app resolves to one of these. Components
+ * never hardcode a hex value — that is what makes theming and the later character skins
+ * a data change rather than a refactor (docs/18 §3).
+ */
+
+:root {
+  color-scheme: dark light;
+
+  /* surfaces */
+  --colour-bg: #0e1116;
+  --colour-surface: #151a21;
+  --colour-surface-raised: #1b222b;
+  --colour-border: #262e39;
+
+  /* text */
+  --colour-text: #e6edf3;
+  --colour-text-muted: #8b98a8;
+  --colour-text-faint: #5c6875;
+
+  /* state */
+  --colour-ok: #3fb950;
+  --colour-warn: #d29922;
+  --colour-error: #f85149;
+  --colour-accent: #58a6ff;
+
+  /* spacing — a 4px scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  --radius: 8px;
+  --radius-sm: 4px;
+
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --colour-bg: #ffffff;
+    --colour-surface: #f6f8fa;
+    --colour-surface-raised: #ffffff;
+    --colour-border: #d8dee4;
+
+    --colour-text: #1f2328;
+    --colour-text-muted: #59636e;
+    --colour-text-faint: #818b98;
+
+    --colour-ok: #1a7f37;
+    --colour-warn: #9a6700;
+    --colour-error: #cf222e;
+    --colour-accent: #0969da;
+  }
+}
