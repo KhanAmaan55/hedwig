@@ -1,0 +1,37 @@
+# Development only — see docker/Dockerfile.dev for why there is no production compose file.
+#
+#   docker compose -f docker/compose.dev.yml up backend      # run the backend
+#   docker compose -f docker/compose.dev.yml run --rm test    # run the suite on Linux
+#
+# The desktop shell still runs on the host and talks to http://127.0.0.1:8730.
+
+name: hedwig-dev
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    ports:
+      - "127.0.0.1:8730:8730" # loopback only, exactly as on the host (docs/21 §4)
+    volumes:
+      - hedwig-data:/data
+      - ../src:/app/src:ro # source is mounted so --reload works
+      - ../config:/app/config:ro
+    environment:
+      HEDWIG_RUNTIME__ENVIRONMENT: development
+      HEDWIG_LOGGING__LEVEL: debug
+    command: ["hedwig", "serve", "--reload"]
+
+  test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    profiles: ["tools"]
+    environment:
+      HEDWIG_RUNTIME__ENVIRONMENT: test
+      HEDWIG_LOGGING__FILE_ENABLED: "false"
+    command: ["pytest"]
+
+volumes:
+  hedwig-data:

@@ -1,0 +1,15 @@
+# Documentation is prose and hand-aligned tables. A code formatter must not rewrite it.
+docs/
+*.md
+
+# Generated and vendored
+dist/
+frontend/dist/
+node_modules/
+.venv/
+uv.lock
+package-lock.json
+coverage/
+
+# Python is formatted by ruff
+*.py

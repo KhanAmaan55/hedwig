@@ -1,0 +1,35 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+*.egg-info/
+
+# Node / build output
+node_modules/
+dist/
+frontend/dist/
+*.tsbuildinfo
+
+# Local configuration and secrets
+.env
+.env.local
+config/hedwig.local.toml
+
+# HEDWIG runtime data — never in version control. This is the user's memory.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

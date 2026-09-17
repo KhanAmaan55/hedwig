@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Nothing in CI may read a developer's machine configuration.
+  HEDWIG_RUNTIME__ENVIRONMENT: test
+  HEDWIG_LOGGING__FILE_ENABLED: "false"
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen --extra dev
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Types
+        run: uv run mypy
+
+      - name: Tests
+        run: uv run pytest --cov --cov-report=term-missing
+
+  frontend:
+    name: Frontend and shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Format
+        run: npx prettier --check .
+
+      - name: Lint
+        run: npm run lint:node
+
+      - name: Types
+        run: npx tsc -p electron/tsconfig.json --noEmit && npm --workspace frontend run typecheck
+
+      - name: Tests
+        run: npm run test:frontend
+
+      - name: Build
+        run: npm run build
+
+  architecture:
+    name: Architecture rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - run: uv sync --frozen --extra dev
+
+      # The contracts in .importlinter and the conventions in tests/architecture are the
+      # architecture. They are checked separately so a failure here reads as what it is:
+      # a design violation, not a broken test.
+      - name: Import contracts and conventions
+        run: uv run pytest -m architecture -v

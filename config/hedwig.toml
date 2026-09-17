@@ -1,0 +1,30 @@
+# HEDWIG — checked-in defaults.
+#
+# Machine-specific overrides go in config/hedwig.local.toml (gitignored), which wins over
+# this file. Environment variables (HEDWIG_SECTION__KEY) win over both. See docs/02 §7.
+#
+# Secrets never belong in this file, or in any file. They come from the OS keychain.
+
+[runtime]
+environment = "development"
+data_dir = "~/.hedwig"
+
+[api]
+host = "127.0.0.1"
+port = 8730
+cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+[llm]
+provider = "ollama"
+endpoint = "http://127.0.0.1:11434"
+conversational = "llama3.1:8b"   # user-facing prose
+utility = "qwen2.5:3b"           # planning, appraisal, extraction — high volume
+embedding = "nomic-embed-text"
+max_attempts = 3
+max_concurrent = 1               # Ollama serves one model at a time efficiently
+
+[logging]
+level = "info"
+format = "console"      # "json" in production; files are always JSON
+file_enabled = true
+redact_content = true   # message text and memory content stay out of logs

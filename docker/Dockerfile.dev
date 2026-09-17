@@ -1,0 +1,49 @@
+# Development only.
+#
+# docs/17 §10 is explicit about this: HEDWIG is a local-first desktop application, and a
+# companion in a container that cannot see the user's documents is missing half the point.
+# This image exists for one job — running the backend and its test suite in a clean,
+# reproducible environment (CI parity, "works on my machine" arguments, a Linux check from
+# a Mac). It is not a deployment target, and there is no production image.
+#
+# The desktop shell and the frontend are not containerised at all; Electron needs the
+# user's display, and the frontend is built into the app.
+
+FROM python:3.12-slim-bookworm
+
+# uv, pinned by digest-free tag: reproducibility comes from uv.lock, not from this line.
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
+# Dependency layer: unchanged lockfile means an unchanged layer.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --extra dev --no-install-project
+
+COPY src/ ./src/
+COPY config/ ./config/
+COPY tests/ ./tests/
+COPY .importlinter ./
+RUN uv sync --frozen --extra dev
+
+# Non-root: nothing here needs privileges.
+RUN useradd --create-home --uid 1000 hedwig \
+    && mkdir -p /data && chown -R hedwig:hedwig /data /app
+USER hedwig
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    HEDWIG_RUNTIME__DATA_DIR=/data \
+    HEDWIG_API__HOST=0.0.0.0 \
+    HEDWIG_LOGGING__FORMAT=json
+
+EXPOSE 8730
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8730/v1/health', timeout=2).status == 200 else 1)"
+
+CMD ["hedwig", "serve"]

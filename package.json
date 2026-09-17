@@ -1,0 +1,44 @@
+{
+  "name": "hedwig-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HEDWIG desktop shell — Electron main process and development orchestration",
+  "license": "MIT",
+  "main": "dist/electron/main.js",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "setup": "uv sync --extra dev && npm install",
+    "dev": "node scripts/dev.mjs",
+    "dev:backend": "uv run hedwig serve --reload --log-level debug",
+    "dev:frontend": "npm --workspace frontend run dev",
+    "dev:electron": "npm run build:electron && electron .",
+    "build": "npm run build:electron && npm run build:frontend",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build:frontend": "npm --workspace frontend run build",
+    "lint": "npm run lint:node && npm run lint:python",
+    "lint:node": "eslint . && npm --workspace frontend run lint",
+    "lint:python": "uv run ruff check . && uv run mypy",
+    "format": "prettier --write . && uv run ruff format .",
+    "format:check": "prettier --check . && uv run ruff format --check .",
+    "typecheck": "tsc -p electron/tsconfig.json --noEmit && npm --workspace frontend run typecheck && uv run mypy",
+    "test": "npm run test:python && npm run test:frontend",
+    "test:python": "uv run pytest",
+    "test:frontend": "npm --workspace frontend run test",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test",
+    "clean": "rm -rf dist frontend/dist node_modules frontend/node_modules .venv"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "electron": "^43.2.0",
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.65.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

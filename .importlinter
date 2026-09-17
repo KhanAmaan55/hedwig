@@ -1,0 +1,53 @@
+; Architecture rules, enforced in CI (docs/02 §4.1).
+;
+; Layers are added here as the milestones that create them land. Removing a layer or
+; loosening a contract requires an ADR — these rules are the architecture, not a style
+; preference.
+
+[importlinter]
+root_package = hedwig
+include_external_packages = True
+
+[importlinter:contract:layers]
+name = Dependencies point downward only
+type = layers
+layers =
+    hedwig.cli
+    hedwig.api
+    hedwig.wiring
+    hedwig.brain
+    hedwig.sessions
+    hedwig.memory
+    hedwig.llm
+    hedwig.core
+; `sessions` is a Layer 2 module (docs/02 §5.1), above `memory`: it owns the conversation
+; log, and memory depends on nothing in it — the recent-turn window is a query that lives
+; with the table it reads (docs/26 §4).
+; Milestones to come insert their layers between `api` and `core`, in this order:
+;     hedwig.emotion | hedwig.personality | hedwig.curiosity | hedwig.reflection | hedwig.goals
+;     hedwig.retrieval | hedwig.knowledge | hedwig.tools
+;     hedwig.embeddings | hedwig.fetch | hedwig.speech | hedwig.expression
+; `wiring` sits above core and below the edge: it is the only module allowed to name
+; concrete implementations.
+
+[importlinter:contract:core-is-independent]
+name = The platform layer knows nothing about the domain
+type = forbidden
+source_modules =
+    hedwig.core
+forbidden_modules =
+    hedwig.api
+    hedwig.cli
+    hedwig.wiring
+
+[importlinter:contract:ports-are-pure]
+name = Port definitions depend on nothing but the standard library
+type = forbidden
+source_modules =
+    hedwig.core.ports
+forbidden_modules =
+    fastapi
+    pydantic
+    pydantic_settings
+    uvicorn
+    typer
