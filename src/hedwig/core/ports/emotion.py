@@ -191,6 +191,9 @@ class EmotionSnapshot:
     arousal: float
     behaviour: BehaviourParameters
     baselines: Mapping[str, float] = field(default_factory=dict)
+    reference: str | None = None
+    """The `emotion_history` row this reading corresponds to. A reply can then be joined
+    back to the mood that produced it (docs/05 §5.1, `message.emotion_ref`)."""
 
 
 @runtime_checkable

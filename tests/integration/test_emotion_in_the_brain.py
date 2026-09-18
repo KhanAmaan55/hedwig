@@ -329,3 +329,121 @@ async def test_health_reports_emotion_as_a_service(api: AsyncClient) -> None:
     body = (await api.get("/v1/health")).json()
 
     assert "emotion" in body["subsystems"]
+
+
+# =========================================================================
+# The loop closes both ways (docs/07 §14)
+# =========================================================================
+
+
+async def test_the_turn_records_the_mood_it_ran_under(hedwig: Container) -> None:
+    """docs/05 §5.1's `emotion_ref`. A mood timeline beside a conversation is decoration;
+    one joined to the messages it produced is an explanation."""
+    await hedwig.brain.run_turn("something worth recording", session_id="s20")
+
+    row = hedwig.database.query_one(
+        "SELECT emotion_ref FROM message WHERE session_id = 's20' AND role = 'hedwig'"
+    )
+    assert row is not None
+    assert row["emotion_ref"] is not None
+
+    history = hedwig.database.query_one(
+        "SELECT dims FROM emotion_history WHERE id = ?", (row["emotion_ref"],)
+    )
+    assert history is not None, "the reply points at a mood that does not exist"
+
+
+async def test_the_guards_verdict_reaches_emotion(hedwig: Container, clock: FakeClock) -> None:
+    """A blocked input is a thing that happened, and cognition should see it (docs/07 §14.3)."""
+    from dataclasses import replace
+
+    from hedwig.brain import Brain, PermissiveGuard
+
+    guarded = Brain(
+        replace(
+            hedwig.brain.collaborators,
+            guard=PermissiveGuard(blocked_phrases=frozenset({"forbidden"})),
+        )
+    )
+    await guarded.run_turn("this contains a forbidden phrase", session_id="s21")
+    await hedwig.bus.drain()
+    clock.advance(seconds=30)
+    await _engine(hedwig).tick()
+
+    rows = hedwig.database.query(
+        "SELECT rationale FROM appraisal WHERE event_type = 'perception.input.appraised'"
+    )
+    assert rows, "the guard's verdict never reached the emotion engine"
+    assert "blocked" in str(rows[0]["rationale"])
+
+
+async def test_the_appraisal_of_an_input_never_records_its_text(hedwig: Container) -> None:
+    """The one place content could reach emotion through a side door."""
+    secret = "my passport number is 123456789"
+    await hedwig.brain.run_turn(secret, session_id="s22")
+    await hedwig.bus.drain()
+
+    rows = hedwig.database.query("SELECT * FROM event WHERE type = 'perception.input.appraised'")
+    assert rows
+    for row in rows:
+        assert secret not in str(dict(row))
+
+
+async def test_emotion_events_are_correlated_with_the_turn_that_caused_them(
+    hedwig: Container, clock: FakeClock
+) -> None:
+    """docs/04 §6: a turn, the memories it formed and the mood it produced share one id.
+
+    Without this the Mind Inspector's causal graph breaks at exactly the link it exists to
+    draw.
+    """
+    final = await hedwig.brain.run_turn("thanks, that was genuinely helpful", session_id="s23")
+    await hedwig.bus.drain()
+    clock.advance(seconds=30)
+    await _engine(hedwig).tick()
+    await hedwig.bus.drain()
+
+    rows = hedwig.database.query(
+        "SELECT correlation_id FROM event WHERE type = 'emotion.state.changed' "
+        "ORDER BY occurred_at DESC LIMIT 1"
+    )
+    assert rows
+    assert rows[0]["correlation_id"] == final["correlation_id"]
+
+
+async def test_the_turn_event_carries_the_mood(hedwig: Container) -> None:
+    await hedwig.brain.run_turn("an ordinary message", session_id="s24")
+    await hedwig.bus.drain()
+
+    row = hedwig.database.query_one(
+        "SELECT payload FROM event WHERE type = 'conversation.turn.completed' "
+        "ORDER BY occurred_at DESC LIMIT 1"
+    )
+    assert row is not None
+    assert "happiness" in str(row["payload"])
+
+
+async def test_directives_reach_the_composed_context_in_a_real_turn(hedwig: Container) -> None:
+    """Emotion produces them, the brain carries them, the responder renders them."""
+    _set(hedwig, curiosity=0.95, trust=0.9, happiness=0.9, confidence=0.9, energy=0.5, stress=0.0)
+
+    final = await hedwig.brain.run_turn("tell me about the harbour", session_id="s25")
+
+    assert final["response_context"].directives
+    assert final["response_context"].directives == final["policy"].style
+    assert final["response_context"].mood["curiosity"] == pytest.approx(0.95)
+
+
+async def test_the_mood_reaching_a_turn_is_the_one_the_next_turn_reports(
+    hedwig: Container, clock: FakeClock
+) -> None:
+    """The one-turn emotional latency of docs/02 §5, stated as a test rather than a note:
+    what a turn does affects the *next* turn, not itself."""
+    first = await hedwig.brain.run_turn("thanks, that was perfect", session_id="s26")
+    await hedwig.bus.drain()
+    clock.advance(seconds=30)
+    await _engine(hedwig).tick()
+
+    second = await hedwig.brain.run_turn("and another thing", session_id="s26")
+
+    assert second["mind"].mood != first["mind"].mood

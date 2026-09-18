@@ -76,6 +76,7 @@ of what exists in code. Update it as each milestone lands.
 | Conversation log: sessions, messages, turns, working-set log | **Implemented** (M6) | `src/hedwig/sessions/` |
 | The turn/memory loop: capture, reinforcement, persistence | **Implemented** (M6) | [26](26-turn-memory-loop.md) |
 | Emotion: six dimensions, deterministic transitions, behaviour bindings | **Implemented** (M7, [ADR-0019](adr/0019-the-emotion-vector-is-six-named-drives.md)) | `src/hedwig/emotion/` |
+| Cognition in the turn: snapshot, directives, correlated events, `emotion_ref` | **Implemented** (M8) | [07](07-brain-langgraph-workflow.md) §14 |
 | API: `/v1/mind/emotion` and its history | **Implemented** (M7) | `src/hedwig/api/routes/mind.py` |
 | Brain collaborators: guard, responder, tools | **Stubbed, and they say so** | `src/hedwig/brain/stubs.py` |
 | API: `/v1/health`, error envelope, correlation middleware | **Implemented** (M1) | `src/hedwig/api/` |

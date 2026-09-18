@@ -105,8 +105,14 @@ class Conversation(Protocol):
         text: str,
         trust: TrustTier = TrustTier.USER,
         meta: Mapping[str, Any] | None = None,
+        emotion_ref: str | None = None,
     ) -> int:
-        """Append a message and return its sequence number within the session."""
+        """Append a message and return its sequence number within the session.
+
+        `emotion_ref` is the `emotion_history` row the reply was produced under, so a mood
+        timeline can be joined to the messages it shaped rather than sitting beside them
+        (docs/05 §5.1).
+        """
         ...
 
     async def window(self, session_id: str, *, limit: int | None = None) -> Sequence[WindowMessage]:

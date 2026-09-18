@@ -20,6 +20,7 @@ from collections.abc import Sequence
 
 from hedwig.core.ports.brain import (
     ContextItem,
+    MindSnapshot,
     RecalledContext,
     ResponseContext,
     ToolOutcome,
@@ -34,6 +35,7 @@ def assemble_context(
     window: Sequence[WindowMessage] = (),
     recalled: RecalledContext | None = None,
     outcomes: Sequence[ToolOutcome] = (),
+    mind: MindSnapshot | None = None,
 ) -> ResponseContext:
     """Assemble everything the responder may see.
 
@@ -49,8 +51,12 @@ def assemble_context(
        scan for untrusted material is a responder that will one day forget (docs/13 §6).
     4. **Citations are what was shown**, which is the set that gets reinforced afterwards
        (docs/06 §7.2).
+    5. **Cognition travels with the context.** The directives are produced by emotion and
+       rendered by the responder; carrying them here means the responder reads one object,
+       and means a test can assert they arrived (docs/07 §14.4).
     """
     recalled = recalled or RecalledContext()
+    mind = mind or MindSnapshot()
 
     items = tuple(recalled.items)
     window_messages = tuple(window)
@@ -67,6 +73,8 @@ def assemble_context(
         dropped=recalled.dropped,
         cited_memory_ids=citations(items),
         has_untrusted=any(item.trust is TrustTier.UNTRUSTED for item in items),
+        directives=mind.directives,
+        mood=dict(mind.mood),
     )
 
 

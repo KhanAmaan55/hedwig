@@ -23,6 +23,7 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from hedwig.core.ports.brain import (
     Intent,
+    MindSnapshot,
     Plan,
     RecalledContext,
     ResponseContext,
@@ -64,7 +65,12 @@ class TurnState(TypedDict, total=False):
     safety_flags: Annotated[list[str], operator.add]
 
     # -- cognition (read once, never mutated within the turn) --------------
+    mind: MindSnapshot
+    """The mood the turn is running under, and what it means. Immutable for the whole turn
+    (docs/07 §4 rule 2, §14.2)."""
     policy: TurnPolicy
+    """`mind.policy`, unpacked once so later nodes read a policy rather than reaching
+    through a snapshot for one."""
 
     # -- recall ------------------------------------------------------------
     queries: list[str]
@@ -134,8 +140,10 @@ def outcomes_of(state: TurnState) -> Sequence[ToolOutcome]:
 def summarise(state: TurnState) -> dict[str, Any]:
     """A compact view for logs and tests. Never the reply text itself (docs/19 §4)."""
     plan = state.get("plan")
+    mind = state.get("mind")
     return {
         "turn_id": state.get("turn_id"),
+        "valence": round(mind.valence, 3) if mind else None,
         "status": state.get("status"),
         "intent": plan.intent.value if plan else None,
         "iterations": state.get("iteration", 0),

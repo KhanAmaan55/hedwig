@@ -90,6 +90,10 @@ class EmotionEngine:
         self._zones: dict[Dimension, str] = {d: _zone_of(self._state[d]) for d in DIMENSIONS}
         self._subscription: Any = None
         self._ticks = 0
+        self._reference: str | None = None
+        """The last history row written. Handed to a turn so the reply it produces can
+        be joined back to the mood it was produced under (docs/07 §14.2)."""
+        self._correlation: str | None = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -139,6 +143,7 @@ class EmotionEngine:
             arousal=self._state.arousal,
             behaviour=behaviour(self._state),
             baselines=self._baselines.as_dict(energy=energy_baseline),
+            reference=self._reference,
         )
 
     async def history(
@@ -199,14 +204,18 @@ class EmotionEngine:
                 correlation_id=item.correlation_id,
             )
 
+        # A coalesced tick genuinely has more than one cause; naming the most recent is a
+        # reporting convention, not a claim (docs/07 §14.5).
+        self._correlation = batch[-1].correlation_id if batch else None
+
         moved = previous.distance(state)
         if moved >= self._min_publish_delta or cause == "restore":
             resolved = cause or ("appraisal" if batch else "decay")
-            self._store.record_history(
+            self._reference = self._store.record_history(
                 state,
                 cause=resolved,
                 appraisal_id=appraisal_id,
-                correlation_id=batch[-1].correlation_id if batch else None,
+                correlation_id=self._correlation,
             )
             await self._announce_state(state, cause=resolved)
 
@@ -267,7 +276,10 @@ class EmotionEngine:
         if self._bus is None:
             return
         try:
-            await self._bus.emit(type_, payload, source="emotion")
+            # Correlated to the turn that moved the mood, so a turn, the memories it formed
+            # and the state it produced share one id — which is the whole of docs/04 §6
+            # made real for cognition.
+            await self._bus.emit(type_, payload, source="emotion", correlation_id=self._correlation)
         except Exception as error:  # a mood must not be able to break the process
             logger.warning("could not announce", extra=fields(type=type_, error=str(error)))
 

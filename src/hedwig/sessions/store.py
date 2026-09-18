@@ -88,6 +88,7 @@ class SqliteSessionStore:
         text: str,
         trust: TrustTier = TrustTier.USER,
         meta: Mapping[str, Any] | None = None,
+        emotion_ref: str | None = None,
     ) -> int:
         """Append a message and return its sequence number.
 
@@ -103,7 +104,7 @@ class SqliteSessionStore:
             seq = int(row["seq"]) + 1
             connection.execute(
                 "INSERT INTO message (id, session_id, seq, role, text, trust_tier, "
-                "token_count, meta, created_at) VALUES (?,?,?,?,?,?,?,?,?) "
+                "token_count, meta, emotion_ref, created_at) VALUES (?,?,?,?,?,?,?,?,?,?) "
                 "ON CONFLICT (id) DO NOTHING",
                 (
                     message_id,
@@ -114,6 +115,7 @@ class SqliteSessionStore:
                     trust.value,
                     estimate_tokens(text),
                     json.dumps(dict(meta)) if meta else None,
+                    emotion_ref,
                     now,
                 ),
             )

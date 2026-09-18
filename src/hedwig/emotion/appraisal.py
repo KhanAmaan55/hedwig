@@ -115,6 +115,32 @@ def appraise_turn_completed(payload: Mapping[str, Any]) -> Appraisal:
     return NEUTRAL
 
 
+def appraise_input_appraised(payload: Mapping[str, Any]) -> Appraisal:
+    """How the guard read an input (docs/07 §14.3).
+
+    The verdict, never the content — this rule sees `allowed`, `injection_score` and a list
+    of flag names, and no message text reaches it. That matters: it is the one place a
+    lexical judgement of a person could enter emotion through a side door, and this is the
+    door being closed deliberately rather than by omission.
+
+    Refusing correctly is *consistent with* the identity core, so a blocked input raises
+    `norm_fit`. It is the injection attempt itself that costs, not the act of declining it.
+    """
+    allowed = bool(payload.get("allowed", True))
+    injection = max(0.0, min(1.0, _number(payload.get("injection_score"))))
+
+    if allowed and injection < 0.5:
+        return NEUTRAL
+
+    return Appraisal(
+        norm_fit=0.30 if not allowed else 0.0,
+        certainty=-0.20,
+        social_valence=-0.30 * injection,
+        significance=0.7,
+        rationale="an input was blocked" if not allowed else "an input looked adversarial",
+    )
+
+
 def appraise_belief_formed(payload: Mapping[str, Any]) -> Appraisal:
     return Appraisal(novelty=0.40, certainty=0.10, rationale="a belief formed")
 
@@ -162,6 +188,7 @@ RULES: dict[str, Rule] = {
     "conversation.session.started": appraise_session_started,
     "conversation.message.received": appraise_message_received,
     "conversation.turn.completed": appraise_turn_completed,
+    "perception.input.appraised": appraise_input_appraised,
     "memory.belief.formed": appraise_belief_formed,
     "memory.entity.discovered": appraise_entity_discovered,
     "memory.episode.stored": appraise_episode_stored,

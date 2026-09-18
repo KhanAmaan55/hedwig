@@ -435,3 +435,34 @@ not respond to tone, sarcasm, frustration or warmth that is not spelled out. A u
 a terrible time politely will not move the vector. That is a real limitation, and the
 alternative is continuous sentiment analysis of a person, which needs a much better
 argument than "richer mood".
+
+
+---
+
+## 13. Connected to the turn (Milestone 8)
+
+Milestone 7 built this engine and connected it at one point: `snapshot` asked for a
+`TurnPolicy`. Milestone 8 made the connection two-way and inspectable. The design is
+[07](07-brain-langgraph-workflow.md) §14; what changed *here* is:
+
+* **The guard's verdict is an appraisal input.** `perception.input.appraised` carries
+  `allowed`, `trust`, `injection_score` and flag names — and no text. It is the only new
+  rule, and it is written so that *declining correctly raises `norm_fit`*: the injection
+  attempt is what costs, not the act of refusing it.
+* **Published events carry the correlation id** of the appraisals that moved the state, so a
+  turn and the mood it produced share one id ([04](04-communication-and-event-bus.md) §6).
+* **`EmotionSnapshot.reference`** exposes the `emotion_history` row a reading came from,
+  which is what lets a reply be stored against the mood that produced it.
+* **`MindReader.policy()` became `snapshot()`**, matching [03](03-module-contracts.md) §5.7.
+  The turn now receives the mood *and* its consequences, which is the difference between a
+  system that acts on emotion and one that can explain having done so.
+
+### 13.1 Still deliberately absent
+
+No avatar ([15](15-avatar-controller.md)). `valence` and `arousal` are in turn state and in
+the turn event, which is exactly what the expression layer will read, and that is where it
+stops.
+
+No emotion-driven routing. A stressed HEDWIG takes the same path through the graph as a calm
+one; only style and budgets differ. Routing on mood would make control flow depend on state
+that varies between runs, which ends the determinism guarantee in §10.

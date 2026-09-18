@@ -1,11 +1,11 @@
-"""The brain's `MindReader`, backed by real emotional state (docs/03 §5.7).
+"""The brain's `MindReader`, backed by real emotional state (docs/03 §5.7, docs/07 §14.2).
 
 The same seam Milestone 5 used for memory, cashed in for emotion: the `snapshot` node was
 written against a narrow port with `DefaultMindReader` behind it, and switching to real state
 is this file plus one line in `wiring.py`. `nodes.py` does not change.
 
 It is also the boundary that keeps the brain from importing the emotion module. The brain
-knows what a `TurnPolicy` is; it does not know what a mood is, and the day emotion is
+knows what a `MindSnapshot` is; it does not know what a mood is, and the day emotion is
 replaced by something else, this file is what gets rewritten.
 """
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from hedwig.core.logging import fields, get_logger
-from hedwig.core.ports.brain import TurnPolicy
+from hedwig.core.ports.brain import MindSnapshot, TurnPolicy
 from hedwig.core.ports.emotion import EmotionReader
 from hedwig.emotion.bindings import turn_policy
 
@@ -31,16 +31,31 @@ class EmotionMindReader:
     flat mood produces exactly the behaviour the system would have had without an emotion
     engine at all."""
 
-    async def policy(self) -> TurnPolicy:
-        state = await self.emotion.state()
-        policy = turn_policy(state, base=self.base)
+    async def snapshot(self) -> MindSnapshot:
+        """One read, one moment. Everything the turn will know about its own mood.
+
+        Taken as a single call rather than several, because two reads a millisecond apart
+        could disagree — and a turn whose policy came from one mood and whose recorded state
+        came from another is a turn nobody can explain afterwards.
+        """
+        reading = await self.emotion.snapshot()
+        policy = turn_policy(reading.state, base=self.base)
+
         logger.debug(
-            "turn policy from emotional state",
+            "mind snapshot",
             extra=fields(
+                valence=reading.valence,
+                arousal=reading.arousal,
                 diversity=policy.diversity,
                 max_tokens=policy.max_tokens,
-                token_budget=policy.token_budget,
                 directives=len(policy.style),
             ),
         )
-        return policy
+        return MindSnapshot(
+            policy=policy,
+            mood=reading.state.as_dict(),
+            valence=reading.valence,
+            arousal=reading.arousal,
+            directives=policy.style,
+            reference=reading.reference,
+        )

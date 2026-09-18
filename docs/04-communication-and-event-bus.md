@@ -197,6 +197,17 @@ capture from `reply.produced` to this event, where a single subscriber sees the 
 | `conversation.session.ended` | sessions | session_id, reason, turn_count | reflection (T1), relationship update |
 | `conversation.feedback.given` | api | message_id, signal (+1/-1/edit), note | personality (drift evidence), memory (reinforce) |
 
+### 5.1.1 Perception
+
+| Event | Publisher | Payload | Notable subscribers |
+|---|---|---|---|
+| `perception.input.appraised` | brain (`guard`) ✅ | allowed, trust, injection_score, flags | emotion |
+
+The verdict, never the content. docs/09 §4.2 keeps a model out of appraisal so that no
+continuous sentiment analysis of a person happens; this event is the side door that would
+otherwise reopen, and it is shut by what the payload is allowed to contain
+([07](07-brain-langgraph-workflow.md) §14.3).
+
 ### 5.2 Perception & memory
 
 | Event | Publisher | Payload | Subscribers |

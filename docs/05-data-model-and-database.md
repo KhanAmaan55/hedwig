@@ -689,7 +689,8 @@ migrations/
 ├── 0003_conversation.sql   ← M5: session, message, turn  (§5.1)
 ├── 0004_memory.sql         ← M5: episode, belief, entity, lineage, access, tombstone, FTS5
 ├── 0005_working_set.sql    ← M6: working_set_log, turn.working_set_id  (§5.1)
-└── 0006_emotion.sql        ← M7: emotion_state, emotion_history, appraisal  (§5.4)
+├── 0006_emotion.sql        ← M7: emotion_state, emotion_history, appraisal  (§5.4)
+└── 0007_message_emotion.sql ← M8: message.emotion_ref — the mood a reply was produced under
 ```
 
 Rules:

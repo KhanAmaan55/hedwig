@@ -28,6 +28,7 @@ from hedwig.brain.stubs import STUB_MARKER
 from hedwig.core.ports.brain import (
     ContextItem,
     Intent,
+    MindSnapshot,
     Plan,
     RecalledContext,
     SafetyVerdict,
@@ -449,8 +450,8 @@ async def test_a_fully_wired_brain_reports_ok() -> None:
         async def inspect(self, text: str) -> SafetyVerdict:
             return SafetyVerdict(allowed=True)
 
-        async def policy(self) -> TurnPolicy:
-            return TurnPolicy()
+        async def snapshot(self) -> MindSnapshot:
+            return MindSnapshot(policy=TurnPolicy(), mood={"happiness": 0.5})
 
         async def plan_queries(self, text: str, **kwargs: object) -> tuple[str, ...]:
             return (text,)
@@ -489,6 +490,9 @@ async def test_a_fully_wired_brain_reports_ok() -> None:
             return None
 
         async def message_received(self, **kwargs: object) -> None:
+            return None
+
+        async def input_appraised(self, verdict: object) -> None:
             return None
 
         async def reply_produced(self, **kwargs: object) -> None:

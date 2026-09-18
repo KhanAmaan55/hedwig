@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import EventBus
-from hedwig.core.ports.brain import TurnSummary
+from hedwig.core.ports.brain import SafetyVerdict, TurnSummary
 
 logger = get_logger(__name__)
 
@@ -53,6 +53,23 @@ class BusAnnouncer:
             },
         )
 
+    async def input_appraised(self, verdict: SafetyVerdict) -> None:
+        """How the guard read an input (docs/07 §14.3).
+
+        The verdict and nothing else. No message text is in this payload, which is what
+        keeps a lexical judgement of a person out of emotion — the door docs/09 §4.2 closed
+        at the front and this could otherwise have opened at the side.
+        """
+        await self._emit(
+            "perception.input.appraised",
+            {
+                "allowed": verdict.allowed,
+                "trust": verdict.trust.value,
+                "injection_score": verdict.injection_score,
+                "flags": list(verdict.flags),
+            },
+        )
+
     async def reply_produced(
         self, *, session_id: str, message_id: str, text: str, working_set_ref: str | None
     ) -> None:
@@ -84,6 +101,7 @@ class BusAnnouncer:
                 "recalled_memory_ids": list(summary.recalled_memory_ids),
                 "tool_calls": summary.tool_calls,
                 "latency_ms": round(summary.latency_ms, 3),
+                "mood": dict(summary.mood),
             },
             correlation_id=summary.correlation_id,
         )

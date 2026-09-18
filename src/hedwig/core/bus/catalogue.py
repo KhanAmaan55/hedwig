@@ -155,6 +155,12 @@ def platform_catalogue() -> EventCatalogue:
         "capture never reads back a row that finalize has not written yet (ADR-0018).",
         payload_keys={"turn_id", "session_id", "status"},
     )
+    catalogue.register(
+        "perception.input.appraised",
+        "The guard classified an input. Carries the verdict, never the content, so no "
+        "lexical judgement of a person reaches emotion through a side door (docs/07 §14.3).",
+        payload_keys={"allowed", "trust", "injection_score"},
+    )
     # Memory (docs/04 §5.2)
     catalogue.register(
         "memory.episode.stored",

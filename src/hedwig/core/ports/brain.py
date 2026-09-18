@@ -77,6 +77,37 @@ class TurnPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class MindSnapshot:
+    """Cognitive state, read once at the start of a turn (docs/07 §4, §14.2).
+
+    Both what the mood *is* and what it *means*. The policy alone was not enough: a turn
+    that receives only the consequences of a mood can act on it but cannot report it, record
+    it, or explain it afterwards — and explainability is a product feature here (ADR-0014).
+
+    Immutable for the whole turn. Emotion may move underneath; this turn keeps the reading
+    it started with, which is what stops a reply changing tone halfway through.
+    """
+
+    policy: TurnPolicy = field(default_factory=lambda: TurnPolicy())
+    mood: Mapping[str, float] = field(default_factory=dict)
+    """The dimensions as read. Empty when no emotion engine is wired, which is a legitimate
+    configuration rather than a degraded one."""
+    valence: float = 0.0
+    arousal: float = 0.0
+    directives: tuple[str, ...] = ()
+    """The behavioural directives, verbatim. Produced by emotion, carried by the brain,
+    rendered by the responder — three modules, one string, each doing what it owns."""
+    reference: str | None = None
+    """The `emotion_history` row this reading came from, so the reply can be joined back to
+    the mood that produced it (docs/05 §5.1, `message.emotion_ref`)."""
+
+    @property
+    def is_flat(self) -> bool:
+        """Whether there is any cognitive state behind this at all."""
+        return not self.mood
+
+
+@dataclass(frozen=True, slots=True)
 class ContextItem:
     """One piece of recalled material."""
 
@@ -120,6 +151,12 @@ class ResponseContext:
     """What was actually shown to the model. The input to reinforcement (docs/06 §7.2)."""
     has_untrusted: bool = False
     """Hoisted so a responder cannot forget to delimit untrusted material (docs/13 §6)."""
+    directives: tuple[str, ...] = ()
+    """How to speak, from cognition (docs/09 §6). Here rather than only on the policy so the
+    responder reads one object, and so a test can assert the directives arrived."""
+    mood: Mapping[str, float] = field(default_factory=dict)
+    """The mood this reply is being composed under. Carried for the record and the
+    inspector, not for the responder to narrate (docs/07 §14.4)."""
 
     @property
     def token_count(self) -> int:
@@ -148,6 +185,9 @@ class TurnSummary:
     recalled_memory_ids: tuple[str, ...] = ()
     tool_calls: int = 0
     latency_ms: float = 0.0
+    mood: Mapping[str, float] = field(default_factory=dict)
+    """The state the turn ran under. What makes the mood timeline joinable to the
+    conversation rather than a graph floating beside it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,12 +231,13 @@ class Guard(Protocol):
 
 @runtime_checkable
 class MindReader(Protocol):
-    """Reads cognitive state into a turn policy.
+    """Reads cognitive state for a turn (docs/03 §5.7).
 
-    Satisfied later by an adapter over `MindStateProvider` (docs/03 §5.7).
+    `snapshot` rather than `policy` because the turn needs both the reading and its
+    consequences: one call, one moment, one internally consistent turn.
     """
 
-    async def policy(self) -> TurnPolicy: ...
+    async def snapshot(self) -> MindSnapshot: ...
 
 
 @runtime_checkable
@@ -269,6 +310,14 @@ class TurnAnnouncer(Protocol):
     async def message_received(
         self, *, session_id: str, message_id: str, text: str, trust: str
     ) -> None: ...
+
+    async def input_appraised(self, verdict: SafetyVerdict) -> None:
+        """Announce how the guard read an input (docs/02 §5, docs/07 §14.3).
+
+        The verdict, never the content: an appraisal of *what was decided about* an input,
+        so no lexical judgement of a person enters emotion through a side door.
+        """
+        ...
 
     async def reply_produced(
         self, *, session_id: str, message_id: str, text: str, working_set_ref: str | None

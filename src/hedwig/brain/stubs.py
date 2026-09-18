@@ -19,6 +19,7 @@ from typing import Any
 
 from hedwig.core.ports.brain import (
     ContextItem,
+    MindSnapshot,
     Plan,
     RecalledContext,
     ResponseContext,
@@ -72,8 +73,14 @@ class DefaultMindReader:
 
     policy_value: TurnPolicy = field(default_factory=TurnPolicy)
 
-    async def policy(self) -> TurnPolicy:
-        return self.policy_value
+    async def snapshot(self) -> MindSnapshot:
+        """A flat mind: the policy, and no mood behind it.
+
+        `mood` stays empty rather than being filled with neutral numbers, because "there is
+        no emotion engine" and "the emotion engine reads 0.5 everywhere" are different
+        situations and the inspector should be able to tell them apart.
+        """
+        return MindSnapshot(policy=self.policy_value, directives=self.policy_value.style)
 
 
 @dataclass(slots=True)
@@ -184,6 +191,7 @@ class InMemoryConversation:
     messages: list[tuple[str, str, str]] = field(default_factory=list)
     turns: list[TurnRecord] = field(default_factory=list)
     working_sets: list[WorkingSetRecord] = field(default_factory=list)
+    emotion_refs: list[str] = field(default_factory=list)
     size: int = 8
 
     async def open(self, session_id: str, *, channel: str = "api") -> bool:
@@ -200,8 +208,11 @@ class InMemoryConversation:
         text: str,
         trust: MemoryTrust = MemoryTrust.USER,
         meta: Mapping[str, Any] | None = None,
+        emotion_ref: str | None = None,
     ) -> int:
         self.messages.append((session_id, role.value, text))
+        if emotion_ref:
+            self.emotion_refs.append(emotion_ref)
         return sum(1 for entry in self.messages if entry[0] == session_id)
 
     async def window(self, session_id: str, *, limit: int | None = None) -> Sequence[WindowMessage]:
@@ -239,6 +250,9 @@ class RecordingAnnouncer:
         self.events.append(
             ("message_received", {"session_id": session_id, "message_id": message_id, "text": text})
         )
+
+    async def input_appraised(self, verdict: SafetyVerdict) -> None:
+        self.events.append(("input_appraised", {"allowed": verdict.allowed}))
 
     async def reply_produced(
         self, *, session_id: str, message_id: str, text: str, working_set_ref: str | None

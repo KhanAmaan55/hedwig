@@ -1,6 +1,6 @@
 # 07 — Brain and LangGraph Workflow
 
-**Status:** Implemented; memory and the conversation log connected (Milestone 6), the model and avatar still stubbed · **Depends on:** [03](03-module-contracts.md), [06](06-memory-architecture.md) · **Depended on by:** [08](08-state-management.md), [16](16-api-structure.md)
+**Status:** Implemented; memory, the conversation log and cognition connected (Milestones 6–8), the model and avatar still stubbed · **Depends on:** [03](03-module-contracts.md), [06](06-memory-architecture.md) · **Depended on by:** [08](08-state-management.md), [16](16-api-structure.md)
 
 ---
 
@@ -67,8 +67,8 @@ stateDiagram-v2
 | Node | Calls | Reads state | Writes state | Notes |
 |---|---|---|---|---|
 | `ingest` | `sessions` | — | `session_id`, `input`, `turn_id`, `correlation_id` | Opens or resumes a session; publishes `conversation.message.received` |
-| `guard` | `guard` service | `input` | `trust_tier`, `safety_flags`, `injection_score` | Classifies the input; the only node that can route to `refuse` |
-| `snapshot` | `MindStateProvider` | — | `mind: MindSnapshot` | Taken **once** per turn: the turn is internally consistent even if emotion changes mid-flight |
+| `guard` | `guard` service | `input` | `verdict`, `safety_flags` | Classifies the input; the only node that can route to `refuse`. Publishes `perception.input.appraised` (§14.3) |
+| `snapshot` | `MindReader` | — | `mind: MindSnapshot`, `policy` | Taken **once** per turn: the turn is internally consistent even if emotion changes mid-flight |
 | `plan_queries` | `LLMProvider` (utility) | `input`, `mind` | `queries[]` | Multi-query expansion ([06](06-memory-architecture.md) §5.2) |
 | `recall` | `RetrievalEngine`, `sessions` | `queries`, `mind` | `context`, `window` | Two sources, kept apart: the window is verbatim and never charged to the retrieval budget ([06](06-memory-architecture.md) §5.1) |
 | `deliberate` | `LLMProvider` (utility), `ToolRegistry` | `input`, `working_set`, `mind`, `tool_results` | `plan`, `tool_request?`, `iteration` | Structured output: `{intent, needs_tools, tool, args, rationale}` |
@@ -406,3 +406,125 @@ The graph stopped being a closed loop. Full design and record in
 The §12.2 deviations stand unchanged: `approve` still auto-denies, and checkpoints are
 still in memory. One deviation was added — the durable spool for a `finalize` write failure
 specified in §8 is not built ([26](26-turn-memory-loop.md) §12.2).
+
+
+---
+
+## 14. Cognition in the turn (Milestone 8)
+
+Milestone 7 built the emotion engine and connected it to the graph at exactly one point:
+`snapshot` asked for a `TurnPolicy`. That is the narrowest possible connection — the turn
+received the *consequences* of a mood without ever seeing the mood — and it left four gaps
+that only became visible once something was actually on the other side of the port.
+
+### 14.1 The four gaps
+
+| Ask | What existed | What was missing |
+|---|---|---|
+| The graph **reads** emotion | `MindReader.policy() -> TurnPolicy` | §4 of this document has always specified `mind: MindSnapshot` in turn state. Without it nothing can report, record, or explain the mood a reply was produced under — the state was readable and not *inspectable*. |
+| The graph **updates** emotion | Emotion subscribes to `conversation.*` | The **guard's verdict never reached emotion**. It is the one structured reading the graph makes of an input, and [02](02-system-architecture.md) §5 draws it as `perception.input.appraised`. An injection attempt moved nothing. |
+| Emotion **influences prompts** | `TurnPolicy.style` carried directives | They never reached `ResponseContext`, which *is* the definition of "what the responder sees" ([26](26-turn-memory-loop.md) §5). The influence existed and nothing asserted it arrived. |
+| The graph **exposes** emotion events | `emotion.state.changed`, `emotion.threshold.crossed` | **No correlation id.** Emotion events were orphaned from the turn that caused them, so the causal chain in [04](04-communication-and-event-bus.md) §6 broke at precisely the link the Mind Inspector exists to draw. |
+
+### 14.2 One read, one snapshot
+
+```python
+@dataclass(frozen=True, slots=True)
+class MindSnapshot:
+    policy: TurnPolicy          # what it means for this turn
+    mood: Mapping[str, float]   # the six dimensions, as read
+    valence: float              # derived (09 §3.2)
+    arousal: float
+    directives: tuple[str, ...] # the behavioural directives, verbatim
+    reference: str | None       # the emotion_history row this reading came from
+```
+
+`MindReader.policy()` becomes `MindReader.snapshot()`, which is what
+[03](03-module-contracts.md) §5.7 specified all along. Still **one read per turn**: a reply
+cannot change tone halfway through, and now it can also *say* which tone it had.
+
+`reference` is the piece that makes the mood durable rather than momentary. It is the
+`emotion_history` id the reading came from, it travels to `finalize`, and it is written to
+`message.emotion_ref` — the column [05](05-data-model-and-database.md) §5.1 has always
+described as "state when produced" and which nothing has ever written.
+
+### 14.3 The guard's verdict is an appraisal
+
+```mermaid
+graph LR
+    G["guard"] -->|"verdict"| A["perception.input.appraised"]
+    A -.->|"bus"| E["emotion rules"]
+    E --> N["next turn's snapshot"]
+```
+
+The verdict carries `allowed`, `trust`, `injection_score` and `flags` — no text. A blocked
+input appraises as `norm_fit +0.3` (declining correctly is consistent with the identity
+core) and `certainty −0.2`; a high injection score appraises as `social_valence −0.3`.
+
+Two properties this must keep, both asserted by test:
+
+1. **The appraisal is of the verdict, not of the content.** No message text enters the
+   event, so no lexical judgement of a person leaks in through the side door that
+   [09](09-emotion-engine.md) §4.2 closed at the front.
+2. **It reaches the *next* turn, not this one.** The snapshot is already taken. That is the
+   deliberate one-turn emotional latency of [02](02-system-architecture.md) §5, and making
+   it immediate would mean re-reading cognition mid-turn.
+
+### 14.4 Directives reach the context
+
+`assemble_context` takes the snapshot and puts `directives` and `mood` into
+`ResponseContext`. The responder then reads one object rather than two, and the test that
+matters — *a high-curiosity mood produces a context containing a follow-up directive* — can
+be written without a model.
+
+This does not move prompt *content* into the brain (§1). The directive strings are produced
+by emotion ([09](09-emotion-engine.md) §6); the brain carries them; the responder renders
+them. Three modules, one string, each doing the thing it owns.
+
+### 14.5 Correlation
+
+Emotion publishes with the correlation id of the appraisals that moved it. A turn, the
+memories it formed, and the mood it produced now share one id, which is the whole of
+[04](04-communication-and-event-bus.md) §6 made real for cognition.
+
+Where a tick coalesces appraisals from several turns, the id of the most recent contributing
+appraisal is used — the same rule the history row already follows. A coalesced tick genuinely
+has more than one cause, and picking the latest is a reporting convention, not a claim.
+
+### 14.6 What is deliberately not built
+
+**No avatar.** `express` still writes a semantic string and nothing consumes it. `valence`
+and `arousal` are now in state and in the turn event, which is exactly what
+[15](15-avatar-controller.md) §3 will read — and that is where it stops.
+
+**No emotion-driven routing.** No node routes on mood. A stressed HEDWIG takes the same path
+through the graph as a calm one; only the style and the budgets differ. Routing on mood
+would make the control flow depend on state that varies between runs, which is the end of
+the determinism test in [09](09-emotion-engine.md) §10 and of reproducible turns generally.
+
+### 14.7 Implementation record
+
+| Piece | Where |
+|---|---|
+| `MindSnapshot`, `MindReader.snapshot()` | `core/ports/brain.py` |
+| The snapshot node, the guard announcement | `brain/nodes.py` |
+| Directives into the response context | `brain/context.py` |
+| `perception.input.appraised` | `brain/announcer.py`, `core/bus/catalogue.py` |
+| The verdict rule | `emotion/appraisal.py` |
+| Correlated emotion events, history reference | `emotion/engine.py` |
+| The mind reader | `emotion/mind.py` |
+| `message.emotion_ref` | `migrations/0007_message_emotion.sql` |
+| Tests | `tests/unit/test_brain_cognition.py`, `tests/integration/test_emotion_in_the_brain.py` |
+
+673 tests pass; `ruff`, `mypy --strict` and the three `import-linter` contracts are clean.
+
+Verified on a real database: a reply row joins through `emotion_ref` to the
+`emotion_history` row that produced it; `emotion.state.changed` carries the `correlation_id`
+of the turn that moved it; `conversation.turn.completed` carries the six dimensions; and the
+directives in `ResponseContext` are the same tuple as `TurnPolicy.style`.
+
+**One behaviour worth knowing:** an ordinary allowed input produces *no* appraisal at all.
+`perception.input.appraised` is published on every turn, and the rule returns neutral unless
+the input was blocked or scored as adversarial. A turn being unremarkable is not an
+emotional event, and a rule that fired on every message would drown the signal it exists to
+carry.

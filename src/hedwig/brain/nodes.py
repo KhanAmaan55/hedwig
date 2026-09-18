@@ -27,6 +27,7 @@ from hedwig.core.ports.brain import (
     Guard,
     Intent,
     MindReader,
+    MindSnapshot,
     Plan,
     Planner,
     RecalledContext,
@@ -116,8 +117,15 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
         )
 
     async def guard(state: TurnState) -> TurnState:
-        """Classify the input. The only node that can divert the turn (docs/07 §3.2)."""
+        """Classify the input. The only node that can divert the turn (docs/07 §3.2).
+
+        The verdict is also announced, because it is the one structured reading the graph
+        makes of an input and cognition should see it (docs/07 §14.3). It reaches the *next*
+        turn, not this one — the snapshot is already taken, which is the deliberate one-turn
+        emotional latency of docs/02 §5.
+        """
         verdict = await deps.guard.inspect(state.get("input", ""))
+        await deps.announcer.input_appraised(verdict)
         return TurnState(
             verdict=verdict,
             safety_flags=list(verdict.flags),
@@ -129,8 +137,18 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
 
         Emotion may change mid-flight; this turn keeps the reading it started with, which
         removes a whole class of "why did the tone shift halfway through?" (docs/07 §4).
+
+        `policy` is stored alongside `mind` rather than derived from it at each use: the
+        policy is what every later node actually reads, and unpacking it once here keeps
+        those nodes from reaching through a snapshot to get at it.
         """
-        return TurnState(policy=await deps.mind.policy(), visited=["snapshot"])
+        mind = await deps.mind.snapshot()
+        return TurnState(
+            mind=mind,
+            policy=mind.policy,
+            visited=["snapshot"],
+            metrics={"valence": mind.valence, "arousal": mind.arousal},
+        )
 
     async def plan_queries(state: TurnState) -> TurnState:
         policy = state.get("policy") or TurnPolicy()
@@ -221,6 +239,7 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
             window=state.get("window") or [],
             recalled=state.get("context") or RecalledContext(),
             outcomes=outcomes_of(state),
+            mind=state.get("mind"),
         )
         reply = await deps.responder.compose(
             text=state.get("input", ""),
@@ -278,6 +297,7 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
         never has to read back a row `finalize` has not written yet (ADR-0018).
         """
         context = state.get("response_context") or ResponseContext()
+        mind = state.get("mind") or MindSnapshot()
         plan = state.get("plan")
         started = (state.get("metrics") or {}).get("started_monotonic", time.monotonic())
 
@@ -293,6 +313,7 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
                 recalled_memory_ids=context.cited_memory_ids,
                 tool_calls=len(outcomes_of(state)),
                 latency_ms=(time.monotonic() - started) * 1000,
+                mood=dict(mind.mood),
             )
         )
         return TurnState(visited=["learn"])
@@ -361,6 +382,7 @@ async def _persist(deps: Collaborators, state: TurnState, *, status: str, elapse
                 text=reply,
                 trust=TrustTier.SELF,
                 meta={"status": status, "intent": _intent_of(state)},
+                emotion_ref=(state.get("mind") or MindSnapshot()).reference,
             )
 
         # Recorded whenever retrieval ran, including when it found nothing: "we searched
