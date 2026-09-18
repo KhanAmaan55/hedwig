@@ -16,6 +16,7 @@ layers =
     hedwig.api
     hedwig.wiring
     hedwig.brain
+    hedwig.emotion
     hedwig.sessions
     hedwig.memory
     hedwig.llm
@@ -24,7 +25,7 @@ layers =
 ; log, and memory depends on nothing in it — the recent-turn window is a query that lives
 ; with the table it reads (docs/26 §4).
 ; Milestones to come insert their layers between `api` and `core`, in this order:
-;     hedwig.emotion | hedwig.personality | hedwig.curiosity | hedwig.reflection | hedwig.goals
+;     hedwig.personality | hedwig.curiosity | hedwig.reflection | hedwig.goals
 ;     hedwig.retrieval | hedwig.knowledge | hedwig.tools
 ;     hedwig.embeddings | hedwig.fetch | hedwig.speech | hedwig.expression
 ; `wiring` sits above core and below the edge: it is the only module allowed to name

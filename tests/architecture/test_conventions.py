@@ -145,6 +145,7 @@ def test_every_source_file_belongs_to_a_documented_layer() -> None:
         "core",
         "llm",
         "sessions",
+        "emotion",
         "memory",
         "brain",
         "api",
@@ -160,3 +161,81 @@ def test_every_source_file_belongs_to_a_documented_layer() -> None:
     assert not unplaced, (
         f"New packages {sorted(unplaced)} must be added to .importlinter and docs/02 §5.1"
     )
+
+
+# --- emotion: INV-3, checked against the document --------------------------------
+
+
+def _binding_table() -> list[tuple[str, str]]:
+    """Rows of the behaviour-binding table in docs/09 §6, as (dimension, binding)."""
+    text = (REPO_ROOT / "docs" / "09-emotion-engine.md").read_text(encoding="utf-8")
+    section = text.split("## 6. Behaviour bindings", 1)[1].split("### 6.1", 1)[0]
+
+    rows: list[tuple[str, str]] = []
+    for line in section.splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        rows.append((cells[0].strip("`"), cells[1]))
+    return rows
+
+
+def test_every_emotional_dimension_has_a_documented_binding() -> None:
+    """INV-3, half of it: a dimension nothing reads is decoration (docs/09 §1).
+
+    Decoration is worse than nothing here, because it invites the user to believe something
+    false about what is happening inside.
+    """
+    from hedwig.core.ports.emotion import DIMENSIONS
+
+    bound = {dimension for dimension, _ in _binding_table()}
+    missing = {d.value for d in DIMENSIONS} - bound
+
+    assert not missing, f"{sorted(missing)} appear in the state vector but bind to no behaviour"
+
+
+def test_the_binding_table_names_no_dimension_that_does_not_exist() -> None:
+    """The other half: a documented binding for a dimension we removed is a lie the code
+    cannot contradict."""
+    from hedwig.core.ports.emotion import DIMENSIONS
+
+    known = {d.value for d in DIMENSIONS}
+    documented = {dimension for dimension, _ in _binding_table()}
+
+    assert documented <= known, (
+        f"docs/09 §6 binds dimensions that do not exist: {documented - known}"
+    )
+
+
+def test_every_dimension_actually_changes_the_behaviour_parameters() -> None:
+    """The document says it; this asserts the code does it."""
+    from hedwig.core.ports.emotion import DIMENSIONS, EmotionState
+    from hedwig.emotion.bindings import behaviour
+
+    for dimension in DIMENSIONS:
+        low = behaviour(EmotionState().with_dimension(dimension, 0.0))
+        high = behaviour(EmotionState().with_dimension(dimension, 1.0))
+        assert low != high, f"{dimension.value} is documented as bound but changes nothing"
+
+
+def test_the_emotion_module_contains_no_model_call() -> None:
+    """docs/09 §4.2: rules only, no model, ever.
+
+    A grep rather than an abstraction, because the thing being prevented is someone adding
+    an import in a hurry — and this fails the build when they do.
+    """
+    emotion_sources = sorted((SOURCE_ROOT / "emotion").rglob("*.py"))
+    assert emotion_sources
+
+    for path in emotion_sources:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                assert not node.module.startswith("hedwig.llm"), (
+                    f"{path.name} imports the language model gateway; docs/09 §4.2 forbids it"
+                )
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert not alias.name.startswith("hedwig.llm"), (
+                        f"{path.name} imports the language model gateway; docs/09 §4.2 forbids it"
+                    )

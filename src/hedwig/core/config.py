@@ -46,6 +46,11 @@ class RuntimeConfig(BaseModel):
 
     environment: Environment = "development"
     data_dir: Path = Path("~/.hedwig")
+    timezone: str = ""
+    """IANA name, e.g. "Europe/Lisbon". Empty means the system's local zone, which is the
+    right default for an application that runs on the user's own machine. Read by the
+    circadian energy baseline (docs/09 §5.3): a companion whose energy tracks UTC while the
+    user is in Lisbon is worse than one with no circadian model at all."""
 
     @field_validator("data_dir")
     @classmethod
@@ -179,6 +184,24 @@ class MemoryConfig(BaseModel):
     max_captures_per_turn: Annotated[int, Field(ge=1, le=50)] = 5
 
 
+class EmotionConfig(BaseModel):
+    """The emotion engine (docs/09).
+
+    Only the operational knobs are here. The mapping matrix, the half-lives, the caps and
+    the floors are *not* configurable: changing what HEDWIG's mood responds to is an
+    architectural change with an ADR, not a setting someone flips (docs/08 §8).
+    """
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    enabled: bool = True
+    tick_seconds: Annotated[float, Field(gt=0, le=600)] = 30.0
+    """The coalescing interval (docs/09 §5.2). Per-event updates would storm the guarded
+    row and make the avatar twitch; 30 s of emotional latency is imperceptible."""
+    min_publish_delta: Annotated[float, Field(ge=0, le=1)] = 0.02
+    """L1 movement below which nothing is published, so idle hours stay quiet."""
+
+
 class PluginsConfig(BaseModel):
     """The plugin allowlist (ADR-0016).
 
@@ -213,6 +236,7 @@ class Config(BaseSettings):
     scheduler: SchedulerConfig = SchedulerConfig()
     llm: LlmConfig = LlmConfig()
     memory: MemoryConfig = MemoryConfig()
+    emotion: EmotionConfig = EmotionConfig()
     plugins: PluginsConfig = PluginsConfig()
 
     @property

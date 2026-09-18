@@ -38,6 +38,17 @@ from hedwig.core.ports.config import (
     ConfigManager,
     ConfigSource,
 )
+from hedwig.core.ports.emotion import (
+    DIMENSIONS,
+    NEUTRAL,
+    Appraisal,
+    AppraisalDimension,
+    BehaviourParameters,
+    Dimension,
+    EmotionReader,
+    EmotionSnapshot,
+    EmotionState,
+)
 from hedwig.core.ports.event_bus import (
     Delivery,
     Event,
@@ -108,6 +119,11 @@ from hedwig.core.ports.state import (
 from hedwig.core.ports.storage import BlobRef, FileStorage, StorageStats
 
 __all__ = [
+    "DIMENSIONS",
+    "NEUTRAL",
+    "Appraisal",
+    "AppraisalDimension",
+    "BehaviourParameters",
     "BlobRef",
     "Clock",
     "ConfigChange",
@@ -118,6 +134,10 @@ __all__ = [
     "ContextItem",
     "Conversation",
     "Delivery",
+    "Dimension",
+    "EmotionReader",
+    "EmotionSnapshot",
+    "EmotionState",
     "Event",
     "EventBus",
     "EventHandler",

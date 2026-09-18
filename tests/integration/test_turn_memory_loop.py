@@ -270,8 +270,9 @@ async def test_a_memory_that_is_recalled_and_shown_grows_stronger(hedwig: Contai
 
 
 async def test_health_reports_the_loop_as_connected(hedwig: Container) -> None:
-    """`recaller`, `conversation` and `announcer` are no longer stubs. What remains stubbed
-    is stated rather than hidden (docs/07 §12.2)."""
+    """`recaller`, `conversation` and `announcer` are no longer stubs — and as of the
+    emotion engine, neither is `mind`. What remains stubbed is stated rather than hidden
+    (docs/07 §12.2)."""
     health = await hedwig.brain.health()
 
-    assert set(health.detail["stubbed"]) == {"guard", "mind", "responder", "tools"}
+    assert set(health.detail["stubbed"]) == {"guard", "responder", "tools"}

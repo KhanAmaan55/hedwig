@@ -390,11 +390,13 @@ CREATE TABLE embedding_state (
 
 ```sql
 -- Current emotional state: exactly one row, guarded.
+-- Six dimensions, fixed by ADR-0019. `valence` and `arousal` are derived in code and
+-- deliberately not stored: a stored summary can disagree with what it summarises.
 CREATE TABLE emotion_state (
     id           INTEGER PRIMARY KEY CHECK (id = 1),
-    valence REAL NOT NULL, arousal REAL NOT NULL, curiosity REAL NOT NULL,
-    happiness REAL NOT NULL, confidence REAL NOT NULL, stress REAL NOT NULL,
-    energy REAL NOT NULL, warmth REAL NOT NULL,
+    happiness REAL NOT NULL, trust REAL NOT NULL, curiosity REAL NOT NULL,
+    confidence REAL NOT NULL, energy REAL NOT NULL, stress REAL NOT NULL,
+    ticked_at    TEXT NOT NULL,     -- when the integrator last ran; decay measures from here
     updated_at   TEXT NOT NULL,
     version      INTEGER NOT NULL DEFAULT 1
 );
@@ -686,7 +688,8 @@ migrations/
 ├── 0002_llm.sql            ← M3: model registry, generation log
 ├── 0003_conversation.sql   ← M5: session, message, turn  (§5.1)
 ├── 0004_memory.sql         ← M5: episode, belief, entity, lineage, access, tombstone, FTS5
-└── 0005_working_set.sql    ← M6: working_set_log, turn.working_set_id  (§5.1)
+├── 0005_working_set.sql    ← M6: working_set_log, turn.working_set_id  (§5.1)
+└── 0006_emotion.sql        ← M7: emotion_state, emotion_history, appraisal  (§5.4)
 ```
 
 Rules:

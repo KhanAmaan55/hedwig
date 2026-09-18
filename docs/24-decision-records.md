@@ -35,6 +35,7 @@ expensive to reverse, or (c) is one a future reader would otherwise assume was a
 | [0016](adr/0016-in-tree-plugin-loader.md) | In-tree plugin loader, not an extension surface | Accepted |
 | [0017](adr/0017-service-registry-not-a-service-locator.md) | The service registry manages lifecycle, not lookup | Accepted |
 | [0018](adr/0018-capture-reads-the-event-not-the-turn-row.md) | Capture reads the event, not the turn row | Accepted |
+| [0019](adr/0019-the-emotion-vector-is-six-named-drives.md) | The emotion vector is six named drives, and trust is one of them | Accepted |
 
 ---
 

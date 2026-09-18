@@ -34,6 +34,7 @@ from hedwig.core.ports import (
     Clock,
     ConfigManager,
     Conversation,
+    EmotionReader,
     EventBus,
     FileStorage,
     LLMProvider,
@@ -42,11 +43,13 @@ from hedwig.core.ports import (
     StateManager,
     TaskScheduler,
 )
+from hedwig.core.ports.scheduler import Priority, TaskSpec
 from hedwig.core.registry import InMemoryServiceRegistry
-from hedwig.core.scheduler import AsyncTaskScheduler
+from hedwig.core.scheduler import AsyncTaskScheduler, IntervalTrigger
 from hedwig.core.state import SqliteStateManager
 from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
+from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
 from hedwig.llm import LanguageModelGateway, OllamaProvider, RecordedProvider
 from hedwig.memory import (
     SUBSCRIPTION,
@@ -88,6 +91,7 @@ class Container:
     scheduler: TaskScheduler
     llm: LanguageModelGateway
     sessions: Conversation
+    emotion: EmotionReader | None
     memory: SqliteMemoryStore
     retrieval: HybridRetrieval
     capture: CaptureService
@@ -220,13 +224,38 @@ def build_container(
         forget_threshold=config.memory.forget_threshold,
     )
 
-    # 8. The turn graph, now a closed loop: it observes into the conversation log, recalls
+    # 8. Emotion. Deterministic, rule-driven, no model anywhere in it (docs/09 §4.2).
+    #    Optional: a user who wants a flat companion is a legitimate configuration, and
+    #    `DefaultMindReader` is exactly what a flat companion is.
+    emotion: EmotionEngine | None = None
+    if config.emotion.enabled:
+        emotion = EmotionEngine(
+            EmotionStore(database, clock=clock),
+            clock=clock,
+            bus=bus,
+            timezone=config.runtime.timezone,
+            min_publish_delta=config.emotion.min_publish_delta,
+        )
+        # The 30-second coalescing tick (docs/09 §5.2). It is a scheduled task rather than
+        # a loop of its own so it inherits catch-up, health and cancellation for free.
+        scheduler.register(
+            TaskSpec(
+                name="emotion.tick",
+                handler=emotion.tick_task,
+                trigger=IntervalTrigger(seconds=config.emotion.tick_seconds),
+                priority=Priority.MAINTENANCE,
+                description="Integrate appraisals and decay toward baseline.",
+                max_runtime_seconds=30.0,
+            )
+        )
+
+    # 9. The turn graph, now a closed loop: it observes into the conversation log, recalls
     #    from real memory, and announces what happened so memory can learn from it
     #    (docs/26 §3). Capture is a *subscriber*, not a node, so it can take its time.
     brain = Brain(
         Collaborators(
             guard=PermissiveGuard(),
-            mind=DefaultMindReader(),
+            mind=EmotionMindReader(emotion) if emotion else DefaultMindReader(),
             recaller=MemoryRecaller(retrieval, store=memory),
             planner=RulePlanner(),
             responder=StubResponder(),
@@ -241,7 +270,7 @@ def build_container(
         name=SUBSCRIPTION,
     )
 
-    # 9. Lifecycle. The registry starts these in dependency order and stops them in reverse.
+    # 10. Lifecycle. The registry starts these in dependency order and stops them in reverse.
     registry = InMemoryServiceRegistry()
     registry.register("config", config_manager)
     registry.register("bus", bus, depends_on=("config",))
@@ -255,9 +284,11 @@ def build_container(
     registry.register("sessions", sessions, depends_on=("bus",))
     registry.register("memory", memory, depends_on=("bus",))
     registry.register("maintenance", maintenance, depends_on=("memory",), critical=False)
+    if emotion is not None:
+        registry.register("emotion", emotion, depends_on=("bus",), critical=False)
     registry.register("brain", brain, depends_on=("bus", "memory", "sessions"), critical=False)
 
-    # 10. Plugins last: they register services of their own against the registry above.
+    # 11. Plugins last: they register services of their own against the registry above.
     plugins = AllowlistPluginLoader(
         config.plugins.enabled,
         config=config,
@@ -280,6 +311,7 @@ def build_container(
         scheduler=scheduler,
         llm=llm,
         sessions=sessions,
+        emotion=emotion,
         memory=memory,
         retrieval=retrieval,
         capture=capture,

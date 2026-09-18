@@ -19,7 +19,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 06 | [Memory Architecture](06-memory-architecture.md) ◐ | Memory types, capture → consolidate → retrieve → decay → forget |
 | 07 | [Brain and LangGraph Workflow](07-brain-langgraph-workflow.md) ✅ | The graph, node catalogue, subgraphs, interrupts, checkpointing |
 | 08 | [State Management](08-state-management.md) | The four state tiers, ownership rules, consistency, recovery |
-| 09 | [Emotion Engine](09-emotion-engine.md) | Appraisal, state integration, decay, behaviour bindings |
+| 09 | [Emotion Engine](09-emotion-engine.md) ✅ | Appraisal, state integration, decay, behaviour bindings |
 | 10 | [Personality Engine](10-personality-engine.md) | Trait vector, evidence-based drift, guardrails, identity core |
 | 11 | [Curiosity Engine](11-curiosity-engine.md) | Knowledge-gap detection, budgeted exploration, interruption policy |
 | 12 | [Reflection Engine](12-reflection-engine.md) | Five reflection tiers, consolidation, idempotency |
@@ -34,7 +34,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 21 | [Security, Privacy and Ethics](21-security-privacy-ethics.md) | Threat model, trust tiers, honesty invariants, export and deletion |
 | 22 | [Development Roadmap](22-roadmap.md) | Eight phases with exit criteria |
 | 23 | [Challenged Assumptions and Open Questions](23-challenged-assumptions.md) | Where the README's premises are wrong or underspecified, and the tradeoff register |
-| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0018, the decisions the rest of the docs assume |
+| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0019, the decisions the rest of the docs assume |
 | 25 | [Core Infrastructure](25-core-infrastructure.md) ✅ | What Milestone 2 built: the seven platform services, their ports, and how they start |
 | 26 | [The Turn/Memory Loop](26-turn-memory-loop.md) ✅ | What Milestone 6 built: observe → retrieve → inject → response context → store → persist |
 
@@ -75,14 +75,16 @@ of what exists in code. Update it as each milestone lands.
 | Retrieval: semantic/embedding channel | **Deferred** — [06](06-memory-architecture.md) §13.2 | — |
 | Conversation log: sessions, messages, turns, working-set log | **Implemented** (M6) | `src/hedwig/sessions/` |
 | The turn/memory loop: capture, reinforcement, persistence | **Implemented** (M6) | [26](26-turn-memory-loop.md) |
-| Brain collaborators: guard, mind, responder, tools | **Stubbed, and they say so** | `src/hedwig/brain/stubs.py` |
+| Emotion: six dimensions, deterministic transitions, behaviour bindings | **Implemented** (M7, [ADR-0019](adr/0019-the-emotion-vector-is-six-named-drives.md)) | `src/hedwig/emotion/` |
+| API: `/v1/mind/emotion` and its history | **Implemented** (M7) | `src/hedwig/api/routes/mind.py` |
+| Brain collaborators: guard, responder, tools | **Stubbed, and they say so** | `src/hedwig/brain/stubs.py` |
 | API: `/v1/health`, error envelope, correlation middleware | **Implemented** (M1) | `src/hedwig/api/` |
 | API: conversation endpoints, WebSocket, auth token | Not started | — |
 | CLI: `serve`, `config`, `models`, `version` | **Implemented** (M1, M3) | `src/hedwig/cli.py` |
 | Frontend shell + transport + health view | **Implemented** (M1) | `frontend/` |
 | Electron desktop shell | **Implemented** (M1, [ADR-0015](adr/0015-electron-desktop-shell.md)) | `electron/` |
 | Architecture tests (layering, clock seam, port purity) | **Implemented** (M1) | `tests/architecture/` |
-| Reflection, emotion, personality, curiosity, goals, tools, avatar | Not started | — |
+| Reflection, personality, curiosity, goals, tools, avatar | Not started | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

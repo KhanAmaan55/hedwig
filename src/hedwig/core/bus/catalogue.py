@@ -186,6 +186,18 @@ def platform_catalogue() -> EventCatalogue:
         "A new entity was seen for the first time.",
         payload_keys={"entity_id", "kind", "name"},
     )
+    # Emotion (docs/04 §5.3, docs/09 §5.2)
+    catalogue.register(
+        "emotion.state.changed",
+        "The emotional state moved enough to be worth saying so. Carries a full snapshot, "
+        "never a delta, so a subscriber that misses one is not left with half a state.",
+        payload_keys={"state", "cause"},
+    )
+    catalogue.register(
+        "emotion.threshold.crossed",
+        "A dimension entered or left a band. Hysteresis stops it flapping on the boundary.",
+        payload_keys={"dimension", "direction", "value"},
+    )
     catalogue.register(
         "state.document.changed",
         "A state document was written.",
