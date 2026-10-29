@@ -24,6 +24,7 @@ from hedwig.core.registry import InMemoryServiceRegistry
 from hedwig.core.state import SqliteStateManager
 from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
+from hedwig.llm.recorded import RecordedProvider, ScriptedResponse
 from hedwig.wiring import MIGRATIONS_DIR, Container, build_container
 
 
@@ -92,14 +93,33 @@ def storage(database: Database, clock: FakeClock, tmp_path: Path) -> ContentAddr
     return ContentAddressedStorage(tmp_path / "blobs", database, clock=clock)
 
 
+RECORDED_REPLY = "A recorded reply."
+
+
 @pytest.fixture
-def container(config: Config, clock: FakeClock, database: Database) -> Container:
+def llm_provider() -> RecordedProvider:
+    """The language model every container-level test talks to.
+
+    Injected, like the clock and the database, so a test can read `llm_provider.calls` and
+    see exactly what the model was sent — which is how "the LLM receives personality context"
+    is asserted rather than assumed (docs/27 §10). The default reply answers any purpose; a
+    test that needs a particular answer scripts one.
+    """
+    return RecordedProvider(default=ScriptedResponse(text=RECORDED_REPLY))
+
+
+@pytest.fixture
+def container(
+    config: Config, clock: FakeClock, database: Database, llm_provider: RecordedProvider
+) -> Container:
     """A fully wired but **not started** container.
 
     Construction and lifecycle are separate (docs/03 §6), which is exactly what lets a test
     inspect the graph without running it.
     """
-    return build_container(config, clock=clock, database=database, migrate=False)
+    return build_container(
+        config, clock=clock, database=database, migrate=False, llm_provider=llm_provider
+    )
 
 
 @pytest.fixture

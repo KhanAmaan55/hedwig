@@ -100,6 +100,14 @@ class MindSnapshot:
     reference: str | None = None
     """The `emotion_history` row this reading came from, so the reply can be joined back to
     the mood that produced it (docs/05 §5.1, `message.emotion_ref`)."""
+    identity: tuple[str, ...] = ()
+    """Who HEDWIG is (docs/10 §3.2). Not a directive, never trimmed, never counted against
+    the cap of twelve."""
+    traits: Mapping[str, float] = field(default_factory=dict)
+    """The personality as read. For the record and the inspector."""
+    relationship: Mapping[str, float] = field(default_factory=dict)
+    """The relationship with the user. Its `trust` is per-entity and is not `mood["trust"]`
+    (ADR-0020)."""
 
     @property
     def is_flat(self) -> bool:
@@ -154,6 +162,11 @@ class ResponseContext:
     directives: tuple[str, ...] = ()
     """How to speak, from cognition (docs/09 §6). Here rather than only on the policy so the
     responder reads one object, and so a test can assert the directives arrived."""
+    identity: tuple[str, ...] = ()
+    """Who is speaking (docs/10 §3.2). Rendered first, never trimmed."""
+    restated: int = 0
+    """Recalled memories left out because the window already carries them verbatim. Counted,
+    because nothing is dropped silently."""
     mood: Mapping[str, float] = field(default_factory=dict)
     """The mood this reply is being composed under. Carried for the record and the
     inspector, not for the responder to narrate (docs/07 §14.4)."""
@@ -237,7 +250,14 @@ class MindReader(Protocol):
     consequences: one call, one moment, one internally consistent turn.
     """
 
-    async def snapshot(self) -> MindSnapshot: ...
+    async def snapshot(self, *, input: str = "") -> MindSnapshot:  # noqa: A002
+        """`input` is read, never written from (docs/27 §4.3).
+
+        It lets the reading react to an explicit request in *this* turn — "be more concise"
+        is honoured in the very reply that hears it — while the durable change stays a command
+        in the owning module. The read remains read-only.
+        """
+        ...
 
 
 @runtime_checkable

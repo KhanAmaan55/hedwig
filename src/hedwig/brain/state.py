@@ -100,6 +100,9 @@ class TurnState(TypedDict, total=False):
     # -- bookkeeping -------------------------------------------------------
     status: TurnStatus
     truncation_reason: str | None
+    failure_reason: str | None
+    """Set by `compose` when there was no model to answer (docs/07 §8). The turn still ends
+    with a reply — an honest one — and `terminal_status` marks it failed."""
     visited: Annotated[list[str], operator.add]
     """Node names in execution order. The cheapest possible trace, and what the graph
     tests assert against."""

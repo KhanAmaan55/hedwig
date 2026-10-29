@@ -270,7 +270,7 @@ The table that makes INV-3 checkable. Every dimension appears at least once as a
 | `energy` | Elaboration | Style directive: fewer digressions below 0.4 | phrasing |
 | `energy` | Background work admission | `admits_background_work` is false below 0.3 | on/off |
 | `happiness` | Playfulness gate | Style directive enabling lightness above 0.65 | on/off |
-| `trust` | Address register | Style directive: personal above 0.6, plainer below 0.35 | phrasing |
+| `trust` | Address register | Style directive: "Speak in a personal, direct register." above 0.6 — rapport, never a claim of familiarity (ADR-0020) | phrasing |
 | `trust` | Assumption vs. clarification | Style directive: prefer asking over assuming below 0.35 | phrasing |
 
 Every dimension appears at least once as a *source*, and the binding-coverage test in §10
@@ -466,3 +466,28 @@ stops.
 No emotion-driven routing. A stressed HEDWIG takes the same path through the graph as a calm
 one; only style and budgets differ. Routing on mood would make control flow depend on state
 that varies between runs, which ends the determinism guarantee in §10.
+
+
+---
+
+## 14. Personality sets the baselines (Milestone 9)
+
+`personality.profile.updated` is now published, and this engine subscribes. The four inputs of
+§3's baselines are read out of the trait snapshot by `traits_from_profile` — a decision, made by
+the module that reads it, because docs/10's traits do not include two of them:
+
+| Baseline input | From |
+|---|---|
+| optimism | `warmth` |
+| agreeableness | mean of `empathy` and `patience` |
+| curiosity | `curiosity` |
+| assertiveness | `assertiveness` |
+
+Only the baselines move, never the state: decay carries the state to its new baseline at each
+dimension's half-life. With the bootstrap anchors, curiosity idles at 0.70 and trust at 0.65.
+
+One binding sentence changed. Above 0.6, emotional trust used to say *"Speak personally and
+directly, as to someone you know well"* — a claim about familiarity, which is the
+relationship's to make. The first live run put it beside the relationship's *"you are still
+getting to know this person"* in one prompt. It now says *"Speak in a personal, direct
+register."*, and a test forbids familiarity claims in any emotion directive (ADR-0020).

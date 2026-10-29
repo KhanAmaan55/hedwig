@@ -31,7 +31,7 @@ class EmotionMindReader:
     flat mood produces exactly the behaviour the system would have had without an emotion
     engine at all."""
 
-    async def snapshot(self) -> MindSnapshot:
+    async def snapshot(self, *, input: str = "") -> MindSnapshot:  # noqa: A002
         """One read, one moment. Everything the turn will know about its own mood.
 
         Taken as a single call rather than several, because two reads a millisecond apart

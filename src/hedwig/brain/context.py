@@ -58,8 +58,8 @@ def assemble_context(
     recalled = recalled or RecalledContext()
     mind = mind or MindSnapshot()
 
-    items = tuple(recalled.items)
     window_messages = tuple(window)
+    items = tuple(item for item in recalled.items if not restates(item, window_messages))
     tool_outcomes = tuple(outcomes)
 
     return ResponseContext(
@@ -68,13 +68,37 @@ def assemble_context(
         outcomes=tool_outcomes,
         window_tokens=window_tokens(window_messages),
         # Retrieval already counted and enforced its own budget; trusting its number keeps
-        # one arithmetic, not two that can disagree (docs/26 §5).
-        recalled_tokens=recalled.token_count or sum(estimate_tokens(item.text) for item in items),
+        # one arithmetic, not two that can disagree (docs/26 §5). If anything was left out as
+        # restated, its count no longer describes what is sent, so count what is.
+        recalled_tokens=(
+            sum(estimate_tokens(item.text) for item in items)
+            if len(items) != len(recalled.items) or not recalled.token_count
+            else recalled.token_count
+        ),
         dropped=recalled.dropped,
         cited_memory_ids=citations(items),
         has_untrusted=any(item.trust is TrustTier.UNTRUSTED for item in items),
         directives=mind.directives,
         mood=dict(mind.mood),
+        identity=mind.identity,
+        restated=len(recalled.items) - len(items),
+    )
+
+
+RESTATE_MIN_CHARS = 12
+"""Shorter window messages ("ok", "thanks") are too common to identify an exchange by."""
+
+
+def restates(item: ContextItem, window: Sequence[WindowMessage]) -> bool:
+    """Whether a recalled memory is an exchange the window already carries verbatim.
+
+    Capture stores each turn as an episode, and retrieval then recalls it on the very next
+    turn — while the window still holds it word for word. Sending both spends tokens twice and
+    shows the model the same exchange as two different kinds of thing. The window wins: it is
+    verbatim, ordered and never budgeted (docs/06 §5.1). Found in the first live run.
+    """
+    return any(
+        len(message.text) >= RESTATE_MIN_CHARS and message.text in item.text for message in window
     )
 
 

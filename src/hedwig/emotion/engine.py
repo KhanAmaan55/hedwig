@@ -35,7 +35,7 @@ from hedwig.core.ports.event_bus import Event
 from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.emotion.appraisal import RULES, Appraiser
 from hedwig.emotion.bindings import behaviour
-from hedwig.emotion.dynamics import Baselines, circadian_energy, integrate
+from hedwig.emotion.dynamics import Baselines, circadian_energy, integrate, traits_from_profile
 from hedwig.emotion.mapping import combine, deltas_for
 from hedwig.emotion.store import EmotionStore
 
@@ -111,6 +111,13 @@ class EmotionEngine:
                     self._on_event,
                     name=f"{SUBSCRIPTION}:{event_type}",
                 )
+            # Personality tells emotion where "normal" is. An event, not an import: the two
+            # are cognition siblings and may not import each other (ADR-0008).
+            self._bus.subscribe(
+                "personality.profile.updated",
+                self._on_profile,
+                name=f"{SUBSCRIPTION}:baselines",
+            )
             self._subscription = True
 
         now = self._clock.now()
@@ -168,6 +175,21 @@ class EmotionEngine:
                 deltas=deltas_for(appraisal),
             )
         )
+
+    async def _on_profile(self, event: Event) -> None:
+        """Move the baselines to the personality's projection (docs/09 §3, §5.1 property 3).
+
+        Only the baselines move — never the state. A curious personality *idles* curious;
+        it does not become curious the instant the profile arrives. Decay then carries the
+        state toward the new baseline at each dimension's own half-life.
+        """
+        traits = event.payload.get("traits")
+        if isinstance(traits, dict):
+            self._baselines = Baselines.from_traits(traits_from_profile(traits))
+
+    @property
+    def baselines(self) -> Baselines:
+        return self._baselines
 
     async def tick(self, *, cause: str | None = None) -> EmotionState:
         """Apply everything since the last tick, plus decay. The transition rule, applied.

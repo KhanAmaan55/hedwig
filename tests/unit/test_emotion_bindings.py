@@ -109,7 +109,17 @@ def test_low_trust_prefers_asking_over_assuming() -> None:
     familiar = style_directives(_at(Dimension.TRUST, 0.9))
 
     assert any("asking over assuming" in d for d in guarded)
-    assert any("personally" in d for d in familiar)
+    assert any("personal" in d for d in familiar)
+
+
+def test_emotion_never_claims_to_know_the_person() -> None:
+    """Familiarity is the relationship's to state (ADR-0020). The first live run sent the model
+    "as to someone you know well" (emotion) beside "you are still getting to know this person"
+    (relationship) — a contradiction in one prompt."""
+    claims = ("know well", "know them", "know this person", "you know each other", "familiar")
+    for state in _extremes():
+        for directive in style_directives(state):
+            assert not any(claim in directive.lower() for claim in claims), directive
 
 
 def test_a_flat_mood_says_almost_nothing() -> None:

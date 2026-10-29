@@ -153,10 +153,11 @@ async def test_the_window_is_the_conversation_and_not_the_memories(hedwig: Conta
 
 
 async def test_the_response_context_carries_both_sources(hedwig: Container) -> None:
-    await hedwig.brain.run_turn("the ferry timetable changed in March", session_id="sess_ctx")
+    """A memory from an *earlier* conversation, alongside this one's window."""
+    await hedwig.brain.run_turn("the ferry timetable changed in March", session_id="sess_old")
     await hedwig.bus.drain()
     second = await hedwig.brain.run_turn(
-        "what happened to the ferry timetable?", session_id="sess_ctx"
+        "what happened to the ferry timetable?", session_id="sess_new"
     )
 
     context = second["response_context"]
@@ -164,6 +165,21 @@ async def test_the_response_context_carries_both_sources(hedwig: Container) -> N
     assert context.recalled
     assert context.cited_memory_ids
     assert context.token_count == context.window_tokens + context.recalled_tokens
+
+
+async def test_the_window_is_not_repeated_as_a_memory(hedwig: Container) -> None:
+    """Within one conversation the previous turn is in the window verbatim; recalling it as a
+    memory too would send the same exchange twice (found in the first live run)."""
+    await hedwig.brain.run_turn("the ferry timetable changed in March", session_id="sess_ctx")
+    await hedwig.bus.drain()
+    second = await hedwig.brain.run_turn(
+        "what happened to the ferry timetable?", session_id="sess_ctx"
+    )
+
+    context = second["response_context"]
+    assert context.restated >= 1
+    assert not any("changed in March" in item.text for item in context.recalled)
+    assert context.recalled_tokens == sum(len(i.text) // 4 or 1 for i in context.recalled)
 
 
 # =========================================================================
@@ -270,9 +286,8 @@ async def test_a_memory_that_is_recalled_and_shown_grows_stronger(hedwig: Contai
 
 
 async def test_health_reports_the_loop_as_connected(hedwig: Container) -> None:
-    """`recaller`, `conversation` and `announcer` are no longer stubs — and as of the
-    emotion engine, neither is `mind`. What remains stubbed is stated rather than hidden
-    (docs/07 §12.2)."""
+    """`recaller`, `conversation`, `announcer`, `mind` and — as of Milestone 9 — `responder`
+    are real. What remains stubbed is stated rather than hidden (docs/07 §12.2)."""
     health = await hedwig.brain.health()
 
-    assert set(health.detail["stubbed"]) == {"guard", "responder", "tools"}
+    assert set(health.detail["stubbed"]) == {"guard", "tools"}

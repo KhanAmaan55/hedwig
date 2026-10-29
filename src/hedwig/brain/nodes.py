@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from hedwig.brain.context import assemble_context
 from hedwig.brain.routing import DEFAULT_CAPS, TurnCaps, terminal_status, truncation_reason
 from hedwig.brain.state import TurnState, outcomes_of
+from hedwig.core.errors import CapabilityUnavailableError
 from hedwig.core.ids import new_id
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports.brain import (
@@ -48,6 +49,22 @@ from hedwig.core.ports.sessions import (
 from hedwig.core.types import TrustTier
 
 logger = get_logger(__name__)
+
+FAILURE_REPLIES = {
+    "unreachable": (
+        "I can't reach my language model right now, so I can't answer properly. Your message "
+        "is saved, and nothing about it has been lost."
+    ),
+    "no_answer": (
+        "I couldn't produce an answer that time — the model returned nothing usable. Your "
+        "message is saved; asking again, or more narrowly, may help."
+    ),
+}
+"""docs/07 §8: the user is told what happened. *Which* thing happened matters: the first live
+run sent "I can't reach my language model" when the model was reachable and had spent its
+whole budget reasoning. Honest about the cause, and specific about the one thing the user
+would most want to know. Owned here, beside the truncation notice, because both are the graph
+telling the user what happened to *the turn*."""
 
 Node = Callable[[TurnState], Awaitable[TurnState]]
 
@@ -142,7 +159,7 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
         policy is what every later node actually reads, and unpacking it once here keeps
         those nodes from reaching through a snapshot to get at it.
         """
-        mind = await deps.mind.snapshot()
+        mind = await deps.mind.snapshot(input=state.get("input", ""))
         return TurnState(
             mind=mind,
             policy=mind.policy,
@@ -241,12 +258,28 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
             outcomes=outcomes_of(state),
             mind=state.get("mind"),
         )
-        reply = await deps.responder.compose(
-            text=state.get("input", ""),
-            plan=plan,
-            context=response_context,
-            policy=policy,
-        )
+        try:
+            reply = await deps.responder.compose(
+                text=state.get("input", ""),
+                plan=plan,
+                context=response_context,
+                policy=policy,
+            )
+        except CapabilityUnavailableError as error:
+            # docs/07 §8: the user is told the language faculty is down, the turn is marked
+            # failed, and nothing is raised at them. Memory does not capture a failed turn and
+            # emotion appraises it as one — both already true, so the failure is coherent
+            # across the system without anyone special-casing it.
+            logger.warning("compose failed", extra=fields(error=str(error)))
+            cause = str(error.detail.get("cause", "unreachable"))
+            return TurnState(
+                reply=FAILURE_REPLIES.get(cause, FAILURE_REPLIES["unreachable"]),
+                response_context=response_context,
+                truncation_reason=None,
+                failure_reason=f"{cause}: {error}",
+                visited=["compose"],
+                metrics={"context_tokens": float(response_context.token_count)},
+            )
         reason = truncation_reason(state, deps.caps)
         if reason:
             # A cap degrades to a reply that says so, never to an error (docs/07 §3.2).

@@ -581,3 +581,28 @@ Milestone 6 closed the loop: a finished turn now teaches memory something. Full 
   unexercised, because forming a belief from a conversation is extraction. This is the most
   visible gap after the semantic retrieval channel of §13.2, and it closes with the same
   milestone.
+
+---
+
+## 15. Implementation record (Milestone 9) — social memory
+
+§3.3's relationship model is built (`memory/relationship.py`, `migrations/0009_relationship.sql`),
+owned by memory as docs/05 places it, and read by personality through `RelationshipReader`. Full
+design: [27](27-personality-relationship-and-the-prompt.md) §5.
+
+* **The update rule is §3.3 verbatim, applied at session end**, never per turn. Per-turn inputs
+  accumulate durably in `relationship_tally`, which is deleted in the same transaction that
+  applies it — a redelivered `session.ended` finds nothing to fold in twice.
+* **Sessions now end**, after `sessions.idle_timeout_minutes` of inactivity. Before this nothing
+  ever ended a session, so the relationship could never have moved.
+* **`session_valence` uses the one definition of valence** (`EmotionState.valence` on the
+  port), so relationship and emotion cannot disagree about what a mood was.
+* **Each term moves only when its input exists.** A session with no recorded mood leaves
+  affinity alone; absent is not neutral.
+* **Trust does not move.** Its documented input is a reliability signal from corroboration,
+  which does not exist. It is implemented and tested with a supplied signal and is skipped in
+  production rather than fed a proxy. ADR-0020 keeps it apart from emotional `trust`.
+
+**One memory-quality fix from the same milestone:** a turn's own exchange was being recalled on
+the very next turn while the window still held it verbatim, so the model saw it twice.
+`assemble_context` now drops memories that restate a window message, and counts them.

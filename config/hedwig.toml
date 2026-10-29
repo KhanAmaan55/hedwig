@@ -17,7 +17,9 @@ cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 [llm]
 provider = "ollama"
 endpoint = "http://127.0.0.1:11434"
-conversational = "llama3.1:8b"   # user-facing prose
+conversational = "llama3.1:8b"   # user-facing prose. Use a non-reasoning model here: reasoning
+                                 # models (e.g. qwen3) can spend the whole reply budget thinking
+                                 # and answer nothing (docs/27 §6.2).
 utility = "qwen2.5:3b"           # planning, appraisal, extraction — high volume
 embedding = "nomic-embed-text"
 max_attempts = 3

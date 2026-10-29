@@ -108,7 +108,7 @@ def _needs_approval(state: TurnState) -> bool:
 
 def terminal_status(state: TurnState) -> TurnStatus:
     """The status a finished turn should carry."""
-    if state.get("status") == "failed":
+    if state.get("status") == "failed" or state.get("failure_reason"):
         return "failed"
     if (intent := state.get("plan")) is not None and intent.intent is Intent.REFUSE:
         return "refused"

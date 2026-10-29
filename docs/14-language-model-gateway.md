@@ -357,3 +357,28 @@ Prompt assembly (§5) is not built: it composes identity, personality, memory an
 tiers, none of which exist yet, and building it now would mean guessing at their shapes.
 The gateway takes the messages it is given. §8's daily and per-job budgets belong with the
 resource governor, which needs scheduler context; only the per-request cap is enforced here.
+
+---
+
+## 14. Implementation record (Milestone 9) — prompt assembly
+
+§5 is built (`llm/prompts.py`), for the sections that now exist: identity, directives, memory,
+untrusted memory, tool output, the conversation window and the user message. Procedures, goals
+and documents have no source yet. `llm/responder.py` uses it to make every reply a model call —
+the end of the Milestone-4 `StubResponder`. Full design:
+[27](27-personality-relationship-and-the-prompt.md) §6.
+
+* **Trimming is deterministic** in the order §5 implies — untrusted, then memory by score, then
+  tool output, then the oldest of the window — and never touches identity, directives or the
+  user's message. Every trim is counted in the request's metadata.
+* **Every request records `prompt_version`** (`compose.v1`).
+* **Templates are versioned constants, not files** — one template does not justify a loader.
+* **`llm.context_window`** (default 8192) sets the budget: window − `max_tokens` − 256.
+* **Refusals use a fixed sentence**, never the model.
+* **Failures carry a cause**: `unreachable` or `no_answer`, each with its own honest reply. The
+  first live run showed why — a reasoning model that spent its budget thinking was reported as
+  unreachable.
+
+**Reasoning models and the conversational tier.** `qwen3:4b` on Ollama 0.40.3 sometimes answers
+nothing within the reply budget; `think: false` makes it reason inside the reply instead, and
+`/no_think` is ignored. Neither is used. The default conversational model is non-reasoning.

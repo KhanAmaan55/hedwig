@@ -194,7 +194,7 @@ capture from `reply.produced` to this event, where a single subscriber sees the 
 | `conversation.message.received` | brain (`ingest`) ✅ | session_id, message_id, text, trust | emotion (appraise), telemetry, ws |
 | `conversation.reply.produced` | brain (`emit`) ✅ | session_id, message_id, text, working_set_ref | expression, goals, ws |
 | `conversation.turn.completed` | brain (`learn`) ✅ | turn_id, session_id, status, input, reply, intent, recalled_memory_ids, tool_calls, latency_ms | **memory (capture)**, reflection (T0), telemetry, curiosity (idle timer reset) |
-| `conversation.session.ended` | sessions | session_id, reason, turn_count | reflection (T1), relationship update |
+| `conversation.session.ended` | sessions ✅ | session_id, reason, turn_count | **memory (relationship update)**, reflection (T1) |
 | `conversation.feedback.given` | api | message_id, signal (+1/-1/edit), note | personality (drift evidence), memory (reinforce) |
 
 ### 5.1.1 Perception
@@ -222,15 +222,18 @@ otherwise reopen, and it is shut by what the payload is allowed to contain
 | `memory.relation.updated` | memory | entity_id, familiarity, affinity, trust | ws, personality (evidence) |
 | `memory.reembed.required` | embeddings | old_model_id, new_model_id, count | scheduler |
 
+Milestone 9 adds `memory.relationship.updated` (memory ✅: entity_id, familiarity, affinity, trust) —
+the relationship after a session was folded in.
+
 ### 5.3 Cognition
 
 | Event | Publisher | Payload | Subscribers |
 |---|---|---|---|
 | `emotion.state.changed` | emotion | **full snapshot** + cause | expression, ws, brain's next snapshot, curiosity |
 | `emotion.threshold.crossed` | emotion | dimension, direction, value | curiosity (initiative), ws |
-| `personality.profile.updated` | personality | **full snapshot** + reason | emotion (baselines), llm prompt builder, ws |
+| `personality.profile.updated` | personality ✅ | **full snapshot** (traits, version) + reason | **emotion (baselines)**, ws |
 | `personality.drift.proposed` | reflection | trait, delta, evidence_ids, rationale | personality, ws |
-| `personality.drift.rejected` | personality | trait, delta, rule_violated | ws, telemetry |
+| `personality.drift.rejected` | personality ✅ | trait, delta, rule, source | ws, telemetry |
 | `goals.goal.created` | goals | goal_id, kind, description, priority | curiosity, retrieval policy builder, ws |
 | `goals.goal.progressed` | goals | goal_id, progress, evidence | ws |
 | `goals.goal.closed` | goals | goal_id, status | reflection, emotion (satisfaction) |

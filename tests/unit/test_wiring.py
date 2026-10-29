@@ -83,7 +83,9 @@ def test_construction_does_no_work(container: Container) -> None:
         "sessions",
         "memory",
         "maintenance",
+        "relationship",
         "emotion",
+        "personality",
         "brain",
     ]
     assert container.plugins.records() == ()

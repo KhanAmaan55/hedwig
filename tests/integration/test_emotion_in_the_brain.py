@@ -20,7 +20,6 @@ from httpx import ASGITransport, AsyncClient
 from hedwig.api.app import create_app
 from hedwig.core.clock import FakeClock
 from hedwig.core.ports.emotion import Dimension, EmotionState
-from hedwig.emotion import EmotionMindReader
 from hedwig.wiring import Container
 
 
@@ -66,7 +65,13 @@ def _set(container: Container, **dimensions: float) -> None:
 async def test_the_brain_reads_real_emotional_state_without_node_changes(
     hedwig: Container,
 ) -> None:
-    assert isinstance(hedwig.brain.collaborators.mind, EmotionMindReader)
+    """With personality enabled the mind reader is the composed one; it reads emotion through
+    the port, so the brain still reads real emotional state without importing the module."""
+    from hedwig.personality import PersonaMindReader
+
+    mind = hedwig.brain.collaborators.mind
+    assert isinstance(mind, PersonaMindReader)
+    assert mind.emotion is hedwig.emotion
 
 
 async def test_curiosity_widens_retrieval_in_an_actual_turn(hedwig: Container) -> None:

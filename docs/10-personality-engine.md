@@ -1,6 +1,6 @@
 # 10 — Personality Engine
 
-**Status:** Design · **Depends on:** [08](08-state-management.md), [09](09-emotion-engine.md) · **Depended on by:** [12](12-reflection-engine.md), [14](14-language-model-gateway.md)
+**Status:** Implemented (Milestone 9) · **Depends on:** [08](08-state-management.md), [09](09-emotion-engine.md) · **Depended on by:** [12](12-reflection-engine.md), [14](14-language-model-gateway.md)
 
 ---
 
@@ -142,6 +142,11 @@ Two properties this buys us:
    something (INV-2).
 2. **Auditable.** The inspector shows the exact directives used for any reply, which makes
    "why did it answer like that?" answerable without reading prompts.
+
+**Leans** (added in Milestone 9, [27](27-personality-relationship-and-the-prompt.md) §4.5): a
+trait that has drifted ≥0.05 from its anchor without crossing a band also renders a lean
+("Be a little more formal than usual."). With bands alone, 16 of 20 single instructions from the
+bootstrap profile changed nothing observable — the prompt/state divergence of §9, built in.
 
 The 12-directive cap matters: past a dozen instructions, small local models start ignoring
 them unpredictably, and a system prompt that is silently not followed is worse than a
@@ -324,3 +329,30 @@ Owns `personality_trait`, `personality_history`, `identity_core`, and the decisi
 | Learned band boundaries | ≥1 year of adherence-eval data |
 | Multiple relationship-scoped personas | Multi-user, which is a non-goal today |
 | Trait inspection through generated examples ("here's how I'd answer at 0.2 vs 0.8") | Phase 5 inspector work; cheap and very legible |
+
+---
+
+## 12. Implementation record (Milestone 9)
+
+Built as specified, with the full design, deviations and findings in
+[27](27-personality-relationship-and-the-prompt.md). In brief:
+
+* **All ten traits, the identity core, band rendering, the seven guardrails, the
+  explicit-instruction fast path, and revert / reset / reset-all** — persisted in
+  `migrations/0008_personality.sql`, every decision recorded including refusals.
+* **Rendering gained leans** (§4 above), because bands alone made most drift invisible.
+* **§5.3's diagram is read precisely** where it was coarse: budgets clamp to what remains and
+  reject only when nothing does; both windows are half-open. The half-open window fixed a real
+  bug — a weekly proposer would have got half the documented rate.
+* **Inferred drift is complete and has no caller.** Reflection proposes; reflection does not
+  exist. Traits move today only on explicit instruction, which is detected by strict rules
+  tested for precision as hard as recall.
+* **Personality reaches the model.** Identity and directives go into the system prompt through
+  the assembler of [14](14-language-model-gateway.md) §5, built in the same milestone; the
+  generation parameters of §4 set `max_tokens` and `temperature` on every request.
+* **Emotion now reads the profile** from `personality.profile.updated`, so the trait projection
+  of [09](09-emotion-engine.md) §3 is live.
+
+Not built: snapshot restore (needs [08](08-state-management.md) §7.1), the personality
+endpoints of [16](16-api-structure.md) §4, and emotion shifting trait *bands* (§4's modulation
+arrow) — emotion's own directives are merged after personality's instead.

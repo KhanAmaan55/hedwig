@@ -67,7 +67,10 @@ def style_directives(state: EmotionState) -> tuple[str, ...]:
     if state.happiness >= PLAYFUL:
         directives.append("Lightness is welcome where it fits.")
     if state.trust >= FAMILIAR:
-        directives.append("Speak personally and directly, as to someone you know well.")
+        # Rapport, not familiarity. An earlier wording ("as to someone you know well") made a
+        # claim about the relationship, and sat in the same prompt as the relationship's own
+        # "you are still getting to know this person" — found in the first live run (ADR-0020).
+        directives.append("Speak in a personal, direct register.")
     elif state.trust < GUARDED:
         directives.append("Prefer asking over assuming; check before acting on an inference.")
 
@@ -84,14 +87,4 @@ def turn_policy(state: EmotionState, *, base: TurnPolicy | None = None) -> TurnP
     requirements are policy, never mood — a confident HEDWIG does not get to skip approval,
     and a stressed one does not get to stop using tools.
     """
-    base = base or TurnPolicy()
-    params = behaviour(state)
-
-    return TurnPolicy(
-        token_budget=int(base.token_budget * params.token_budget_multiplier),
-        max_tokens=max(1, int(base.max_tokens * params.max_tokens_multiplier)),
-        temperature=base.temperature,
-        diversity=params.diversity,
-        style=params.style,
-        allow_tools=base.allow_tools,
-    )
+    return behaviour(state).apply_to(base or TurnPolicy())

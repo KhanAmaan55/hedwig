@@ -1,6 +1,6 @@
 # 07 — Brain and LangGraph Workflow
 
-**Status:** Implemented; memory, the conversation log and cognition connected (Milestones 6–8), the model and avatar still stubbed · **Depends on:** [03](03-module-contracts.md), [06](06-memory-architecture.md) · **Depended on by:** [08](08-state-management.md), [16](16-api-structure.md)
+**Status:** Implemented; memory, conversation log, cognition and the model connected (Milestones 6–9); guard, tools and avatar still stubbed · **Depends on:** [03](03-module-contracts.md), [06](06-memory-architecture.md) · **Depended on by:** [08](08-state-management.md), [16](16-api-structure.md)
 
 ---
 
@@ -528,3 +528,22 @@ directives in `ResponseContext` are the same tuple as `TurnPolicy.style`.
 the input was blocked or scored as adversarial. A turn being unremarkable is not an
 emotional event, and a rule that fired on every message would drown the signal it exists to
 carry.
+
+
+---
+
+## 15. The model answers (Milestone 9)
+
+`StubResponder` is gone from the wiring: `compose` now calls `GatewayResponder`, which builds a
+prompt with the assembler of [14](14-language-model-gateway.md) §5 and asks the model. Details in
+[27](27-personality-relationship-and-the-prompt.md) §6. What changed in the graph:
+
+* **`compose` has a failure path**, as §8 always specified. A `CapabilityUnavailableError` from
+  the responder becomes an honest reply and a `failure_reason` in state; `terminal_status` then
+  marks the turn `failed`. Two causes, two replies — `unreachable` and `no_answer` — because the
+  first live run reported a reasoning model that answered nothing as unreachable.
+* **`snapshot` passes the input to `MindReader.snapshot(input=…)`**, read-only, so an explicit
+  "be more concise" is honoured in the reply that hears it (docs/27 §4.3).
+* **`ResponseContext` gained `identity` and `restated`**: who is speaking, and how many recalled
+  memories were left out because the window already carried them.
+* **`/v1/health` now lists `guard` and `tools` as the only stubs.**

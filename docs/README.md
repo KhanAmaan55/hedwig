@@ -20,7 +20,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 07 | [Brain and LangGraph Workflow](07-brain-langgraph-workflow.md) ✅ | The graph, node catalogue, subgraphs, interrupts, checkpointing |
 | 08 | [State Management](08-state-management.md) | The four state tiers, ownership rules, consistency, recovery |
 | 09 | [Emotion Engine](09-emotion-engine.md) ✅ | Appraisal, state integration, decay, behaviour bindings |
-| 10 | [Personality Engine](10-personality-engine.md) | Trait vector, evidence-based drift, guardrails, identity core |
+| 10 | [Personality Engine](10-personality-engine.md) ✅ | Trait vector, evidence-based drift, guardrails, identity core |
 | 11 | [Curiosity Engine](11-curiosity-engine.md) | Knowledge-gap detection, budgeted exploration, interruption policy |
 | 12 | [Reflection Engine](12-reflection-engine.md) | Five reflection tiers, consolidation, idempotency |
 | 13 | [Knowledge and Tools](13-knowledge-and-tools.md) | The four knowledge tiers, tool layer, provenance, injection defence |
@@ -34,9 +34,10 @@ depends on. After that, read whatever subsystem you are working on.
 | 21 | [Security, Privacy and Ethics](21-security-privacy-ethics.md) | Threat model, trust tiers, honesty invariants, export and deletion |
 | 22 | [Development Roadmap](22-roadmap.md) | Eight phases with exit criteria |
 | 23 | [Challenged Assumptions and Open Questions](23-challenged-assumptions.md) | Where the README's premises are wrong or underspecified, and the tradeoff register |
-| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0019, the decisions the rest of the docs assume |
+| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0020, the decisions the rest of the docs assume |
 | 25 | [Core Infrastructure](25-core-infrastructure.md) ✅ | What Milestone 2 built: the seven platform services, their ports, and how they start |
 | 26 | [The Turn/Memory Loop](26-turn-memory-loop.md) ✅ | What Milestone 6 built: observe → retrieve → inject → response context → store → persist |
+| 27 | [Personality, Relationship and the Prompt](27-personality-relationship-and-the-prompt.md) ✅ | What Milestone 9 built: traits and their brakes, the relationship, and the prompt the model receives |
 
 ## Document conventions
 
@@ -78,14 +79,17 @@ of what exists in code. Update it as each milestone lands.
 | Emotion: six dimensions, deterministic transitions, behaviour bindings | **Implemented** (M7, [ADR-0019](adr/0019-the-emotion-vector-is-six-named-drives.md)) | `src/hedwig/emotion/` |
 | Cognition in the turn: snapshot, directives, correlated events, `emotion_ref` | **Implemented** (M8) | [07](07-brain-langgraph-workflow.md) §14 |
 | API: `/v1/mind/emotion` and its history | **Implemented** (M7) | `src/hedwig/api/routes/mind.py` |
-| Brain collaborators: guard, responder, tools | **Stubbed, and they say so** | `src/hedwig/brain/stubs.py` |
+| Personality: ten traits, identity core, guarded drift, instruction fast path, reversal | **Implemented** (M9) | `src/hedwig/personality/` |
+| Relationship memory, session end | **Implemented** (M9; relationship trust frozen without a signal) | `src/hedwig/memory/relationship.py` |
+| Prompt assembly and the model-backed responder | **Implemented** (M9) | `src/hedwig/llm/prompts.py`, `responder.py` |
+| Brain collaborators: guard, tools | **Stubbed, and they say so** | `src/hedwig/brain/stubs.py` |
 | API: `/v1/health`, error envelope, correlation middleware | **Implemented** (M1) | `src/hedwig/api/` |
 | API: conversation endpoints, WebSocket, auth token | Not started | — |
 | CLI: `serve`, `config`, `models`, `version` | **Implemented** (M1, M3) | `src/hedwig/cli.py` |
 | Frontend shell + transport + health view | **Implemented** (M1) | `frontend/` |
 | Electron desktop shell | **Implemented** (M1, [ADR-0015](adr/0015-electron-desktop-shell.md)) | `electron/` |
 | Architecture tests (layering, clock seam, port purity) | **Implemented** (M1) | `tests/architecture/` |
-| Reflection, personality, curiosity, goals, tools, avatar | Not started | — |
+| Reflection, curiosity, goals, tools, avatar | Not started | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

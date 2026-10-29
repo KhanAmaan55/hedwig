@@ -24,7 +24,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from hedwig.core.logging import fields, get_logger
-from hedwig.core.ports import Clock, Health, HealthStatus
+from hedwig.core.ports import Clock, EventBus, Health, HealthStatus
+from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.core.ports.sessions import (
     MessageRole,
     TurnRecord,
@@ -38,6 +39,7 @@ from hedwig.core.types import TrustTier
 logger = get_logger(__name__)
 
 DEFAULT_WINDOW = 8
+DEFAULT_IDLE = timedelta(minutes=30)
 
 
 class SqliteSessionStore:
@@ -48,11 +50,15 @@ class SqliteSessionStore:
         database: Database,
         *,
         clock: Clock,
+        bus: EventBus | None = None,
         window_size: int = DEFAULT_WINDOW,
+        idle_for: timedelta = DEFAULT_IDLE,
     ) -> None:
         self._db = database
         self._clock = clock
+        self._bus = bus
         self._window_size = max(1, window_size)
+        self._idle_for = idle_for
 
     @property
     def window_size(self) -> int:
@@ -61,10 +67,15 @@ class SqliteSessionStore:
     # -- sessions ----------------------------------------------------------
 
     async def open(self, session_id: str, *, channel: str = "api") -> bool:
-        """Open or resume a session. Returns whether it was newly created.
+        """Open or resume a session. Returns whether a conversation *started*.
 
-        `INSERT ... ON CONFLICT DO NOTHING` rather than a read-then-write: two turns
-        starting at once on the same session must not race into two rows or an error.
+        True for a new session, and also for one that had ended and is being resumed: a
+        session id reused after an idle timeout is a new conversation, and treating it as a
+        continuation would let a long-lived id update the relationship once and never again
+        (docs/27 §5.1).
+
+        `INSERT ... ON CONFLICT DO NOTHING` rather than a read-then-write: two turns starting
+        at once on the same session must not race into two rows or an error.
         """
         now = self._now()
         changed = self._db.execute(
@@ -72,10 +83,64 @@ class SqliteSessionStore:
             "VALUES (?,?,?,?,?) ON CONFLICT (id) DO NOTHING",
             (session_id, channel, now, now, now),
         )
-        created = changed > 0
-        if created:
+        if changed > 0:
             logger.info("session opened", extra=fields(session=session_id, channel=channel))
-        return created
+            return True
+
+        resumed = self._db.execute(
+            "UPDATE session SET ended_at = NULL, end_reason = NULL, started_at = ?, "
+            "updated_at = ?, version = version + 1 WHERE id = ? AND ended_at IS NOT NULL",
+            (now, now, session_id),
+        )
+        if resumed > 0:
+            logger.info("session resumed", extra=fields(session=session_id))
+        return resumed > 0
+
+    async def end_idle(self, *, idle_for: timedelta) -> list[str]:
+        """End every open session with no activity for `idle_for`, and announce each.
+
+        The relationship model's update is applied at session end (docs/06 §3.3); until this
+        existed, sessions never ended and the relationship could never change.
+        """
+        now = self._clock.now()
+        cutoff = (now - idle_for).isoformat(timespec="milliseconds")
+        rows = self._db.query(
+            "SELECT id, turn_count FROM session WHERE ended_at IS NULL AND updated_at < ?",
+            (cutoff,),
+        )
+        ended: list[str] = []
+        for row in rows:
+            changed = self._db.execute(
+                "UPDATE session SET ended_at = ?, end_reason = 'timeout', updated_at = ?, "
+                "version = version + 1 WHERE id = ? AND ended_at IS NULL",
+                (self._now(), self._now(), row["id"]),
+            )
+            if not changed:
+                continue  # someone else ended or resumed it in between
+            session_id = str(row["id"])
+            ended.append(session_id)
+            await self._announce_end(session_id, reason="timeout", turns=int(row["turn_count"]))
+        if ended:
+            logger.info("idle sessions ended", extra=fields(count=len(ended)))
+        return ended
+
+    async def end_idle_task(self, context: TaskContext) -> TaskResult:
+        """The scheduler's entry point."""
+        ended = await self.end_idle(idle_for=self._idle_for)
+        return TaskResult(stats={"ended": len(ended)})
+
+    async def _announce_end(self, session_id: str, *, reason: str, turns: int) -> None:
+        if self._bus is None:
+            return
+        try:
+            await self._bus.emit(
+                "conversation.session.ended",
+                {"session_id": session_id, "reason": reason, "turn_count": turns},
+                source="sessions",
+                correlation_id=session_id,
+            )
+        except Exception as error:  # ending a session must not fail on a full queue
+            logger.warning("could not announce session end", extra=fields(error=str(error)))
 
     # -- messages ----------------------------------------------------------
 

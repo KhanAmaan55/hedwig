@@ -150,6 +150,12 @@ def platform_catalogue() -> EventCatalogue:
         payload_keys={"session_id", "message_id", "text"},
     )
     catalogue.register(
+        "conversation.session.ended",
+        "A session ended — today only by inactivity. The relationship update is applied "
+        "here, never per turn, because relationships do not lurch (docs/06 §3.3).",
+        payload_keys={"session_id", "reason", "turn_count"},
+    )
+    catalogue.register(
         "conversation.turn.completed",
         "A turn finished. Carries the turn's substance, not only its identifiers, so "
         "capture never reads back a row that finalize has not written yet (ADR-0018).",
@@ -191,6 +197,24 @@ def platform_catalogue() -> EventCatalogue:
         "memory.entity.discovered",
         "A new entity was seen for the first time.",
         payload_keys={"entity_id", "kind", "name"},
+    )
+    catalogue.register(
+        "memory.relationship.updated",
+        "A session was folded into the relationship with an entity (docs/06 §3.3).",
+        payload_keys={"entity_id", "familiarity", "affinity", "trust"},
+    )
+    # Personality (docs/04 §5.3, docs/10 §7)
+    catalogue.register(
+        "personality.profile.updated",
+        "The personality changed, or was announced at startup. A full snapshot; emotion "
+        "moves its baselines on it (docs/09 §3).",
+        payload_keys={"traits", "version", "reason"},
+    )
+    catalogue.register(
+        "personality.drift.rejected",
+        "A proposed trait change was refused, with the guardrail that refused it. Silent "
+        "rejection would make drift feel arbitrary (docs/10 §9).",
+        payload_keys={"trait", "delta", "rule"},
     )
     # Emotion (docs/04 §5.3, docs/09 §5.2)
     catalogue.register(

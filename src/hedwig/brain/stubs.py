@@ -73,7 +73,7 @@ class DefaultMindReader:
 
     policy_value: TurnPolicy = field(default_factory=TurnPolicy)
 
-    async def snapshot(self) -> MindSnapshot:
+    async def snapshot(self, *, input: str = "") -> MindSnapshot:  # noqa: A002
         """A flat mind: the policy, and no mood behind it.
 
         `mood` stays empty rather than being filled with neutral numbers, because "there is

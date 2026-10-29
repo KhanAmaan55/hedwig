@@ -163,6 +163,10 @@ class LlmConfig(BaseModel):
     max_concurrent: Annotated[int, Field(ge=1)] = 1
     """Ollama serves one model at a time efficiently; queueing beats thrashing."""
     max_request_tokens: int = 0
+    context_window: Annotated[int, Field(ge=1024)] = 8192
+    """The conversational model's context, in tokens. The prompt budget is this minus the
+    reply's `max_tokens` minus a safety margin (docs/14 §5.1). Set it to what the model
+    actually supports: too high and prompts are truncated by the provider, silently."""
     """0 disables the per-request cap. Daily budgets belong to the resource governor."""
 
 
@@ -202,6 +206,36 @@ class EmotionConfig(BaseModel):
     """L1 movement below which nothing is published, so idle hours stay quiet."""
 
 
+class SessionsConfig(BaseModel):
+    """Session lifecycle (docs/02 §5.1, docs/27 §5.1)."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    idle_timeout_minutes: Annotated[float, Field(gt=0)] = 30.0
+    """A session with no activity for this long ends. The relationship update runs then."""
+    reap_interval_seconds: Annotated[float, Field(gt=0)] = 300.0
+
+
+class PersonalityConfig(BaseModel):
+    """The personality engine (docs/10).
+
+    Unlike emotion's constants, the drift caps are configuration: docs/10 §8 says that if
+    users find adaptation too slow, the fix is to relax them *in config, not in code*. The
+    defaults are the documented values.
+    """
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    enabled: bool = True
+    anchors: dict[str, float] = Field(default_factory=dict)
+    """Override bootstrap anchors (docs/10 §6), e.g. `{"formality": 0.6}`. Only affects a
+    HEDWIG that has never run; a drifted trait is never reset by a config change."""
+    per_proposal_cap: Annotated[float, Field(gt=0, le=0.25)] = 0.03
+    weekly_budget: Annotated[float, Field(gt=0, le=0.25)] = 0.02
+    lifetime_cap: Annotated[float, Field(gt=0, le=1)] = 0.25
+    instruction_step: Annotated[float, Field(gt=0, le=0.25)] = 0.06
+
+
 class PluginsConfig(BaseModel):
     """The plugin allowlist (ADR-0016).
 
@@ -237,6 +271,8 @@ class Config(BaseSettings):
     llm: LlmConfig = LlmConfig()
     memory: MemoryConfig = MemoryConfig()
     emotion: EmotionConfig = EmotionConfig()
+    personality: PersonalityConfig = PersonalityConfig()
+    sessions: SessionsConfig = SessionsConfig()
     plugins: PluginsConfig = PluginsConfig()
 
     @property

@@ -17,6 +17,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
+from hedwig.core.ports.brain import TurnPolicy
+
 
 class Dimension(StrEnum):
     """The state vector (docs/09 §3).
@@ -180,6 +182,24 @@ class BehaviourParameters:
     max_tokens_multiplier: float
     style: tuple[str, ...]
     admits_background_work: bool
+
+    def apply_to(self, policy: TurnPolicy) -> TurnPolicy:
+        """Modulate a policy by this mood.
+
+        One definition, used by the emotion engine's own projection and by personality's
+        composed mind reader — so the two cannot disagree about what a mood does to a turn,
+        and personality never has to import the emotion module to apply it (ADR-0008).
+
+        What it deliberately does not touch: `allow_tools` and `temperature`. Approval is
+        policy, never mood (docs/09 §6.1); sampling temperature belongs to personality.
+        """
+        return replace(
+            policy,
+            token_budget=int(policy.token_budget * self.token_budget_multiplier),
+            max_tokens=max(1, int(policy.max_tokens * self.max_tokens_multiplier)),
+            diversity=self.diversity,
+            style=self.style,
+        )
 
 
 @dataclass(frozen=True, slots=True)

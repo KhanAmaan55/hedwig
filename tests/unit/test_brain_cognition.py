@@ -58,7 +58,7 @@ class _Mind:
         self._snapshot = snapshot
         self.reads = 0
 
-    async def snapshot(self) -> MindSnapshot:
+    async def snapshot(self, *, input: str = "") -> MindSnapshot:  # noqa: A002
         self.reads += 1
         return self._snapshot
 

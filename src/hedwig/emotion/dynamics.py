@@ -63,6 +63,34 @@ class Traits:
     assertiveness: float = 0.5
 
 
+def traits_from_profile(profile: dict[str, float]) -> Traits:
+    """Read emotion's four inputs out of a personality snapshot (docs/09 §3).
+
+    docs/09 writes its baselines in terms of optimism, agreeableness, curiosity and
+    assertiveness; docs/10's traits are chosen for rendering and do not include the first two.
+    The projection is therefore a decision, and it is made here, by the module that reads it:
+
+    * optimism      <- warmth                 a warm character idles happier
+    * agreeableness <- mean(empathy, patience) the two traits that are about the other person
+    * curiosity     <- curiosity
+    * assertiveness <- assertiveness
+
+    A trait missing from the snapshot reads as 0.5 — the same neutral value as no
+    personality at all — rather than as zero, which would be a strong claim nobody made.
+    """
+
+    def trait(name: str) -> float:
+        value = profile.get(name)
+        return float(value) if isinstance(value, int | float) else 0.5
+
+    return Traits(
+        optimism=trait("warmth"),
+        agreeableness=(trait("empathy") + trait("patience")) / 2,
+        curiosity=trait("curiosity"),
+        assertiveness=trait("assertiveness"),
+    )
+
+
 NEUTRAL_TRAITS = Traits()
 """What emotion reads until personality exists. Explicit, so the day a real profile arrives
 the difference is visible in one place."""

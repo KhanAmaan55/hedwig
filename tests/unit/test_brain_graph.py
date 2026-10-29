@@ -450,7 +450,7 @@ async def test_a_fully_wired_brain_reports_ok() -> None:
         async def inspect(self, text: str) -> SafetyVerdict:
             return SafetyVerdict(allowed=True)
 
-        async def snapshot(self) -> MindSnapshot:
+        async def snapshot(self, **kwargs: object) -> MindSnapshot:
             return MindSnapshot(policy=TurnPolicy(), mood={"happiness": 0.5})
 
         async def plan_queries(self, text: str, **kwargs: object) -> tuple[str, ...]:

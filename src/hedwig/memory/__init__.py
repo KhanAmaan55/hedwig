@@ -23,6 +23,7 @@ from hedwig.memory.capture import (
 )
 from hedwig.memory.maintenance import MaintenanceReport, MemoryMaintenance
 from hedwig.memory.recaller import MemoryRecaller
+from hedwig.memory.relationship import USER_ENTITY_ID, RelationshipMemory, SessionTally, updated
 from hedwig.memory.retrieval import HybridRetrieval
 from hedwig.memory.salience import (
     DEFAULT_HALF_LIFE_DAYS,
@@ -48,6 +49,7 @@ __all__ = [
     "FORGET_THRESHOLD",
     "REMEMBER_MARKERS",
     "SUBSCRIPTION",
+    "USER_ENTITY_ID",
     "BeliefCandidate",
     "CaptureReport",
     "CaptureService",
@@ -56,6 +58,8 @@ __all__ = [
     "MaintenanceReport",
     "MemoryMaintenance",
     "MemoryRecaller",
+    "RelationshipMemory",
+    "SessionTally",
     "SqliteMemoryStore",
     "TurnCaptureSubscriber",
     "Verdict",
@@ -69,4 +73,5 @@ __all__ = [
     "reinforcement",
     "salience_floor",
     "similarity",
+    "updated",
 ]
