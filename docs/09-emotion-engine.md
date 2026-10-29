@@ -262,15 +262,15 @@ The table that makes INV-3 checkable. Every dimension appears at least once as a
 | Dimension | Binding | Mechanism | Magnitude |
 |---|---|---|---|
 | `curiosity` | Retrieval diversity | `TurnPolicy.diversity = 0.2 + 0.5·curiosity` | λ 0.2→0.7 |
-| `curiosity` | Question rate in replies | Style directive: ask a follow-up when genuinely useful, above 0.6 | ±1 question |
-| `confidence` | Hedging | Style directive: hedge below 0.4, assert above 0.7 | phrasing |
+| `curiosity` | Question rate in replies | Style directive: ask a follow-up when genuinely useful, above max(0.6, resting + 0.10) | ±1 question |
+| `confidence` | Hedging | Style directive: hedge below min(0.4, resting − 0.10), assert above max(0.7, resting + 0.10) | phrasing |
 | `confidence` | Retrieval depth | Below 0.4, `token_budget × 1.3` — more evidence before speaking | +30 % |
 | `stress` | Response length | `max_tokens × (1 − 0.4·stress)` | up to −40 % |
 | `stress` | Language complexity | Style directive: simpler sentences above 0.6 | phrasing |
 | `energy` | Elaboration | Style directive: fewer digressions below 0.4 | phrasing |
 | `energy` | Background work admission | `admits_background_work` is false below 0.3 | on/off |
-| `happiness` | Playfulness gate | Style directive enabling lightness above 0.65 | on/off |
-| `trust` | Address register | Style directive: "Speak in a personal, direct register." above 0.6 — rapport, never a claim of familiarity (ADR-0020) | phrasing |
+| `happiness` | Playfulness gate | Style directive enabling lightness above max(0.65, resting + 0.10) | on/off |
+| `trust` | Address register | Style directive: "Speak in a personal, direct register." above max(0.6, resting + 0.10) — rapport, never a claim of familiarity (ADR-0020) | phrasing |
 | `trust` | Assumption vs. clarification | Style directive: prefer asking over assuming below 0.35 | phrasing |
 
 Every dimension appears at least once as a *source*, and the binding-coverage test in §10
@@ -491,3 +491,25 @@ directly, as to someone you know well"* — a claim about familiarity, which is 
 relationship's to make. The first live run put it beside the relationship's *"you are still
 getting to know this person"* in one prompt. It now says *"Speak in a personal, direct
 register."*, and a test forbids familiarity claims in any emotion directive (ADR-0020).
+
+
+---
+
+## 15. Mood is judged against where it rests (Milestone 9, follow-up)
+
+Once personality began setting the baselines (§14), emotion's absolute thresholds started
+firing *at rest*. HEDWIG's curiosity rests at 0.70, past the 0.60 "curious" threshold, so every
+prompt carried personality's "take an interest in their reasoning" **and** emotion's "ask a
+follow-up question" — and a live run against `gemma3:4b` ended nearly every reply with a
+question. Trust did the same, resting at 0.645 against 0.60 and repeating personality's warmth.
+
+**The rule now:** for the four dimensions whose resting point personality sets — curiosity,
+confidence, happiness, trust — a mood directive fires only past
+`max(absolute, resting + 0.10)` on the high side and `min(absolute, resting − 0.10)` on the
+low side (`MOOD_MARGIN`). At rest the mood is silent and the character speaks for itself; a
+genuinely elevated or depressed mood still speaks. Stress and energy keep absolute thresholds:
+their resting points are a constant and the clock, not a character.
+
+Without baselines (no personality, a flat companion) the thresholds are the absolute ones, as
+before. Tests pin all of it: silence at rest, speech when elevated, no speech for a half-margin
+rise, the absolute floor for a low-resting character, and the unchanged stress/energy rules.

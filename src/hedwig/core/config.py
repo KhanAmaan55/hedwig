@@ -38,6 +38,13 @@ CONFIG_DIR = REPO_ROOT / "config"
 
 Environment = Literal["development", "production", "test"]
 
+USE_LOCAL_SOURCES = True
+"""Whether `config/hedwig.local.toml` and `.env` are read.
+
+False in tests (set by `tests/conftest.py`): a developer's machine-local settings must not be
+able to change test outcomes. Before this existed, creating a local file pointing at another
+model made every fixture-built container in the suite load that model."""
+
 
 class RuntimeConfig(BaseModel):
     """Process-level settings."""
@@ -288,12 +295,20 @@ class Config(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # First source wins.
+        # First source wins. The machine-local sources are skipped when `USE_LOCAL_SOURCES`
+        # is off, which is how the test suite stays independent of the laptop it runs on.
+        local: tuple[PydanticBaseSettingsSource, ...] = (
+            (
+                dotenv_settings,
+                TomlConfigSettingsSource(settings_cls, CONFIG_DIR / "hedwig.local.toml"),
+            )
+            if USE_LOCAL_SOURCES
+            else ()
+        )
         return (
             init_settings,
             env_settings,
-            dotenv_settings,
-            TomlConfigSettingsSource(settings_cls, CONFIG_DIR / "hedwig.local.toml"),
+            *local,
             TomlConfigSettingsSource(settings_cls, CONFIG_DIR / "hedwig.toml"),
             file_secret_settings,
         )

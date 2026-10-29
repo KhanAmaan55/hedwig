@@ -71,3 +71,25 @@ def test_redacted_dump_is_json_safe() -> None:
     import json
 
     json.dumps(load_config().redacted_dump())
+
+
+def test_the_suite_does_not_read_this_machines_local_config() -> None:
+    """Regression: a developer's `config/hedwig.local.toml` changed what every fixture-built
+    container loaded. The suite must be the same on every machine."""
+    from hedwig.core.config import load_config
+
+    assert load_config().llm.conversational == "llama3.1:8b"
+
+
+def test_local_sources_are_read_outside_the_suite(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The switch must not quietly disable the feature it guards."""
+    import hedwig.core.config as config_module
+
+    (tmp_path / "hedwig.toml").write_text('[llm]\nconversational = "checked-in"\n')
+    (tmp_path / "hedwig.local.toml").write_text('[llm]\nconversational = "this-machine"\n')
+    monkeypatch.setattr(config_module, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(config_module, "USE_LOCAL_SOURCES", True)
+
+    assert config_module.load_config().llm.conversational == "this-machine"

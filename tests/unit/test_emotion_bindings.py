@@ -16,6 +16,7 @@ import pytest
 from hedwig.core.ports.brain import TurnPolicy
 from hedwig.core.ports.emotion import DIMENSIONS, Dimension, EmotionState
 from hedwig.emotion.bindings import behaviour, style_directives, turn_policy
+from hedwig.emotion.dynamics import Baselines
 
 FLAT = EmotionState()
 
@@ -189,3 +190,91 @@ def test_no_mood_changes_the_sampling_temperature() -> None:
 def test_bindings_are_a_pure_function_of_the_state() -> None:
     for state in _extremes():
         assert behaviour(state) == behaviour(state)
+
+
+# =========================================================================
+# Mood is judged against where it rests (MOOD_MARGIN)
+# =========================================================================
+
+
+def _hedwig_rest() -> tuple[EmotionState, Baselines]:
+    """HEDWIG's resting state with the bootstrap personality behind it."""
+    from hedwig.emotion.dynamics import traits_from_profile
+    from hedwig.personality.traits import SPECS
+
+    baselines = Baselines.from_traits(
+        traits_from_profile({trait.value: spec.anchor for trait, spec in SPECS.items()})
+    )
+    rest = EmotionState(
+        happiness=baselines.happiness,
+        trust=baselines.trust,
+        curiosity=baselines.curiosity,
+        confidence=baselines.confidence,
+        energy=0.5,
+        stress=baselines.stress,
+    )
+    return rest, baselines
+
+
+def test_a_mood_at_rest_says_nothing_the_character_already_says() -> None:
+    """Regression: a curious character rests at 0.70, past the old absolute 0.60, so the prompt
+    asked for follow-up questions on every turn on top of personality's own curiosity — and the
+    question rate doubled. Trust did the same against warmth."""
+
+    rest, baselines = _hedwig_rest()
+
+    assert style_directives(rest, baselines=baselines) == ()
+
+
+def test_a_genuinely_elevated_mood_still_speaks() -> None:
+    """The margin silences the resting character, not the mood."""
+    from hedwig.emotion.bindings import MOOD_MARGIN
+
+    rest, baselines = _hedwig_rest()
+    excited = rest.with_dimension(Dimension.CURIOSITY, baselines.curiosity + MOOD_MARGIN + 0.01)
+
+    assert any("follow-up" in d for d in style_directives(excited, baselines=baselines))
+
+
+def test_a_small_rise_above_rest_is_not_yet_a_mood() -> None:
+    from hedwig.emotion.bindings import MOOD_MARGIN
+
+    rest, baselines = _hedwig_rest()
+    nudged = rest.with_dimension(Dimension.CURIOSITY, baselines.curiosity + MOOD_MARGIN / 2)
+
+    assert style_directives(nudged, baselines=baselines) == ()
+
+
+def test_the_absolute_threshold_still_applies_to_a_low_resting_point() -> None:
+    """For an incurious character resting at 0.40, rising to 0.55 is above rest + margin but
+    not curious in any absolute sense. Both conditions must hold."""
+    from hedwig.emotion.dynamics import Traits
+
+    baselines = Baselines.from_traits(Traits(curiosity=0.2))  # rests at 0.40
+    state = EmotionState(curiosity=0.55)
+
+    assert not any("follow-up" in d for d in style_directives(state, baselines=baselines))
+
+
+def test_low_confidence_still_hedges_below_the_absolute_floor() -> None:
+    """The low side keeps its absolute threshold: a confident character rattled down to 0.3
+    must still say where it is unsure."""
+    rest, baselines = _hedwig_rest()
+    rattled = rest.with_dimension(Dimension.CONFIDENCE, 0.3)
+
+    assert any("unsure" in d for d in style_directives(rattled, baselines=baselines))
+
+
+def test_stress_and_energy_keep_absolute_thresholds() -> None:
+    """Their resting points are a constant and the clock, not a character."""
+    rest, baselines = _hedwig_rest()
+    strained = rest.with_dimension(Dimension.STRESS, 0.65).with_dimension(Dimension.ENERGY, 0.3)
+    directives = style_directives(strained, baselines=baselines)
+
+    assert "Use short, simple sentences." in directives
+    assert "Stay on the point; skip digressions." in directives
+
+
+def test_without_baselines_the_thresholds_are_absolute() -> None:
+    """A flat companion has no character to defer to."""
+    assert any("follow-up" in d for d in style_directives(EmotionState(curiosity=0.7)))

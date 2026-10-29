@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from hedwig.core.ports.brain import TurnPolicy
 from hedwig.core.ports.emotion import BehaviourParameters, EmotionState
+from hedwig.emotion.dynamics import Baselines
 
 # -- thresholds ------------------------------------------------------------
 CURIOUS = 0.60
@@ -29,15 +30,32 @@ FAMILIAR = 0.60
 GUARDED = 0.35
 
 
-def behaviour(state: EmotionState) -> BehaviourParameters:
-    """Everything the state implies, in one object."""
+MOOD_MARGIN = 0.10
+"""How far a dimension must move from where it rests before the *mood* says anything.
+
+Personality sets where curiosity, confidence, happiness and trust rest (docs/09 §14). Before
+this margin existed, emotion's thresholds were absolute, so a curious character resting at 0.70
+crossed the 0.60 "curious" threshold permanently — and the prompt carried personality's "take an
+interest in their reasoning" *and* emotion's "ask a follow-up question" on every turn, doubling
+the question rate. Trust did the same against warmth. A mood directive now speaks only when the
+mood departs from the character; at rest, the character speaks for itself."""
+
+
+def behaviour(state: EmotionState, *, baselines: Baselines | None = None) -> BehaviourParameters:
+    """Everything the state implies, in one object.
+
+    `baselines` is where the state rests. Without it the thresholds are the absolute ones —
+    which is right for a flat companion with no personality behind it.
+    """
     return BehaviourParameters(
         diversity=round(0.2 + 0.5 * state.curiosity, 6),
         # Low confidence buys more evidence before speaking, rather than more hedging in
         # front of the same evidence.
-        token_budget_multiplier=1.3 if state.confidence < HEDGING else 1.0,
+        token_budget_multiplier=(
+            1.3 if _below(state.confidence, HEDGING, _rest(baselines, "confidence")) else 1.0
+        ),
         max_tokens_multiplier=round(1.0 - 0.4 * state.stress, 6),
-        style=style_directives(state),
+        style=style_directives(state, baselines=baselines),
         # The governor's switch for non-urgent background work. Nothing reads it yet; it is
         # here because `energy` would otherwise have only a style binding, and a dimension
         # whose sole effect is phrasing is one step from decoration.
@@ -45,36 +63,58 @@ def behaviour(state: EmotionState) -> BehaviourParameters:
     )
 
 
-def style_directives(state: EmotionState) -> tuple[str, ...]:
+def style_directives(state: EmotionState, *, baselines: Baselines | None = None) -> tuple[str, ...]:
     """Behavioural directives for composition (docs/10 §4).
 
     Directives, not descriptions. "Be concise" is a directive; "you are feeling stressed" is
     a description, and a model handed the second one will narrate a mood at the user, which
     §9 lists as a failure mode by name.
+
+    Curiosity, confidence, happiness and trust are judged against where they *rest*
+    (`MOOD_MARGIN`): personality already renders the resting character, and saying it twice is
+    how the question rate doubled. Stress and energy keep absolute thresholds — their resting
+    points are a constant and the clock, not a character.
     """
     directives: list[str] = []
 
-    if state.curiosity >= CURIOUS:
+    if _above(state.curiosity, CURIOUS, _rest(baselines, "curiosity")):
         directives.append("Ask a follow-up question when it would genuinely help.")
-    if state.confidence >= CONFIDENT:
+    if _above(state.confidence, CONFIDENT, _rest(baselines, "confidence")):
         directives.append("State conclusions directly; do not hedge what you know.")
-    elif state.confidence < HEDGING:
+    elif _below(state.confidence, HEDGING, _rest(baselines, "confidence")):
         directives.append("Say plainly where you are unsure.")
     if state.stress >= STRESSED:
         directives.append("Use short, simple sentences.")
     if state.energy < TIRED:
         directives.append("Stay on the point; skip digressions.")
-    if state.happiness >= PLAYFUL:
+    if _above(state.happiness, PLAYFUL, _rest(baselines, "happiness")):
         directives.append("Lightness is welcome where it fits.")
-    if state.trust >= FAMILIAR:
+    if _above(state.trust, FAMILIAR, _rest(baselines, "trust")):
         # Rapport, not familiarity. An earlier wording ("as to someone you know well") made a
         # claim about the relationship, and sat in the same prompt as the relationship's own
         # "you are still getting to know this person" — found in the first live run (ADR-0020).
         directives.append("Speak in a personal, direct register.")
-    elif state.trust < GUARDED:
+    elif _below(state.trust, GUARDED, _rest(baselines, "trust")):
         directives.append("Prefer asking over assuming; check before acting on an inference.")
 
     return tuple(directives)
+
+
+def _rest(baselines: Baselines | None, name: str) -> float | None:
+    if baselines is None:
+        return None
+    value: float = getattr(baselines, name)
+    return value
+
+
+def _above(value: float, absolute: float, rest: float | None) -> bool:
+    """Elevated: past the absolute threshold *and* clearly above where it rests."""
+    return value >= (absolute if rest is None else max(absolute, rest + MOOD_MARGIN))
+
+
+def _below(value: float, absolute: float, rest: float | None) -> bool:
+    """Depressed: past the absolute threshold *and* clearly below where it rests."""
+    return value < (absolute if rest is None else min(absolute, rest - MOOD_MARGIN))
 
 
 def turn_policy(state: EmotionState, *, base: TurnPolicy | None = None) -> TurnPolicy:

@@ -352,9 +352,22 @@ frozen thereafter except for keys explicitly marked hot-reloadable.
 defaults (in code)
   ← config/hedwig.toml          (checked-in, safe defaults)
     ← config/hedwig.local.toml  (gitignored, machine-specific)
-      ← HEDWIG_* environment variables
-        ← CLI flags
+      ← .env                    (gitignored)
+        ← HEDWIG_* environment variables
+          ← CLI flags
 ```
+
+**Where to change a setting for this machine: `config/hedwig.local.toml`.** One place. The model
+names in particular are read by nothing outside the configuration — not the dev script, Docker
+or Electron — so there is no second consumer to keep in sync, and putting the same key in
+`.env` as well would only create a second place that silently wins. Environment variables are
+for one-off overrides (`HEDWIG_LLM__CONVERSATIONAL=… uv run hedwig serve`); `uv run hedwig
+config` shows the effective value of every key.
+
+**The test suite reads neither `hedwig.local.toml` nor `.env`** (`USE_LOCAL_SOURCES`, switched
+off in `tests/conftest.py`), for the same reason it strips `HEDWIG_*` variables: a developer's
+machine must not change test outcomes. Before this, creating a local file that named another
+model changed what every fixture-built container in the suite loaded.
 
 Structure (illustrative, not exhaustive):
 

@@ -148,7 +148,7 @@ class EmotionEngine:
             state=self._state,
             valence=self._state.valence,
             arousal=self._state.arousal,
-            behaviour=behaviour(self._state),
+            behaviour=behaviour(self._state, baselines=self._baselines),
             baselines=self._baselines.as_dict(energy=energy_baseline),
             reference=self._reference,
         )

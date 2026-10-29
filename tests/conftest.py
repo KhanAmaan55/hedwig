@@ -145,7 +145,13 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture(autouse=True)
 def _isolate_environment(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Stop a developer's own HEDWIG_* variables from changing test outcomes."""
+    """Stop a developer's own settings from changing test outcomes.
+
+    Their HEDWIG_* variables, their `.env`, and their `config/hedwig.local.toml` — all three are
+    machine-local, and the suite must give the same answer on every machine. The checked-in
+    `config/hedwig.toml` is still read: it is part of the product.
+    """
     for key in [key for key in os.environ if key.startswith("HEDWIG_")]:
         monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("hedwig.core.config.USE_LOCAL_SOURCES", False)
     yield

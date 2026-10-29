@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports.brain import MindSnapshot, TurnPolicy
 from hedwig.core.ports.emotion import EmotionReader
-from hedwig.emotion.bindings import turn_policy
 
 logger = get_logger(__name__)
 
@@ -39,7 +38,9 @@ class EmotionMindReader:
         came from another is a turn nobody can explain afterwards.
         """
         reading = await self.emotion.snapshot()
-        policy = turn_policy(reading.state, base=self.base)
+        # The engine's own reading, judged against where the state rests — not a
+        # recomputation from the bare state, which would lose the baselines.
+        policy = reading.behaviour.apply_to(self.base)
 
         logger.debug(
             "mind snapshot",
