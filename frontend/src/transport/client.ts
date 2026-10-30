@@ -6,7 +6,7 @@
  * knows about fetch, URLs, or the error envelope.
  */
 
-import type { ApiErrorBody, Health } from "./types";
+import type { ApiErrorBody, ExpressionIntent, Health } from "./types";
 
 /**
  * Where the backend is.
@@ -66,6 +66,11 @@ export class HedwigClient {
 
   async health(signal?: AbortSignal): Promise<Health> {
     return this.get<Health>("/v1/health", signal);
+  }
+
+  /** What the avatar should be expressing (docs/28 §4). */
+  async expression(signal?: AbortSignal): Promise<ExpressionIntent> {
+    return this.get<ExpressionIntent>("/v1/mind/expression", signal);
   }
 
   private async get<T>(path: string, signal?: AbortSignal): Promise<T> {

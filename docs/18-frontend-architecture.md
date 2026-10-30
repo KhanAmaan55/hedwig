@@ -143,6 +143,10 @@ graph LR
 | Calm mode | A user setting that flattens all expression — for people who find an animated face distracting |
 | Renderer independence | The renderer receives semantic frames only; it never reads the mind store |
 
+**Built in Milestone 10** ([28](28-avatar-mvp.md)): the VRM renderer, intent polled from
+`GET /v1/mind/expression` until the WebSocket exists, idle motion generated client-side.
+Not yet: the 2D renderer and its fallback, the `?renderer=` switch, the quality budget, calm mode.
+
 ---
 
 ## 7. Mind Inspector

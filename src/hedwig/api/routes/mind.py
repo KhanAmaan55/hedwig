@@ -1,6 +1,7 @@
 """Cognitive state, read-only (docs/16 §4).
 
-`GET /v1/mind/emotion` and its history. Read-only on purpose: writes go through the owning
+`GET /v1/mind/emotion` and its history, and `GET /v1/mind/expression` — the same state,
+resolved into what the avatar should express. Read-only on purpose: writes go through the owning
 module's own commands (docs/08 §3), and a `PATCH /mind/emotion` would be a way to make
 HEDWIG claim a mood it does not have.
 
@@ -21,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from hedwig.api.deps import ContainerDep
+from hedwig.expression import resolve
 
 router = APIRouter(prefix="/mind", tags=["mind"])
 
@@ -95,6 +97,44 @@ async def emotion_history(
     engine = _engine(container)
     entries = await engine.history(since=since, limit=limit)
     return EmotionHistory(entries=[dict(entry) for entry in entries], count=len(entries))
+
+
+class MoodRead(BaseModel):
+    valence: float = Field(description="-1..1")
+    arousal: float = Field(description="0..1")
+
+
+class ExpressionRead(BaseModel):
+    """Semantic expression intent (docs/15 §4, docs/28 §4). Never geometry: each renderer maps
+    this to its own model through a character profile."""
+
+    mood: MoodRead
+    overlay: dict[str, float] = Field(description="Named blend; weights sum to at most 1.")
+    gaze: str
+    energy: float
+    action: str
+    emotion_version: int | None = Field(
+        description="Changes whenever the underlying state does; renderers can skip unchanged polls."
+    )
+
+
+@router.get(
+    "/expression",
+    response_model=ExpressionRead,
+    summary="What the avatar should be expressing, resolved from emotional state",
+)
+async def expression(container: ContainerDep) -> ExpressionRead:
+    """A neutral face, not a 503, when emotion is disabled: a flat companion still has a face."""
+    state = await container.emotion.state() if container.emotion is not None else None
+    intent = resolve(state)
+    return ExpressionRead(
+        mood=MoodRead(valence=intent.mood.valence, arousal=intent.mood.arousal),
+        overlay={overlay.value: weight for overlay, weight in intent.overlay.items()},
+        gaze=intent.gaze.value,
+        energy=intent.energy,
+        action=intent.action,
+        emotion_version=state.version if state is not None else None,
+    )
 
 
 def _engine(container: ContainerDep) -> Any:

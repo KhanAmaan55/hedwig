@@ -33,3 +33,8 @@ data/
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Avatar models. A VRM carries its own licence in its metadata, and committing someone else's
+# model makes this repository its redistributor (docs/28 §5.1). Place yours here; it stays local.
+frontend/public/avatars/*
+!frontend/public/avatars/README.md

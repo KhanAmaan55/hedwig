@@ -37,6 +37,7 @@ expensive to reverse, or (c) is one a future reader would otherwise assume was a
 | [0018](adr/0018-capture-reads-the-event-not-the-turn-row.md) | Capture reads the event, not the turn row | Accepted |
 | [0019](adr/0019-the-emotion-vector-is-six-named-drives.md) | The emotion vector is six named drives, and trust is one of them | Accepted |
 | [0020](adr/0020-two-trusts-kept-apart.md) | Two trusts, kept apart | Accepted |
+| [0021](adr/0021-vrm-first-semantic-seam-kept.md) | VRM first, with the semantic seam kept | Accepted |
 
 ---
 

@@ -452,3 +452,29 @@ async def test_the_mood_reaching_a_turn_is_the_one_the_next_turn_reports(
     second = await hedwig.brain.run_turn("and another thing", session_id="s26")
 
     assert second["mind"].mood != first["mind"].mood
+
+
+# =========================================================================
+# The expression endpoint (docs/28)
+# =========================================================================
+
+
+async def test_the_expression_endpoint_resolves_the_current_state(
+    api: AsyncClient, hedwig: Container
+) -> None:
+    _set(hedwig, curiosity=0.95, trust=0.6, happiness=0.55, confidence=0.6, energy=0.6, stress=0.1)
+
+    body = (await api.get("/v1/mind/expression")).json()
+
+    assert set(body) == {"mood", "overlay", "gaze", "energy", "action", "emotion_version"}
+    assert body["overlay"]["interest"] == max(body["overlay"].values())
+    assert sum(body["overlay"].values()) <= 1.0 + 1e-6
+    assert body["gaze"] == "user"
+
+
+async def test_the_expression_endpoint_carries_semantics_never_geometry(api: AsyncClient) -> None:
+    """The seam ADR-0021 keeps: no blendshape names, no bones — and no user content."""
+    text = (await api.get("/v1/mind/expression")).text.lower()
+
+    for geometric in ("blendshape", "bone", "happy", "rotation", "morph"):
+        assert geometric not in text

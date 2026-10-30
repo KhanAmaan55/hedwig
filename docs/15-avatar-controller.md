@@ -1,6 +1,6 @@
 # 15 — Avatar Controller
 
-**Status:** Design · **Depends on:** [09](09-emotion-engine.md), [16](16-api-structure.md) · **Depended on by:** [18](18-frontend-architecture.md)
+**Status:** VRM renderer implemented (Milestone 10, [28](28-avatar-mvp.md)); 2D renderer, WebSocket frames, speech not yet · **Depends on:** [09](09-emotion-engine.md), [16](16-api-structure.md) · **Depended on by:** [18](18-frontend-architecture.md)
 
 ---
 
@@ -235,6 +235,10 @@ mapping.
 
 Starting 3D would be the classic mistake: months of rigging work before discovering the frame
 protocol has the wrong fields. 2D first is not a compromise, it is how you find out.
+
+> **Superseded in part by [ADR-0021](adr/0021-vrm-first-semantic-seam-kept.md):** Milestone 10
+> built VRM first, keeping the seam this phasing protected — semantic intent from a backend
+> resolver, mapped through a character profile.
 
 ---
 

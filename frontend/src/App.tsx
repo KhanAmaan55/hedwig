@@ -1,9 +1,13 @@
-import type { JSX } from "react";
+import { lazy, Suspense, type JSX } from "react";
 
 import { useHealth } from "./hooks/useHealth";
 import { StatusDot } from "./components/StatusDot";
 import { SubsystemList } from "./components/SubsystemList";
 import { formatDuration } from "./lib/format";
+
+// Lazy: three.js and three-vrm are most of the bundle, and nothing else in the app needs them
+// (docs/28 §6).
+const AvatarPane = lazy(() => import("./panes/avatar/AvatarPane"));
 
 /**
  * Milestone 1's entire UI: proof that the shell, the renderer and the backend are one
@@ -50,6 +54,13 @@ export default function App(): JSX.Element {
             </button>
           </section>
         )}
+
+        <section className="panel">
+          <h2 className="panel__title">Avatar</h2>
+          <Suspense fallback={<p className="panel__hint">Loading avatar…</p>}>
+            <AvatarPane />
+          </Suspense>
+        </section>
 
         {health !== null && (
           <>

@@ -287,3 +287,107 @@ code {
   outline: 2px solid var(--colour-accent);
   outline-offset: 2px;
 }
+
+.button--small {
+  font-size: var(--text-xs);
+  padding: 2px var(--space-2);
+}
+
+/* -- avatar pane (docs/28) ------------------------------------------------- */
+
+.avatar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: radial-gradient(
+    ellipse at 50% 35%,
+    var(--colour-surface-raised),
+    var(--colour-bg) 70%
+  );
+}
+
+.avatar--dragging {
+  outline: 2px dashed var(--colour-accent);
+  outline-offset: -6px;
+}
+
+.avatar--empty {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: var(--space-6);
+  color: var(--colour-text-muted);
+}
+
+.avatar__canvas {
+  flex: 1;
+  min-height: 360px;
+}
+
+.avatar__canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar__overlay {
+  position: absolute;
+  inset: 0 0 auto 0;
+  top: 35%;
+  text-align: center;
+  color: var(--colour-text-muted);
+  padding: 0 var(--space-6);
+  pointer-events: none;
+}
+
+.avatar__hint {
+  font-size: var(--text-sm);
+  color: var(--colour-text-faint);
+}
+
+.avatar__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+  border-top: 1px solid var(--colour-border);
+}
+
+.avatar__footer a {
+  color: inherit;
+}
+
+.avatar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.avatar__readout {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.avatar__readout div {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.avatar__readout dt {
+  min-width: 4.5rem;
+}
+
+.avatar__readout dd {
+  margin: 0;
+}

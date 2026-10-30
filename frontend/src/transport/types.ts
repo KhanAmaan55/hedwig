@@ -41,3 +41,22 @@ export interface ApiErrorBody {
     retryable: boolean;
   };
 }
+
+/** The nameable part of an expression (docs/15 §4.1). Nothing negative exists to reach for. */
+export type Overlay = "interest" | "warmth" | "amusement" | "uncertainty" | "fatigue";
+
+/**
+ * `GET /v1/mind/expression` (docs/28 §4).
+ *
+ * Semantic, never geometric: what the face should express, not how any particular model does
+ * it. Each renderer maps this through a character profile (ADR-0021).
+ */
+export interface ExpressionIntent {
+  mood: { valence: number; arousal: number };
+  overlay: Partial<Record<Overlay, number>>;
+  gaze: "user" | "away" | "thinking";
+  energy: number;
+  action: string;
+  /** Changes whenever the underlying emotional state does. */
+  emotion_version: number | null;
+}

@@ -92,6 +92,7 @@ accumulates errors forever, and the user is the highest-trust source available.
 |---|---|---|
 | `GET` | `/mind` | Full `MindSnapshot` |
 | `GET` | `/mind/emotion` · `/mind/emotion/history?from=&to=&resolution=` | Current + timeline |
+| `GET` | `/mind/expression` | The emotional state resolved into semantic avatar intent ([28](28-avatar-mvp.md) §4) |
 | `GET` | `/mind/personality` | Traits with anchors, drift, bounds |
 | `GET` | `/mind/personality/history` | Every applied change with evidence |
 | `POST` | `/mind/personality/revert/{history_id}` | Undo one drift |

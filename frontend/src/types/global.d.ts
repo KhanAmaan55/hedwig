@@ -11,6 +11,8 @@ interface Window {
 
 interface ImportMetaEnv {
   readonly VITE_HEDWIG_API?: string;
+  /** Where the avatar model is, relative to the page (docs/28 §5.1). */
+  readonly VITE_HEDWIG_AVATAR?: string;
 }
 
 interface ImportMeta {

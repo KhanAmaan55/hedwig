@@ -25,6 +25,10 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: true,
     emptyOutDir: true,
+    // The one chunk over Vite's 500 kB default is the avatar pane — three.js and three-vrm,
+    // ~760 kB — which is lazy-loaded so the rest of the app never pays for it (docs/28 §6).
+    // 800 covers it; growth past that, or the main chunk approaching it, still warns.
+    chunkSizeWarningLimit: 800,
   },
 
   test: {
