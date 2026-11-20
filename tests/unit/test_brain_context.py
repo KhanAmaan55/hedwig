@@ -176,3 +176,39 @@ def test_citations_keep_order_and_drop_repeats() -> None:
 def test_an_item_with_no_memory_id_is_not_cited() -> None:
     """Nothing to reinforce, so nothing is claimed."""
     assert citations((_item("a", memory_id=""),)) == ()
+
+
+# =========================================================================
+# Restatement (docs/26 §5, docs/06 §16)
+# =========================================================================
+
+
+def test_the_exchange_still_in_the_window_is_not_sent_twice() -> None:
+    window = (
+        WindowMessage(role="user", text="Please remember my tea is lapsang.", at=""),
+        WindowMessage(role="hedwig", text="Noted, lapsang it is.", at=""),
+    )
+    episode = _item("User: Please remember my tea is lapsang.\nHEDWIG: Noted, lapsang it is.")
+
+    context = assemble_context(window=window, recalled=RecalledContext(items=(episode,)))
+
+    assert context.recalled == ()
+    assert context.restated == 1
+
+
+def test_a_reply_hedwig_repeats_does_not_hide_an_older_memory() -> None:
+    """Small models repeat sentences. A reply in the window that also appears inside an older,
+    different exchange used to drop that exchange from recall."""
+    window = (
+        WindowMessage(role="user", text="What tea do I like again?", at=""),
+        WindowMessage(role="hedwig", text="You like smoky lapsang souchong tea.", at=""),
+    )
+    older = _item(
+        "User: My favourite tea is smoky lapsang souchong.\n"
+        "HEDWIG: You like smoky lapsang souchong tea."
+    )
+
+    context = assemble_context(window=window, recalled=RecalledContext(items=(older,)))
+
+    assert context.recalled == (older,)
+    assert context.restated == 0

@@ -75,6 +75,7 @@ of what exists in code. Update it as each milestone lands.
 | Brain: graph, nodes, routing, planner, caps | **Implemented** (M4) | `src/hedwig/brain/` |
 | Memory: episodic, semantic, importance, decay, forgetting | **Implemented** (M5) | `src/hedwig/memory/` |
 | Retrieval: lexical, structural, temporal channels | **Implemented** (M5) | `src/hedwig/memory/retrieval.py` |
+| Memory control: `/v1/memory`, `hedwig memory` (list, search, pin, forget, restore) | **Implemented** (MEM-02, [06](06-memory-architecture.md) §16) | `src/hedwig/api/routes/memory.py` |
 | Retrieval: semantic/embedding channel | **Deferred** — [06](06-memory-architecture.md) §13.2 | — |
 | Conversation log: sessions, messages, turns, working-set log | **Implemented** (M6) | `src/hedwig/sessions/` |
 | The turn/memory loop: capture, reinforcement, persistence | **Implemented** (M6) | [26](26-turn-memory-loop.md) |

@@ -612,3 +612,54 @@ design: [27](27-personality-relationship-and-the-prompt.md) §5.
 **One memory-quality fix from the same milestone:** a turn's own exchange was being recalled on
 the very next turn while the window still held it verbatim, so the model saw it twice.
 `assemble_context` now drops memories that restate a window message, and counts them.
+
+---
+
+## 16. Memory you can see and change (MEM-02)
+
+A memory system the user cannot inspect is one they cannot trust or correct (docs/01 §6). This
+is the minimum of docs/16 §4.2: see what HEDWIG remembers, search it as HEDWIG would, protect
+something, and take something away and back.
+
+```mermaid
+graph LR
+    CLI["hedwig memory …"] -->|HTTP + token| API["/v1/memory routes"]
+    UI["Mind Inspector (UX-03)"] -->|HTTP + token| API
+    API -->|browse · inspect| ST["SqliteMemoryStore"]
+    API -->|search, no access log| RT["HybridRetrieval"]
+    API -->|set_pinned · tombstone · restore| ST
+```
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/v1/memory?limit=&include_forgotten=` | Most recent first, episodes and beliefs together |
+| `GET` | `/v1/memory/search?q=&limit=` | Ranked exactly as recall ranks, with the score breakdown |
+| `GET` | `/v1/memory/{id}` | Includes forgotten memories, so there is something to restore |
+| `POST`/`DELETE` | `/v1/memory/{id}/pin` | Pinned memories never decay or get forgotten |
+| `POST` | `/v1/memory/{id}/forget` | Tombstone with reason `user_request`; reversible. 409 if pinned |
+| `POST` | `/v1/memory/{id}/restore` | Undo a forget |
+
+* **Looking is not remembering.** Search here goes straight to `HybridRetrieval.search` and
+  records no access, so inspecting a memory never reinforces it (docs/06 §7.2). Only a turn
+  reinforces.
+* **A pinned memory refuses to be forgotten, loudly.** The store already refused silently
+  (`tombstone` returns `False`); the API turns that into a 409 that says to unpin first, rather
+  than a 200 that did nothing.
+* **Forgetting is a tombstone, not a delete.** The row stays, hidden from recall, with its body
+  archived in `tombstone`. Permanent deletion is the privacy purge's job (SEC-02), behind a
+  confirmation.
+* **The CLI is a client.** `hedwig memory list | search | show | pin | unpin | forget |
+  restore` go through `hedwig.client`, like `chat`.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| `inspect` sees tombstoned rows; recall never does | Restore is possible from the UI | Two read paths with different visibility | Never; the difference is the point |
+| No `PATCH` (correction) yet | Story stays small | A wrong memory can only be forgotten, not fixed | REF-01 makes beliefs; MEM-03 corrects them |
+
+**Found while testing restore.** A restored memory was recalled and then dropped as "restated".
+`assemble_context` drops a memory that restates the window, and the rule matched *any* window
+message of 12+ characters, HEDWIG's replies included. Replies are generated, and small models
+repeat sentences, so a reply in the window could hide an older, different exchange that contained
+the same sentence. The rule now matches only the user's messages, which an episode always holds
+verbatim (`brain/context.py::restates`, docs/29 G15).
+
