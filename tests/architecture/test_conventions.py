@@ -156,6 +156,7 @@ def test_every_source_file_belongs_to_a_documented_layer() -> None:
         "knowledge",
         "curiosity",
         "speech",
+        "explain",
         "api",
         "cli",
         "client",

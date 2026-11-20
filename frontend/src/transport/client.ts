@@ -9,6 +9,7 @@
 import type {
   ApiErrorBody,
   EmotionReading,
+  Explanation,
   ExpressionIntent,
   Finding,
   Gap,
@@ -152,6 +153,13 @@ export class HedwigClient {
       `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
       { body: { text }, auth: true },
     );
+  }
+
+  /** Why HEDWIG said that (docs/16 §14). */
+  async explain(messageId: string): Promise<Explanation> {
+    return this.request<Explanation>("GET", `/v1/explain/${encodeURIComponent(messageId)}`, {
+      auth: true,
+    });
   }
 
   // -- the Mind Inspector (UX-03) -----------------------------------------------

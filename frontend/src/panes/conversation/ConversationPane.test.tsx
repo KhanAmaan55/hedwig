@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../transport/client";
-import type { MessagePage, SessionInfo, TurnReply } from "../../transport/types";
+import type { Explanation, MessagePage, SessionInfo, TurnReply } from "../../transport/types";
 
 import { activityStore } from "../../stores/activity";
 import { UNREACHABLE, type StreamHandlers } from "../../transport/socket";
@@ -379,5 +379,87 @@ describe("ConversationPane streaming (docs/16 §13)", () => {
 
     expect(await screen.findByText("Hello! Lovely to meet you.")).toBeInTheDocument();
     expect(api.send).toHaveBeenCalledWith("sess_1", "hello there");
+  });
+});
+
+describe("Why? (docs/16 §14)", () => {
+  const WHY: Explanation = {
+    message_id: "msg_9",
+    question: "What tea do I like?",
+    reply: "Lapsang souchong.",
+    intent: "answer",
+    rationale: "answering from what is already known",
+    directives: ["Be concise but complete."],
+    goals_in_view: 0,
+    finding_offered: false,
+    mood: { happiness: 0.6, stress: 0.1 },
+    retrieval: {
+      queries: ["What tea do I like?"],
+      items: [
+        {
+          memory_id: "ep_1",
+          score: 0.83,
+          trust: "user",
+          kind: "episode",
+          text: "User: my favourite tea is lapsang",
+          forgotten_since: false,
+        },
+      ],
+      dropped_count: 0,
+    },
+    tools: [],
+    model: [
+      {
+        purpose: "compose.reply",
+        model: "gemma4:e2b",
+        status: "ok",
+        tokens_in: 900,
+        tokens_out: 12,
+        duration_ms: 400,
+      },
+    ],
+    trace_id: "req_1",
+  };
+
+  it("shows what HEDWIG remembered, how it was told to speak, and its mood — once asked", async () => {
+    const explainApi = { explain: vi.fn().mockResolvedValue(WHY) };
+    const api = fakeApi({
+      send: vi.fn().mockResolvedValue({ ...reply("Lapsang souchong."), message_id: "msg_9" }),
+    });
+    render(<ConversationPane api={api} storage={memoryStorage()} explainApi={explainApi} />);
+
+    type("What tea do I like?");
+    pressEnter();
+    const why = await screen.findByRole("button", { name: "Why?" });
+    expect(explainApi.explain).not.toHaveBeenCalled();
+
+    fireEvent.click(why);
+
+    expect(await screen.findByText("User: my favourite tea is lapsang")).toBeInTheDocument();
+    expect(screen.getByText(/you told me, relevance 0.83/)).toBeInTheDocument();
+    expect(screen.getByText("Be concise but complete.")).toBeInTheDocument();
+    expect(screen.getByText(/not feelings/)).toBeInTheDocument();
+    expect(screen.getByText(/gemma4:e2b, 900 tokens in, 12 out/)).toBeInTheDocument();
+    expect(explainApi.explain).toHaveBeenCalledWith("msg_9");
+
+    fireEvent.click(why);
+    expect(screen.queryByText("Be concise but complete.")).not.toBeInTheDocument();
+  });
+
+  it("is honest about what was not recorded or not done", async () => {
+    const explainApi = {
+      explain: vi.fn().mockResolvedValue({ ...WHY, directives: null, retrieval: null, mood: null }),
+    };
+    const api = fakeApi({
+      send: vi.fn().mockResolvedValue({ ...reply("Hi."), message_id: "msg_9" }),
+    });
+    render(<ConversationPane api={api} storage={memoryStorage()} explainApi={explainApi} />);
+
+    type("hello there");
+    pressEnter();
+    fireEvent.click(await screen.findByRole("button", { name: "Why?" }));
+
+    expect(await screen.findByText("Did not search memory.")).toBeInTheDocument();
+    expect(screen.getByText("Not recorded for replies this old.")).toBeInTheDocument();
   });
 });

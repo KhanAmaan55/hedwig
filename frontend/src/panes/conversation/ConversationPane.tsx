@@ -1,4 +1,4 @@
-import { useEffect, useRef, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 
 import { Composer } from "./Composer";
 import {
@@ -11,10 +11,13 @@ import { client } from "../../transport/client";
 import type { StreamApi } from "../../transport/socket";
 import { useVoice, type VoiceApi } from "../../voice/useVoice";
 
+import { WhyPanel, type ExplainApi } from "./WhyPanel";
+
 export interface ConversationPaneProps {
   readonly api?: ConversationApi;
   readonly storage?: SessionStorage;
   readonly voiceApi?: VoiceApi;
+  readonly explainApi?: ExplainApi;
   /** The live channel (docs/16 §13). Without it, replies arrive whole over REST. */
   readonly live?: StreamApi | null;
 }
@@ -36,6 +39,7 @@ export default function ConversationPane({
   api = client,
   storage = browserStorage,
   voiceApi = client,
+  explainApi = client,
   live = null,
 }: ConversationPaneProps): JSX.Element {
   const voice = useVoice(voiceApi);
@@ -53,6 +57,7 @@ export default function ConversationPane({
     return send(text);
   };
 
+  const [why, setWhy] = useState<string | null>(null);
   const listRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const list = listRef.current;
@@ -106,6 +111,21 @@ export default function ConversationPane({
               <p className="message__meta">
                 drew on {message.recalled} {message.recalled === 1 ? "memory" : "memories"}
               </p>
+            )}
+            {message.role === "hedwig" && message.key.startsWith("msg_") && (
+              <>
+                <button
+                  className="message__why"
+                  type="button"
+                  aria-expanded={why === message.key}
+                  onClick={() => {
+                    setWhy(why === message.key ? null : message.key);
+                  }}
+                >
+                  Why?
+                </button>
+                {why === message.key && <WhyPanel api={explainApi} messageId={message.key} />}
+              </>
             )}
           </li>
         ))}
