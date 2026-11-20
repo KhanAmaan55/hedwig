@@ -8,6 +8,7 @@ from hedwig.api.routes import (
     conversation,
     curiosity,
     egress,
+    explain,
     goals,
     health,
     memory,
@@ -28,5 +29,6 @@ v1.include_router(egress.router)
 v1.include_router(curiosity.router)
 v1.include_router(speech.router)
 v1.include_router(stream.router)
+v1.include_router(explain.router)
 
 __all__ = ["v1"]

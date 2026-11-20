@@ -191,3 +191,39 @@ export interface RelationshipReading {
   interaction_count: number;
   last_interaction_at: string | null;
 }
+
+/** `GET /v1/explain/{message_id}` (docs/16 §14). Absent things are null or empty, never missing. */
+export interface Explanation {
+  message_id: string;
+  question: string | null;
+  reply: string;
+  intent: string | null;
+  rationale: string | null;
+  /** null for replies from before directives were recorded. */
+  directives: string[] | null;
+  goals_in_view: number | null;
+  finding_offered: boolean | null;
+  mood: Record<string, number> | null;
+  retrieval: {
+    queries: string[];
+    items: {
+      memory_id: string;
+      score: number;
+      trust: string;
+      kind: string | null;
+      text: string | null;
+      forgotten_since: boolean;
+    }[];
+    dropped_count: number;
+  } | null;
+  tools: { name: string; status: string; error: string | null; duration_ms: number | null }[];
+  model: {
+    purpose: string;
+    model: string;
+    status: string;
+    tokens_in: number | null;
+    tokens_out: number | null;
+    duration_ms: number | null;
+  }[];
+  trace_id: string | null;
+}

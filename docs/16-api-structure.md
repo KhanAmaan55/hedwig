@@ -481,3 +481,53 @@ sending; the first token at 7.9 s on a cold first call; 3 to 249 characters over
 reply on screen afterwards, identical to the persisted message. Streaming does not shorten a
 cold model's time to first token (G12). It makes the wait legible.
 
+---
+
+## 14. Implementation record — why HEDWIG said that (SEC-01)
+
+`GET /v1/explain/{message_id}`, behind the token, for any reply HEDWIG gave. It is an
+**assembly**, as §6 intended: `hedwig.explain` reads the records the turn already left, under
+docs/08 §3.1's rule (reads go to the tables, writes go through the owner). It writes nothing.
+
+```mermaid
+graph LR
+    M[("message<br/><small>reply · meta · emotion_ref</small>")] --> X["explain.Explainer"]
+    T[("turn<br/><small>status · latency · working_set_id · correlation</small>")] --> X
+    W[("working_set_log<br/><small>queries · items · scores</small>")] --> X
+    MEM["memory.inspect<br/><small>what each item says, even if forgotten since</small>"] --> X
+    L[("llm_call")] -->|by correlation| X
+    TC[("tool_call")] -->|by correlation| X
+    E[("emotion_history")] -->|emotion_ref| X
+    X --> R["/v1/explain/{id}"]
+```
+
+| Field | From |
+|---|---|
+| `question`, `reply` | the turn's user and reply messages |
+| `intent`, `rationale`, `directives` | the reply's `meta`, **new**: the planner's rationale and every directive the reply was composed under (personality, relationship, emotion, plan) |
+| `mood` | the `emotion_history` row the reply points at |
+| `retrieval` | `working_set_log`: queries, each memory's score and trust, what it says now, and whether it has been forgotten since |
+| `tools` | `tool_call` rows with the turn's correlation id |
+| `model` | `llm_call` rows with the turn's correlation id: model, tier, tokens, timings |
+| `trace_id` | the turn's correlation id |
+
+* **The one record that was missing.** Directives and the planner's rationale were computed
+  every turn and never stored, so "why so short?" had no answer afterwards. §6 predicted this
+  ("designing the explain endpoint early is what forced those tables to carry the right
+  columns"). They now go into the reply message's `meta`, a JSON column that already existed: no
+  migration. Replies from before this change explain everything else and say directives were not
+  recorded.
+* **Honest about absence.** Every section is present, and empty or `null` when there was nothing
+  (no recall run, no tool, no mood engine), never omitted, so a client can tell "nothing
+  happened" from "not recorded".
+* **In the app**, each HEDWIG reply has a *Why?* toggle showing the same assembly.
+
+**Not built:** `prompt_version` per call (it is in the request's metadata, which `llm_call` does
+not store; recording it is a column, worth adding when the first regression needs bisecting,
+docs/19 §12). Also the causal event graph of `/traces/{correlation_id}`.
+
+**Verified live** on a streamed `gemma4:e2b` turn ("What time is it right now?"): *Why?* showed
+the search that found nothing, `get_datetime — ok`, the seven directives, the plan, the mood
+at the time and `gemma4:e2b, 404 tokens in, 22 out, 4.5 s`. The model and tool records joined
+through the streamed turn's correlation id.
+

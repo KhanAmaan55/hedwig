@@ -274,6 +274,7 @@ graph LR
 | `fetch` | Outbound HTTP with allowlist, robots, caching, sanitisation | [13](13-knowledge-and-tools.md) §4 |
 | `speech` | TTS/ASR adapters, phoneme timings for lip sync. Built: Piper TTS behind `Speaker` | [15](15-avatar-controller.md) §6, §13 |
 | `expression` | Emotion + speech → expression frames | [15](15-avatar-controller.md) |
+| `explain` | Read model: assembles why a reply was what it was, from records other modules own (docs/08 §3.1) | [16](16-api-structure.md) §14 |
 | `core.bus` | Publish/subscribe, durable outbox, replay | [04](04-communication-and-event-bus.md) |
 | `core.config` | Layered config load, validation, hot-reload of safe keys | §7 below |
 | `core.token` | The API bearer token file: create `0600`, rotate, constant-time match | [ADR-0022](adr/0022-the-token-gates-user-content.md) |

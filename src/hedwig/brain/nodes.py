@@ -414,7 +414,7 @@ async def _persist(deps: Collaborators, state: TurnState, *, status: str, elapse
                 role=MessageRole.HEDWIG,
                 text=reply,
                 trust=TrustTier.SELF,
-                meta={"status": status, "intent": _intent_of(state)},
+                meta=_reply_meta(state, status=status),
                 emotion_ref=(state.get("mind") or MindSnapshot()).reference,
             )
 
@@ -478,3 +478,21 @@ def _policy_of(state: TurnState) -> dict[str, float]:
     """The retrieval-relevant part of the turn policy, for the explanation log."""
     policy = state.get("policy") or TurnPolicy()
     return {"token_budget": float(policy.token_budget), "diversity": policy.diversity}
+
+
+def _reply_meta(state: TurnState, *, status: str) -> dict[str, object]:
+    """What `/v1/explain` needs that no other record keeps (docs/16 §14).
+
+    The directives the reply was composed under and why the planner chose what it did were
+    computed every turn and stored nowhere, so "why so short?" had no answer afterwards.
+    """
+    mind = state.get("mind") or MindSnapshot()
+    plan = state.get("plan")
+    return {
+        "status": status,
+        "intent": _intent_of(state),
+        "rationale": plan.rationale if plan is not None else "",
+        "directives": [*(plan.directives if plan is not None else ()), *mind.directives],
+        "goals": len(mind.goals),
+        "finding_offered": bool(mind.findings),
+    }

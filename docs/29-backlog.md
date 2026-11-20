@@ -90,7 +90,7 @@ the repository, ahead of any new cognitive capability.
 | 13 | Security: API token | **COMPLETE** (was MISSING) | `core/token.py`, `api/auth.py`; `test_token_file.py`, `test_conversation_api.py` (ADR-0022) |
 | 13 | Security: injection defence | **MISSING** | Not needed until untrusted content enters (knowledge, curiosity) |
 | 13 | Observability: correlation ids, `llm_call`, `working_set_log`, turn record | **COMPLETE** | `test_turn_memory_loop.py` |
-| 13 | Observability: `/explain`, traces, `/metrics` | **MISSING** | Records exist; the assembly does not |
+| 13 | Observability: `/explain`, traces, `/metrics` | **PARTIAL** | `/v1/explain` and *Why?* in the app (SEC-01); `/traces`, `/metrics` not built |
 
 ### 3.3 Integration gaps, debt and documentation drift
 
@@ -418,7 +418,7 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 ### 4.13 Security and reliability
 
 #### SEC-01 — `/explain/{message_id}`
-**Status:** Todo · **P2** · **M** · **Depends on:** FND-02 · Assembly of existing records (docs/16 §6).
+**Status:** Done (2026-11-20; `/traces` not yet) · **P2** · **M** · **Depends on:** FND-02 · Assembly of existing records (docs/16 §6).
 
 #### SEC-02 — Export and purge
 **Status:** Todo · **P2** · **L** · **Depends on:** MEM-02 · Purge-completeness test (docs/21 §7).
@@ -437,7 +437,7 @@ Remaining, in dependency order, highest value first:
 
 1. ~~FND-05~~ — done. Next on it: replay on reconnect, `interrupt`, and pushing `mind.update`
    instead of polling (EMO-02).
-2. **SEC-01** — `/explain/{message_id}`, then the inspector's traces view. The records exist.
+2. ~~SEC-01~~ — done. Next on it: `/traces/{correlation_id}`, `prompt_version` on `llm_call`.
 3. **REF-02** — T2 nightly consolidation: belief corroboration and promotion, contradictions as
    gaps, summary of the day. Split before starting (XL).
 4. **SEC-02** — export and purge, with the purge-completeness test.
@@ -593,4 +593,10 @@ tables, or copied rows). Nothing existing was changed or deleted.
   fails a turn. In the app: `transport/socket.ts`, stage labels, words as they arrive, REST
   fallback, token refresh on 4401, keepalive. Vite proxies and authenticates upgrades.
   Verified live with `gemma4:e2b`. Python 1094 tests, frontend 101.
+- **SEC-01** Why HEDWIG said that — `hedwig.explain` (a read model under docs/08 §3.1) assembles
+  the question, reply, intent, rationale, directives, mood, recall (with each memory's text and
+  whether it was forgotten since), tools and model calls; `GET /v1/explain/{id}` behind the
+  token; *Why?* under each reply in the app. The one missing record, directives and the planner's
+  rationale, now goes into the reply's existing `meta` (no migration). Verified live on a
+  streamed turn. Python 1099 tests, frontend 103. Design in [16](16-api-structure.md) §14.
 
