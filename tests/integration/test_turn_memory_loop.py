@@ -286,8 +286,9 @@ async def test_a_memory_that_is_recalled_and_shown_grows_stronger(hedwig: Contai
 
 
 async def test_health_reports_the_loop_as_connected(hedwig: Container) -> None:
-    """`recaller`, `conversation`, `announcer`, `mind` and — as of Milestone 9 — `responder`
-    are real. What remains stubbed is stated rather than hidden (docs/07 §12.2)."""
+    """Every collaborator is real: the guard and the tools were the last stubs (docs/13 §12).
+    Health stated them for as long as they existed (docs/07 §12.2); now it states none."""
     health = await hedwig.brain.health()
 
-    assert set(health.detail["stubbed"]) == {"guard", "tools"}
+    assert set(health.detail["stubbed"]) == set()
+    assert health.status.value == "ok"

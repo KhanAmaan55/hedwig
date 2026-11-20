@@ -23,7 +23,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 10 | [Personality Engine](10-personality-engine.md) ✅ | Trait vector, evidence-based drift, guardrails, identity core |
 | 11 | [Curiosity Engine](11-curiosity-engine.md) | Knowledge-gap detection, budgeted exploration, interruption policy |
 | 12 | [Reflection Engine](12-reflection-engine.md) ◐ | Five reflection tiers, consolidation, idempotency |
-| 13 | [Knowledge and Tools](13-knowledge-and-tools.md) | The four knowledge tiers, tool layer, provenance, injection defence |
+| 13 | [Knowledge and Tools](13-knowledge-and-tools.md) ◐ | The four knowledge tiers, tool layer, provenance, injection defence |
 | 14 | [Language Model Gateway](14-language-model-gateway.md) ✅ | Provider abstraction, model tiering, prompt assembly, structured output |
 | 15 | [Avatar Controller](15-avatar-controller.md) ◐ | Expression intent, frame protocol, renderer independence, lip sync |
 | 16 | [API Structure](16-api-structure.md) ◐ | REST resources, WebSocket protocol, versioning, auth |
@@ -85,7 +85,7 @@ of what exists in code. Update it as each milestone lands.
 | Personality: ten traits, identity core, guarded drift, instruction fast path, reversal | **Implemented** (M9) | `src/hedwig/personality/` |
 | Relationship memory, session end | **Implemented** (M9; relationship trust frozen without a signal) | `src/hedwig/memory/relationship.py` |
 | Prompt assembly and the model-backed responder | **Implemented** (M9) | `src/hedwig/llm/prompts.py`, `responder.py` |
-| Brain collaborators: guard, tools | **Stubbed, and they say so** | `src/hedwig/brain/stubs.py` |
+| Brain collaborators: guard, tools | **Implemented** (COG-01/02, [13](13-knowledge-and-tools.md) §12) | `src/hedwig/brain/guard.py`, `src/hedwig/tools/`, `src/hedwig/knowledge/injection.py` |
 | API: `/v1/health`, error envelope, correlation middleware | **Implemented** (M1) | `src/hedwig/api/` |
 | API: bearer token on user-content routes | **Implemented** (FND-01, [ADR-0022](adr/0022-the-token-gates-user-content.md)) | `src/hedwig/core/token.py`, `src/hedwig/api/auth.py` |
 | API: sessions and messages (REST, non-streaming) | **Implemented** (FND-02, [16](16-api-structure.md) §12) | `src/hedwig/api/routes/conversation.py` |

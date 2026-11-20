@@ -17,10 +17,12 @@ layers =
     hedwig.api
     hedwig.wiring
     hedwig.brain | hedwig.reflection
+    hedwig.tools
     hedwig.emotion | hedwig.personality | hedwig.expression | hedwig.goals
     hedwig.sessions
     hedwig.memory
     hedwig.llm
+    hedwig.knowledge
     hedwig.core
 ; `client` sits under `cli` and above `api` so the CLI may use it; the separate contract below
 ; forbids it from importing anything of HEDWIG's, so it can only ever speak HTTP.
