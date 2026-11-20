@@ -39,6 +39,7 @@ expensive to reverse, or (c) is one a future reader would otherwise assume was a
 | [0020](adr/0020-two-trusts-kept-apart.md) | Two trusts, kept apart | Accepted |
 | [0021](adr/0021-vrm-first-semantic-seam-kept.md) | VRM first, with the semantic seam kept | Accepted |
 | [0022](adr/0022-the-token-gates-user-content.md) | The API token gates user content, read from a file on every request | Accepted |
+| [0023](adr/0023-live-turn-output-through-a-scoped-sink.md) | Live turn output travels through a context-scoped sink, not the event bus | Accepted |
 
 ---
 

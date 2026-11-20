@@ -7,6 +7,7 @@ import { SubsystemList } from "./components/SubsystemList";
 import { formatDuration } from "./lib/format";
 import ConversationPane from "./panes/conversation/ConversationPane";
 import InspectorPane from "./panes/inspector/InspectorPane";
+import { stream } from "./transport/socket";
 
 // Lazy: three.js and three-vrm are most of the bundle, and nothing else in the app needs them
 // (docs/28 §6).
@@ -59,7 +60,7 @@ export default function App(): JSX.Element {
 
         <div className="layout">
           <PaneBoundary name="Conversation">
-            <ConversationPane />
+            <ConversationPane live={stream} />
           </PaneBoundary>
 
           <aside className="layout__side">

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { activityStore } from "../../stores/activity";
 import { ApiError, client as defaultClient, type HedwigClient } from "../../transport/client";
+import { DISCONNECTED, UNREACHABLE, type StreamApi } from "../../transport/socket";
+import type { TurnReply } from "../../transport/types";
 
 /**
  * The conversation pane's state (docs/18 §13.3).
@@ -26,6 +28,8 @@ export interface ChatMessage {
   readonly failed?: boolean;
   /** How many memories this reply drew on (docs/18 §13.3). */
   readonly recalled?: number;
+  /** Still arriving, token by token (docs/16 §13). */
+  readonly streaming?: boolean;
 }
 
 export interface Conversation {
@@ -36,6 +40,8 @@ export interface Conversation {
   /** Resuming the previous conversation. */
   readonly loading: boolean;
   readonly error: string | null;
+  /** What HEDWIG is doing in this turn, from the live channel: "recalling", "composing"… */
+  readonly stage: string | null;
   /** Resolves false when nothing was sent, so the composer can keep the text. */
   readonly send: (text: string) => Promise<boolean>;
   readonly startOver: () => void;
@@ -78,6 +84,8 @@ export function describeError(caught: unknown): string {
         return "The API token was refused. Restart the app so it can read the current token.";
       case "not_found":
         return "That conversation no longer exists. Send again to start a new one.";
+      case DISCONNECTED:
+        return caught.message;
       default:
         return `${caught.code}: ${caught.message}`;
     }
@@ -88,13 +96,15 @@ export function describeError(caught: unknown): string {
 export function useConversation(
   api: ConversationApi = defaultClient,
   storage: SessionStorage = browserStorage,
-  onReply?: (text: string) => void,
+  onReply?: (text: string, streamed: boolean) => void,
+  live: StreamApi | null = null,
 ): Conversation {
   const [sessionId, setSessionId] = useState<string | null>(() => storage.get());
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(() => storage.get() !== null);
   const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<string | null>(null);
   const counter = useRef(0);
   const nextKey = () => `local-${++counter.current}`;
 
@@ -139,6 +149,55 @@ export function useConversation(
       const trimmed = text.trim();
       if (!trimmed || busy) return false;
 
+      /** One turn over the live channel. `null` when the channel could not carry it at all. */
+      const streamTurn = async (channel: StreamApi, text: string): Promise<TurnReply | null> => {
+        const key = nextKey();
+        let shown = false;
+        let quiet = 0;
+        try {
+          return await channel.send(sessionId, text, {
+            onStarted: (started) => {
+              if (started !== sessionId) {
+                setSessionId(started);
+                storage.set(started);
+              }
+            },
+            onStage: (name) => {
+              setStage(name);
+            },
+            onToken: (piece) => {
+              if (!shown) {
+                shown = true;
+                setStage(null);
+                setMessages((current) => [
+                  ...current,
+                  { key, role: "hedwig", text: "", streaming: true },
+                ]);
+                activityStore.set("speaking");
+              }
+              setMessages((current) =>
+                current.map((m) => (m.key === key ? { ...m, text: m.text + piece } : m)),
+              );
+              // The mouth moves with the words as they arrive, and rests between them.
+              activityStore.setMouth(0.65);
+              window.clearTimeout(quiet);
+              quiet = window.setTimeout(() => {
+                activityStore.setMouth(0.1);
+              }, 90);
+            },
+          });
+        } catch (caught) {
+          window.clearTimeout(quiet);
+          if (caught instanceof ApiError && caught.code === UNREACHABLE) return null;
+          if (caught instanceof ApiError && caught.code === DISCONNECTED) {
+            throw new ApiError(DISCONNECTED, caught.message, 0, null, true);
+          }
+          throw caught;
+        } finally {
+          window.clearTimeout(quiet);
+        }
+      };
+
       const userKey = nextKey();
       setMessages((current) => [...current, { key: userKey, role: "user", text: trimmed }]);
       setBusy(true);
@@ -147,28 +206,34 @@ export function useConversation(
       activityStore.set("thinking");
 
       try {
-        // Lazily: opening the app must not create empty conversations (docs/18 §13.3).
-        let target = sessionId;
-        if (target === null) {
-          target = (await api.openSession("web")).id;
-          setSessionId(target);
-          storage.set(target);
+        const streamed = live ? await streamTurn(live, trimmed) : null;
+        let reply: TurnReply;
+        if (streamed) {
+          reply = streamed;
+        } else {
+          // REST: no live channel, or it could not be opened before anything was sent.
+          let target = sessionId;
+          if (target === null) {
+            // Lazily: opening the app must not create empty conversations (docs/18 §13.3).
+            target = (await api.openSession("web")).id;
+            setSessionId(target);
+            storage.set(target);
+          }
+          reply = await api.send(target, trimmed);
         }
-
-        const reply = await api.send(target, trimmed);
-        setMessages((current) => [
-          ...current,
-          {
-            key: reply.message_id,
-            role: "hedwig",
-            text: reply.reply,
-            recalled: reply.cited_memory_ids.length,
-          },
-        ]);
+        const finished: ChatMessage = {
+          key: reply.message_id,
+          role: "hedwig",
+          text: reply.reply,
+          recalled: reply.cited_memory_ids.length,
+        };
+        // The streamed text was a preview; the reply is authoritative (ADR-0023).
+        setMessages((current) => [...current.filter((m) => !m.streaming), finished]);
         activityStore.set("idle");
-        onReply?.(reply.reply);
+        onReply?.(reply.reply, streamed !== null);
         return true;
       } catch (caught) {
+        setMessages((current) => current.filter((m) => !m.streaming));
         setError(describeError(caught));
         const honest =
           caught instanceof ApiError && typeof caught.detail.reply === "string"
@@ -191,10 +256,13 @@ export function useConversation(
         return false;
       } finally {
         setBusy(false);
-        if (activityStore.get() === "thinking") activityStore.set("idle");
+        setStage(null);
+        if (activityStore.get() !== "idle" && activityStore.get() !== "speaking") {
+          activityStore.set("idle");
+        }
       }
     },
-    [api, busy, sessionId, storage, onReply],
+    [api, busy, sessionId, storage, onReply, live],
   );
 
   const startOver = useCallback(() => {
@@ -207,5 +275,5 @@ export function useConversation(
     setError(null);
   }, [api, sessionId, storage]);
 
-  return { sessionId, messages, busy, loading, error, send, startOver };
+  return { sessionId, messages, busy, loading, error, stage, send, startOver };
 }

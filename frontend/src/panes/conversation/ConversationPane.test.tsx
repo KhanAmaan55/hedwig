@@ -5,6 +5,7 @@ import { ApiError } from "../../transport/client";
 import type { MessagePage, SessionInfo, TurnReply } from "../../transport/types";
 
 import { activityStore } from "../../stores/activity";
+import { UNREACHABLE, type StreamHandlers } from "../../transport/socket";
 import type { VoiceApi } from "../../voice/useVoice";
 
 import ConversationPane from "./ConversationPane";
@@ -317,5 +318,66 @@ describe("ConversationPane voice (docs/15 §13)", () => {
       expect(toggle).toHaveAttribute("title", "piper is not installed");
     });
     expect(toggle).toBeDisabled();
+  });
+});
+
+describe("ConversationPane streaming (docs/16 §13)", () => {
+  it("shows the stage, then the words as they arrive, then the final reply", async () => {
+    let finish: (reply: TurnReply) => void = () => undefined;
+    let handlers: StreamHandlers = {};
+    const live = {
+      send: vi.fn((_session: string | null, _text: string, given: StreamHandlers = {}) => {
+        handlers = given;
+        return new Promise<TurnReply>((resolve) => {
+          finish = resolve;
+        });
+      }),
+    };
+    const api = fakeApi();
+    const storage = memoryStorage();
+    render(<ConversationPane api={api} storage={storage} live={live} />);
+
+    type("hello there");
+    pressEnter();
+    await waitFor(() => {
+      expect(live.send).toHaveBeenCalled();
+    });
+
+    act(() => {
+      handlers.onStarted?.("sess_live", "t1");
+      handlers.onStage?.("recalling", null);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("remembering");
+
+    act(() => {
+      handlers.onToken?.("Hello ");
+      handlers.onToken?.("from the stream");
+    });
+    expect(screen.getByText("Hello from the stream")).toBeInTheDocument();
+    expect(activityStore.get()).toBe("speaking");
+
+    await act(async () => {
+      finish({ ...reply("Hello from the stream."), message_id: "msg_final" });
+      await Promise.resolve();
+    });
+    expect(await screen.findByText("Hello from the stream.")).toBeInTheDocument();
+    expect(screen.queryByText("Hello from the stream")).not.toBeInTheDocument();
+    expect(storage.value).toBe("sess_live");
+    expect(api.openSession).not.toHaveBeenCalled();
+    expect(api.send).not.toHaveBeenCalled();
+  });
+
+  it("falls back to REST when the live channel cannot open", async () => {
+    const live = {
+      send: vi.fn().mockRejectedValue(new ApiError(UNREACHABLE, "no socket", 0, null, true)),
+    };
+    const api = fakeApi();
+    render(<ConversationPane api={api} storage={memoryStorage()} live={live} />);
+
+    type("hello there");
+    pressEnter();
+
+    expect(await screen.findByText("Hello! Lovely to meet you.")).toBeInTheDocument();
+    expect(api.send).toHaveBeenCalledWith("sess_1", "hello there");
   });
 });

@@ -57,8 +57,15 @@ export default defineConfig({
       "/v1": {
         target: BACKEND,
         changeOrigin: true,
+        // The live channel too (docs/16 §13): upgrades are proxied and authenticated alike.
+        ws: true,
         configure: (proxy) => {
           proxy.on("proxyReq", (proxyReq, request) => {
+            if (request.headers.authorization) return;
+            const token = apiToken();
+            if (token) proxyReq.setHeader("Authorization", `Bearer ${token}`);
+          });
+          proxy.on("proxyReqWs", (proxyReq, request) => {
             if (request.headers.authorization) return;
             const token = apiToken();
             if (token) proxyReq.setHeader("Authorization", `Bearer ${token}`);

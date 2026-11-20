@@ -431,3 +431,53 @@ sequenceDiagram
 * T1 session reflection on `session.ended`, now that ends are prompt (REF-01).
 * `/explain/{message_id}` from the records this path already writes (SEC-01).
 * Rate limit (§7: 60 messages/min) once a client exists that could exceed it.
+
+---
+
+## 13. Implementation record — the stream (FND-05)
+
+`ws://127.0.0.1:8730/v1/stream`, the envelope of §5.1. What is built:
+
+| Direction | Type | Payload |
+|---|---|---|
+| → server | `hello` | `{client}` → answered with `ready {server_version}` |
+| → server | `message.send` | `{session_id?, text, client_message_id?}`; no `session_id` opens one |
+| → server | `ping` | `{}` → `pong` |
+| ← client | `turn.started` | `{turn_id, session_id, client_message_id}` |
+| ← client | `turn.stage` | `{stage: recalling · deliberating · acting · composing, detail?}` |
+| ← client | `token` | `{text}`, in order, never dropped |
+| ← client | `message.complete` | the same body `POST …/messages` returns (§12) |
+| ← client | `turn.completed` | `{turn_id, status}` |
+| ← client | `error` | the §4.6 error object, plus `client_message_id` when it answers a send |
+
+* **Authentication.** Browsers cannot set headers on a WebSocket. The client offers two
+  subprotocols, `hedwig.v1` and `hedwig.token.<token>`; the server checks the second and answers
+  with the first. An `Authorization` header is accepted too, which is how the Vite proxy
+  authenticates in browser development. Never a query string (§9). A bad token closes the socket
+  with code 4401 before anything else is read.
+* **How tokens get out.** Through the context-scoped live sink of
+  [ADR-0023](adr/0023-live-turn-output-through-a-scoped-sink.md): no bus, no persistence, no
+  port change. `message.complete` is authoritative; streamed text is a preview of it.
+* **Ordering and backpressure.** One send lock per connection, so envelopes never interleave.
+  Tokens are sent in order and awaited, so a slow client slows its own turn's delivery and never
+  another's. Turns on one session still run one at a time (docs/07 §16).
+* **Disconnects.** A turn keeps running when its client goes, and completes and persists.
+  Reconnecting and loading history shows the reply. Replaying the live stream on reconnect (§5.5)
+  is not built.
+* **Not built yet:** `interrupt` (cancelling a turn mid-graph needs the turn to be resumable or
+  cleanly failed, COG-03), `approval.*` (COG-03), `client_message_id` dedupe across reconnects
+  (FND-06), `mind.update`/`expression.frame` (the avatar still polls; EMO-02), `presence`.
+
+**The app.** `frontend/src/transport/socket.ts` connects on the first send, offers the token as a
+subprotocol, asks for a fresh token once after a 4401 (a rotation), and keeps the connection
+alive with a ping every 25 s. The conversation pane shows the stage ("remembering…", "putting
+it into words…"), then the words as they arrive, and replaces them with `message.complete`'s
+reply. If the socket cannot open, the same message goes over REST. If it drops after the turn
+began, the pane says the reply is saved. The mouth moves with arriving words; with voice on,
+the reply is spoken once it is complete.
+
+**Verified live** (browser pane, `gemma4:e2b`, through the Vite proxy): the stage label 52 ms after
+sending; the first token at 7.9 s on a cold first call; 3 to 249 characters over ~550 ms; one
+reply on screen afterwards, identical to the persisted message. Streaming does not shorten a
+cold model's time to first token (G12). It makes the wait legible.
+

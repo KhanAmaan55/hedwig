@@ -34,7 +34,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 21 | [Security, Privacy and Ethics](21-security-privacy-ethics.md) | Threat model, trust tiers, honesty invariants, export and deletion |
 | 22 | [Development Roadmap](22-roadmap.md) | Eight phases with exit criteria |
 | 23 | [Challenged Assumptions and Open Questions](23-challenged-assumptions.md) | Where the README's premises are wrong or underspecified, and the tradeoff register |
-| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0022, the decisions the rest of the docs assume |
+| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0023, the decisions the rest of the docs assume |
 | 25 | [Core Infrastructure](25-core-infrastructure.md) ✅ | What Milestone 2 built: the seven platform services, their ports, and how they start |
 | 26 | [The Turn/Memory Loop](26-turn-memory-loop.md) ✅ | What Milestone 6 built: observe → retrieve → inject → response context → store → persist |
 | 27 | [Personality, Relationship and the Prompt](27-personality-relationship-and-the-prompt.md) ✅ | What Milestone 9 built: traits and their brakes, the relationship, and the prompt the model receives |
@@ -90,7 +90,8 @@ of what exists in code. Update it as each milestone lands.
 | API: bearer token on user-content routes | **Implemented** (FND-01, [ADR-0022](adr/0022-the-token-gates-user-content.md)) | `src/hedwig/core/token.py`, `src/hedwig/api/auth.py` |
 | API: sessions and messages (REST, non-streaming) | **Implemented** (FND-02, [16](16-api-structure.md) §12) | `src/hedwig/api/routes/conversation.py` |
 | API: session end; one turn at a time per session | **Implemented** (FND-03, FND-04; [07](07-brain-langgraph-workflow.md) §16) | `src/hedwig/brain/graph.py`, `src/hedwig/api/routes/conversation.py` |
-| API: WebSocket stream, feedback | Not started — backlog FND-05 | — |
+| API: WebSocket stream (tokens, stages, completion), REST fallback in the app | **Implemented** (FND-05, [16](16-api-structure.md) §13, [ADR-0023](adr/0023-live-turn-output-through-a-scoped-sink.md)) | `src/hedwig/api/routes/stream.py`, `src/hedwig/core/live.py`, `frontend/src/transport/socket.ts` |
+| API: feedback, replay on reconnect, interrupt | Not started | — |
 | CLI: `serve`, `chat`, `token`, `config`, `models`, `version` | **Implemented** (M1, M3, UX-01) | `src/hedwig/cli.py`, `src/hedwig/client.py` |
 | Frontend shell + transport + health view | **Implemented** (M1) | `frontend/` |
 | Electron desktop shell | **Implemented** (M1, [ADR-0015](adr/0015-electron-desktop-shell.md)) | `electron/` |
