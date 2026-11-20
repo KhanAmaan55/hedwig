@@ -222,7 +222,7 @@ class HybridRetrieval:
             candidates[memory_id] = Candidate(
                 memory_id=memory_id,
                 kind=MemoryKind.EPISODE,
-                text=f"{row['title']}: {row['content']}",
+                text=_episode_text(str(row["title"]), str(row["content"])),
                 occurred_at=datetime.fromisoformat(row["occurred_at"]),
                 salience=float(row["salience"]),
                 confidence=float(row["confidence"]),
@@ -398,3 +398,15 @@ def _to_match(query: str) -> str:
     # OR rather than AND: recall matters more than precision at the candidate stage, and
     # fusion plus rescoring is what sorts the result out.
     return " OR ".join(f'"{word}"' for word in words[:12])
+
+
+def _episode_text(title: str, content: str) -> str:
+    """`title: content`, unless the title is only the start of the content.
+
+    An interaction episode's title is its first line, truncated. Prefixing it repeated the
+    user's words with the first copy cut off mid-word (docs/27 §6.3).
+    """
+    stem = title.rstrip("…").strip()
+    if stem and stem in content:
+        return content
+    return f"{title}: {content}"

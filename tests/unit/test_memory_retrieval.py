@@ -19,7 +19,7 @@ from hedwig.core.ports.memory import (
 from hedwig.core.store import Database
 from hedwig.core.types import EntityId, MemoryId, MemoryKind, Provenance, TrustTier
 from hedwig.memory import HybridRetrieval, SqliteMemoryStore
-from hedwig.memory.retrieval import _fuse, _mmr, _pack, _to_match
+from hedwig.memory.retrieval import _episode_text, _fuse, _mmr, _pack, _to_match
 
 
 @pytest.fixture
@@ -468,3 +468,26 @@ def test_punctuation_cannot_break_the_search(query: str) -> None:
 
 def test_a_query_of_only_punctuation_yields_no_match_expression() -> None:
     assert _to_match("?!...") == ""
+
+
+# =========================================================================
+# What recall hands the prompt (docs/27 §6.3)
+# =========================================================================
+
+
+def test_an_interaction_title_is_not_repeated_in_front_of_its_content() -> None:
+    """The title is the content's first line, truncated: prefixing it repeated the user's
+    words with the first copy cut off mid-word."""
+    text = _episode_text(
+        "Hi HEDWIG! Please remember that my favourite tea is smoky lapsang souch…",
+        "User: Hi HEDWIG! Please remember that my favourite tea is smoky lapsang souchong.\n"
+        "HEDWIG: Noted.",
+    )
+    assert text.startswith("User: Hi HEDWIG!")
+    assert text.count("favourite tea") == 1
+
+
+def test_a_title_that_adds_something_is_kept() -> None:
+    assert _episode_text("Learning Rust", "The user is writing a compiler.") == (
+        "Learning Rust: The user is writing a compiler."
+    )

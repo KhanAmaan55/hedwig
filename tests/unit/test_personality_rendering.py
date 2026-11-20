@@ -21,6 +21,7 @@ from hedwig.core.ports.personality import (
 from hedwig.personality.instructions import acknowledgement, detect_instructions
 from hedwig.personality.rendering import (
     BANDS,
+    LEANS,
     MAX_DIRECTIVES,
     generation_policy,
     merge,
@@ -189,6 +190,31 @@ def test_a_stranger_is_not_presumed_upon() -> None:
     directives = relationship_directives(RelationshipState(entity_id="e", familiarity=0.05))
 
     assert any("getting to know" in d for d in directives)
+
+
+def test_a_stranger_is_still_someone_hedwig_remembers() -> None:
+    """G11: "don't presume shared history" beat the memory block, and a recalled preference
+    was answered with "I can't know that" (docs/27 §6.3). Not presuming is not forgetting."""
+    directives = relationship_directives(RelationshipState(entity_id="e", familiarity=0.05))
+
+    assert any("use what you remember" in d for d in directives)
+    assert not any("presume shared history" in d for d in directives)
+
+
+ECHOED_JARGON = ("land", "flag caveats", "presume shared history", "[")
+"""Words a small model narrates or imitates back at the user (docs/27 §6.3)."""
+
+
+def test_no_directive_uses_words_a_small_model_echoes() -> None:
+    sentences = [s for bands in BANDS.values() for s in bands if s]
+    sentences += [s for pair in LEANS.values() for s in pair]
+    for familiarity in (0.05, 0.4, 0.8):
+        sentences += relationship_directives(
+            RelationshipState(entity_id="e", familiarity=familiarity, affinity=-0.5, trust=0.1)
+        )
+
+    offenders = [s for s in sentences for word in ECHOED_JARGON if word in s.lower()]
+    assert not offenders
 
 
 def test_familiarity_permits_drawing_on_shared_history() -> None:
