@@ -430,20 +430,21 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 
 ## 5. Next up
 
-Dependency order, highest value first:
+Done this session: FND-01–04, FND-07, UX-01–03, MEM-01, MEM-02, PER-01, PER-03, REF-01,
+GOA-01/02, COG-01/02/04, KNW-02/03, CUR-01/02/03, AVA-01/02, VOI-01 (and part of VOI-03).
 
-1. ~~UX-02~~, ~~MEM-01~~, ~~PER-03~~, ~~FND-03~~, ~~FND-04~~ — done
-2. **FND-07** — recovery reaches every subscriber (small; a reliability bug)
-3. **FND-05** — streaming, which also answers G12
-4. **REF-01** — T1 reflection on `session.ended`, now that ends are prompt
-4. **FND-03**, **FND-04** — session end, per-session turn lock (small, unblock REF-01)
-5. **AVA-01** — the avatar reacts to turns
-6. **MEM-02** — memory control for the user
-7. **REF-01** — semantic memory populated by reflection
-8. **COG-01** → **COG-02** → **KNW-02** (needs a provider decision) → **KNW-03** → **COG-04**
-9. **FND-05** — WebSocket, then **VOI-01** (needs a dependency decision)
+Remaining, in dependency order, highest value first:
 
----
+1. **FND-05** — WebSocket stream: token streaming (ends the "thinking…" wait and G12), stage
+   indicators, active surfacing of findings, and the base for COG-03 approvals.
+2. **SEC-01** — `/explain/{message_id}`, then the inspector's traces view. The records exist.
+3. **REF-02** — T2 nightly consolidation: belief corroboration and promotion, contradictions as
+   gaps, summary of the day. Split before starting (XL).
+4. **SEC-02** — export and purge, with the purge-completeness test.
+5. **MEM-05** → **MEM-04** — the recall eval corpus, then the embedding channel.
+6. **KNW-01** — local documents (CURATED tier).
+7. **MEM-03**, **MEM-06**, **PER-02**, **COG-03**, **FND-06**, **EMO-02**, **VOI-02**/**VOI-03**,
+   **AVA-03**, **SEC-03** — as listed above.
 
 ## 6. Development log
 
@@ -575,4 +576,10 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   four-tab inspector (Mind, Memory, Goals, Curiosity) where every button is a public API call;
   `PaneBoundary` so one pane's failure never blanks the app (found while testing). Verified live.
   Design in [18](18-frontend-architecture.md) §14.
+
+**End of session 1.** Python 1081 tests, frontend 93, `npm run check` clean, Electron shell
+compiles. Live scorecard on `gemma4:e2b` (`scripts/eval_models.py`, 2 runs each, all scenarios):
+**25/26**. Every scenario passed every run except *keeps goals in their place* (1/2;
+stochastic on a 2B model, 3/3 when measured earlier). Migrations 0010–0014 are additive (new
+tables, or copied rows). Nothing existing was changed or deleted.
 
