@@ -282,6 +282,11 @@ class ReflectionConfig(BaseModel):
     """The most recent messages of a segment that reach the model. A 2-4B utility model's
     context is the limit; map-reduce for longer sessions is future work (docs/12 §8)."""
     max_facts: Annotated[int, Field(ge=0, le=20)] = 5
+    auto_apply_judgements: bool = False
+    """Let the nightly run merge or supersede beliefs on the utility model's word alone. Off by
+    default: on `gemma4:e2b` its "contradicts" was wrong often enough to rewrite true memories,
+    so verdicts wait for the user in the Mind Inspector (docs/12 §15). Turn it on only for a
+    model you have measured with `scripts/eval_models.py`."""
 
 
 class PersonalityConfig(BaseModel):

@@ -101,13 +101,14 @@ of what exists in code. Update it as each milestone lands.
 | Avatar thinking/speaking states; voice (Piper) with amplitude mouth | **Implemented** (AVA-01, VOI-01, AVA-02, [15](15-avatar-controller.md) §13) | `src/hedwig/speech/`, `frontend/src/voice/`, `frontend/src/stores/activity.ts` |
 | Mind Inspector: mood, relationship, personality, memory, goals, curiosity | **Implemented** (UX-03, PER-01, [18](18-frontend-architecture.md) §14) | `frontend/src/panes/inspector/`, `src/hedwig/api/routes/persona.py` |
 | Avatar: 2D renderer, WebSocket frames, phoneme lip sync, gestures; speech recognition | Not started | — |
-| Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01) | `src/hedwig/wiring.py`, `src/hedwig/memory/maintenance.py` |
+| Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01; a stage of the nightly run since REF-02) | `src/hedwig/reflection/nightly.py`, `src/hedwig/memory/maintenance.py` |
 | Frontend conversation pane, token delivery (Electron IPC, Vite proxy) | **Implemented** (UX-02, [18](18-frontend-architecture.md) §13) | `frontend/src/panes/conversation/`, `electron/` |
 | Reflection T1: session summary and belief extraction | **Implemented** (REF-01, [12](12-reflection-engine.md) §14) | `src/hedwig/reflection/` |
 | Goals: store, lifecycle, API/CLI, in the prompt, from reflection | **Implemented** (GOA-01/02, [08](08-state-management.md) §6.1) | `src/hedwig/goals/` |
 | Web research: opt-in search, fetch controls, citations, egress audit | **Implemented** (KNW-02/03, [13](13-knowledge-and-tools.md) §13) | `src/hedwig/knowledge/`, `src/hedwig/tools/research.py` |
 | Curiosity: gap register, gated exploration, findings feed, deferred surfacing | **Implemented** (CUR-01/02/03, [11](11-curiosity-engine.md) §13) | `src/hedwig/curiosity/` |
-| Reflection T2–T4 | Not started — [29](29-backlog.md) | — |
+| Reflection T2 nightly: day summaries, belief merge and promotion, judged conflicts put to the user | **Implemented** (REF-02a/b/c, [12](12-reflection-engine.md) §15) | `src/hedwig/reflection/nightly.py`, `frontend/src/panes/inspector/` |
+| Reflection T2 procedures and drift; T3–T4 | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

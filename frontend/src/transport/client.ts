@@ -8,6 +8,8 @@
 
 import type {
   ApiErrorBody,
+  BeliefDispute,
+  DisputeChoice,
   EmotionReading,
   Explanation,
   ExpressionIntent,
@@ -197,6 +199,23 @@ export class HedwigClient {
   ): Promise<MemoryItem> {
     const path = `/v1/memory/${encodeURIComponent(id)}/${action === "unpin" ? "pin" : action}`;
     return this.request<MemoryItem>(action === "unpin" ? "DELETE" : "POST", path, { auth: true });
+  }
+
+  async disputes(): Promise<BeliefDispute[]> {
+    const body = await this.request<{ disputes: BeliefDispute[] }>(
+      "GET",
+      "/v1/reflection/disputes",
+      { auth: true },
+    );
+    return body.disputes;
+  }
+
+  async resolveDispute(pair: string, choice: DisputeChoice): Promise<void> {
+    await this.request<unknown>(
+      "POST",
+      `/v1/reflection/disputes/${encodeURIComponent(pair)}/resolve`,
+      { body: { choice }, auth: true },
+    );
   }
 
   async goals(): Promise<Goal[]> {

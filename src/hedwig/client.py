@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -184,6 +185,19 @@ class HedwigClient:
 
     def explore(self) -> dict[str, Any]:
         return self._request("POST", "/v1/curiosity/explore")
+
+    def reflect(self) -> dict[str, Any]:
+        return self._request("POST", "/v1/reflection/run")
+
+    def disputes(self) -> list[dict[str, Any]]:
+        return list(self._request("GET", "/v1/reflection/disputes")["disputes"])
+
+    def resolve_dispute(self, pair: str, choice: str) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/v1/reflection/disputes/{quote(pair, safe='')}/resolve",
+            json={"choice": choice},
+        )
 
     def egress(self, *, limit: int = 50) -> list[dict[str, Any]]:
         return list(self._request("GET", "/v1/egress", params={"limit": limit})["requests"])

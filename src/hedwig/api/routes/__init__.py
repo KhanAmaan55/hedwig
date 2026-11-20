@@ -14,6 +14,7 @@ from hedwig.api.routes import (
     memory,
     mind,
     persona,
+    reflection,
     speech,
     stream,
 )
@@ -30,5 +31,6 @@ v1.include_router(curiosity.router)
 v1.include_router(speech.router)
 v1.include_router(stream.router)
 v1.include_router(explain.router)
+v1.include_router(reflection.router)
 
 __all__ = ["v1"]

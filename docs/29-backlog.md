@@ -64,8 +64,8 @@ the repository, ahead of any new cognitive capability.
 | 2 | Brain: decides what to remember / goal updates | **PARTIAL** | Capture subscriber stores the exchange; no goal system |
 | 13 | LLM gateway: tiering, streaming, structured output, metrics, replaceable provider | **COMPLETE** | `llm/`; `test_llm_gateway.py`, `test_ollama_provider.py`, `RecordedProvider` |
 | 3 | Episodic memory: capture, novelty gate, decay maths, tombstones | **COMPLETE** | `memory/capture.py`, `store.py`; `test_memory_*` |
-| 3 | Memory decay and forgetting **in the running system** | **COMPLETE** (was BROKEN) | Scheduled nightly as `memory.maintenance` (MEM-01); `test_memory_maintenance_scheduled.py` |
-| 3 | Semantic memory (beliefs) | **PARTIAL** | T1 reflection writes tentative beliefs from each ended conversation (REF-01); no promotion or contradiction handling yet (T2) |
+| 3 | Memory decay and forgetting **in the running system** | **COMPLETE** (was BROKEN) | Scheduled nightly (MEM-01), now the last stage of `reflection.nightly` (REF-02); `test_memory_maintenance_scheduled.py` |
+| 3 | Semantic memory (beliefs) | **PARTIAL** | T1 writes tentative beliefs (REF-01); T2 merges duplicates, promotes on two conversations, and puts judged conflicts to the user (REF-02). Paraphrases are not found without embeddings (MEM-04) |
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
 | 3 | Project memory | **MISSING** | No schema or module |
@@ -352,7 +352,26 @@ user through the utility model, so that semantic memory is finally populated (G3
 - **Tests:** recorded-provider extraction; running twice changes nothing.
 
 #### REF-02 — T2 nightly consolidation
-**Status:** Todo · **P2** · **XL** (split before starting) · **Depends on:** REF-01, MEM-01
+**Status:** Done as REF-02a/b/c (2026-11-20); REF-02d deferred · **P2** · **XL** (split) · **Depends on:** REF-01, MEM-01 · **Modules:** `reflection/nightly.py`, `memory/store.py`, `api/routes/reflection.py`, inspector, migration 0015
+
+As the user, I want HEDWIG to tidy what it learned overnight — one summary per busy day, one
+belief per fact, facts heard in two conversations trusted more, and conflicts settled — so that
+its memory gets better with time rather than only bigger.
+
+- **REF-02a — the run.** `reflection.nightly` at `memory.maintenance_hour`; stages summarise →
+  merge → judge → promote → maintain; yields at a stage boundary while the user is talking and
+  resumes there; every run recorded (`reflection_run`). `hedwig reflect`, `POST /v1/reflection/run`.
+- **REF-02b — beliefs.** Overlap ≥0.9 merges (noisy-OR, `merged_from`, `corroborated_by`);
+  two independent conversations promote to `active`; the ambiguous middle goes to the utility
+  model; **its verdicts are proposals** the user settles in the inspector (*Needs your eye*),
+  `hedwig disputes|settle`, or the API. `reflection.auto_apply_judgements` (off) lets a measured
+  model act alone. Pinned beliefs are never superseded.
+- **REF-02c — days.** A finished local day with ≥5 conversation episodes gets one
+  `period_summary` linked to every leaf.
+- **REF-02d — deferred:** procedures (no procedural memory), drift analysis (PER-02), FTS and
+  vacuum maintenance, contradictions as curiosity gaps.
+- **Tests:** `test_nightly_reflection.py` (16), inspector tests; live held-out judgement on
+  `gemma4:e2b` (docs/12 §15.1).
 
 ### 4.9 Goals
 
@@ -438,8 +457,8 @@ Remaining, in dependency order, highest value first:
 1. ~~FND-05~~ — done. Next on it: replay on reconnect, `interrupt`, and pushing `mind.update`
    instead of polling (EMO-02).
 2. ~~SEC-01~~ — done. Next on it: `/traces/{correlation_id}`, `prompt_version` on `llm_call`.
-3. **REF-02** — T2 nightly consolidation: belief corroboration and promotion, contradictions as
-   gaps, summary of the day. Split before starting (XL).
+3. ~~REF-02~~ — done (a/b/c). Next on it: embedding candidates (after MEM-04), a held-out
+   judgement scenario in the eval harness, REF-02d.
 4. **SEC-02** — export and purge, with the purge-completeness test.
 5. **MEM-05** → **MEM-04** — the recall eval corpus, then the embedding channel.
 6. **KNW-01** — local documents (CURATED tier).
@@ -599,4 +618,14 @@ tables, or copied rows). Nothing existing was changed or deleted.
   token; *Why?* under each reply in the app. The one missing record, directives and the planner's
   rationale, now goes into the reply's existing `meta` (no migration). Verified live on a
   streamed turn. Python 1099 tests, frontend 103. Design in [16](16-api-structure.md) §14.
+- **REF-02 (a/b/c)** Nightly consolidation — `reflection/nightly.py`: a plain stage list
+  (summarise, merge, judge, promote, maintain) that yields to a live conversation and resumes at
+  the stage it stopped; MEM-01's standalone task folded in as the last stage. Migration 0015
+  (new tables `reflection_run`, `belief_judgement`). **Finding:** live on `gemma4:e2b` the belief
+  judge looked perfect on pairs that were its prompt's examples and was unreliable on held-out
+  ones (all "different", then all "contradicts"; after fixes, 2/3 with "plays guitar" vs "plays
+  piano" called a contradiction). So model verdicts are now proposals the user settles in the
+  Mind Inspector (*Needs your eye*) or with `hedwig disputes|settle`; only rules (≥0.9 overlap,
+  two conversations) act alone. Paraphrases ("vegetarian" / "does not eat meat") are not found
+  by word overlap — embeddings are the fix (MEM-04). Design in [12](12-reflection-engine.md) §15.
 

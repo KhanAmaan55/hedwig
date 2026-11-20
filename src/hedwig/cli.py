@@ -502,6 +502,44 @@ def curiosity_dismiss(finding_id: str) -> None:
 
 
 @app.command()
+def reflect() -> None:
+    """Run the nightly consolidation now: summarise days, merge and judge beliefs, promote, decay."""
+    result = _call(lambda c: c.reflect())
+    assert isinstance(result, dict)
+    print(
+        result["status"] + (f" (resumes at {result['next_stage']})" if result["next_stage"] else "")
+    )
+    for stage, stats in result["stats"].items():
+        print(f"  {stage:<10} {json.dumps(stats)}")
+
+
+@app.command()
+def disputes() -> None:
+    """Beliefs HEDWIG thinks repeat or conflict. Settle one with `hedwig settle`."""
+    found = _call(lambda c: c.disputes())
+    assert isinstance(found, list)
+    if not found:
+        print("nothing needs your eye")
+    for item in found:
+        print(f"{item['pair']}  ({item['verdict']}?)")
+        print(f"  first:  {item['first']['statement']}")
+        print(f"  second: {item['second']['statement']}")
+
+
+@app.command()
+def settle(
+    pair: Annotated[str, typer.Argument(help="The pair, as `hedwig disputes` prints it.")],
+    choice: Annotated[
+        str, typer.Argument(help="first or second (that one is true now), both, or same.")
+    ],
+) -> None:
+    """Say which of two beliefs is true. What you keep counts as confirmed."""
+    result = _call(lambda c: c.resolve_dispute(pair, choice))
+    assert isinstance(result, dict)
+    print(f"settled: {result['resolution']}")
+
+
+@app.command()
 def egress(limit: Annotated[int, typer.Option(help="How many.")] = 30) -> None:
     """Every request HEDWIG made to the internet, newest first, with what it sent."""
     rows = _call(lambda c: c.egress(limit=limit))
