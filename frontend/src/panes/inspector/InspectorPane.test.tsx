@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../transport/client";
-import type { Finding, Goal, MemoryItem } from "../../transport/types";
+import type { BeliefDispute, Finding, Goal, MemoryItem } from "../../transport/types";
 
 import InspectorPane, { type InspectorApi } from "./InspectorPane";
 
@@ -70,6 +70,8 @@ function fakeApi(overrides: Partial<InspectorApi> = {}): InspectorApi {
       .fn()
       .mockResolvedValue({ query: "tea", hits: [{ memory: MEMORY, score: 1, breakdown: {} }] }),
     memoryAction: vi.fn().mockResolvedValue({ ...MEMORY, forgotten: true }),
+    disputes: vi.fn().mockResolvedValue([]),
+    resolveDispute: vi.fn().mockResolvedValue(undefined),
     goals: vi.fn().mockResolvedValue([GOAL]),
     createGoal: vi.fn().mockResolvedValue(GOAL),
     updateGoal: vi.fn().mockResolvedValue({ ...GOAL, status: "active" }),
@@ -112,6 +114,59 @@ describe("InspectorPane", () => {
     await waitFor(() => {
       expect(api.memories).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("puts what the nightly run could not decide to the user, and settles it", async () => {
+    const dispute: BeliefDispute = {
+      pair: "bel_1|bel_2",
+      verdict: "contradicts",
+      proposed_at: "",
+      first: { id: "bel_1", statement: "The user's sister lives in Porto." },
+      second: { id: "bel_2", statement: "The user's sister lives in Lisbon." },
+    };
+    const api = fakeApi({
+      disputes: vi.fn().mockResolvedValueOnce([dispute]).mockResolvedValue([]),
+    });
+    render(<InspectorPane api={api} />);
+    tab("Memory");
+    expect(await screen.findByRole("region", { name: "Needs your eye" })).toHaveTextContent(
+      "Lisbon",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Second is true" }));
+    await waitFor(() => {
+      expect(api.resolveDispute).toHaveBeenCalledWith("bel_1|bel_2", "second");
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Needs your eye" })).not.toBeInTheDocument();
+    });
+    expect(api.memories).toHaveBeenCalledTimes(2);
+  });
+
+  it("marks a belief that was replaced", async () => {
+    const replaced: MemoryItem = { ...MEMORY, id: "bel_1", kind: "belief", status: "superseded" };
+    render(<InspectorPane api={fakeApi({ memories: vi.fn().mockResolvedValue([replaced]) })} />);
+    tab("Memory");
+    expect(await screen.findByText(/no longer true/)).toBeInTheDocument();
+  });
+
+  it("says why a dispute could not be settled", async () => {
+    const dispute: BeliefDispute = {
+      pair: "bel_1|bel_2",
+      verdict: "same",
+      proposed_at: "",
+      first: { id: "bel_1", statement: "The user enjoys green tea." },
+      second: { id: "bel_2", statement: "The user drinks green tea daily." },
+    };
+    const api = fakeApi({
+      disputes: vi.fn().mockResolvedValue([dispute]),
+      resolveDispute: vi
+        .fn()
+        .mockRejectedValue(new ApiError("conflict", "That memory is pinned.", 409, null, false)),
+    });
+    render(<InspectorPane api={api} />);
+    tab("Memory");
+    fireEvent.click(await screen.findByRole("button", { name: "Same thing" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("pinned");
   });
 
   it("searches as HEDWIG recalls", async () => {

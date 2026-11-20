@@ -116,8 +116,10 @@ accumulates errors forever, and the user is the highest-trust source available.
 | `POST` | `/curiosity/explore` | Manual trigger, still budget-bound |
 | `GET`/`POST`/`DELETE` | `/documents` | Ingest, list, remove local documents |
 | `POST` | `/documents/reindex` | Re-ingest |
-| `GET` | `/reflection/runs?tier=` | Run history and stats |
-| `POST` | `/reflection/trigger?tier=` | Manual trigger (dev and impatience) |
+| `GET` | `/reflection/runs?tier=` | Run history and stats (built as `GET /reflection/runs?limit=`, T2 only — REF-02) |
+| `POST` | `/reflection/trigger?tier=` | Manual trigger (dev and impatience) (built as `POST /reflection/run` — REF-02) |
+| `GET` | `/reflection/disputes` | Beliefs the nightly run thinks repeat or conflict, waiting for the user (REF-02) |
+| `POST` | `/reflection/disputes/{pair}/resolve` | `{"choice": "first" \| "second" \| "both" \| "same"}` — the user settles one (REF-02) |
 | `GET` | `/reflection/report/latest` | The T4 identity report |
 
 ### 4.5 System and introspection

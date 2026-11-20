@@ -71,7 +71,7 @@ from hedwig.memory import (
     TurnCaptureSubscriber,
 )
 from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore, PersonaMindReader
-from hedwig.reflection import SessionReflector
+from hedwig.reflection import NightlyReflection, SessionReflector
 from hedwig.sessions import SqliteSessionStore
 from hedwig.speech import PiperSpeaker
 from hedwig.tools import (
@@ -128,6 +128,7 @@ class Container:
     curiosity: CuriosityStore
     explorer: Explorer
     speaker: Speaker
+    nightly: NightlyReflection
     persona_control: PersonaControl | None
     """The same engine as `personality`, typed by the role the inspector needs (PER-01)."""
 
@@ -272,19 +273,6 @@ def build_container(
         bus=bus,
         half_life_days=config.memory.decay_half_life_days,
         forget_threshold=config.memory.forget_threshold,
-    )
-    # Nightly decay and forgetting (docs/06 §7). Until this was registered the pass existed,
-    # was tested, and never ran: salience never decayed in a real install (docs/29 G2).
-    # A scheduled task, so a machine asleep at 03:00 catches up once on waking.
-    scheduler.register(
-        TaskSpec(
-            name="memory.maintenance",
-            handler=maintenance.run_task,
-            trigger=DailyTrigger(hour=config.memory.maintenance_hour),
-            priority=Priority.MAINTENANCE,
-            description="Decay salience and forget what has faded (capped at 2 % a night).",
-            max_runtime_seconds=600.0,
-        )
     )
     # Social memory (docs/06 §3.3). In `memory` because docs/05 puts `relation` there;
     # personality reads it through `RelationshipReader` and never writes it.
@@ -448,6 +436,30 @@ def build_container(
             max_facts=config.reflection.max_facts,
         )
 
+    # 10d. Reflection, T2 (docs/12 §15): the nightly run. Decay and forgetting are its last
+    #      stage now (they were the standalone `memory.maintenance` task, MEM-01).
+    nightly = NightlyReflection(
+        database=database,
+        store=memory,
+        capture=capture,
+        maintenance=maintenance,
+        history=sessions,
+        gateway=llm,
+        clock=clock,
+        timezone=config.runtime.timezone,
+        auto_apply=config.reflection.auto_apply_judgements,
+    )
+    scheduler.register(
+        TaskSpec(
+            name="reflection.nightly",
+            handler=nightly.task,
+            trigger=DailyTrigger(hour=config.memory.maintenance_hour),
+            priority=Priority.MAINTENANCE,
+            description="Summarise days, merge and judge beliefs, promote, decay and forget.",
+            max_runtime_seconds=900.0,
+        )
+    )
+
     # 11. Lifecycle. The registry starts these in dependency order and stops them in reverse.
     registry = InMemoryServiceRegistry()
     registry.register("config", config_manager)
@@ -522,6 +534,7 @@ def build_container(
         curiosity=curiosity,
         explorer=explorer,
         speaker=speaker,
+        nightly=nightly,
         persona_control=personality,
     )
 

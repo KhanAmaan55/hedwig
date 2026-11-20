@@ -272,6 +272,77 @@ class SqliteMemoryStore:
         )
         return new.id
 
+    async def supersede_with(self, old: MemoryId, newer: MemoryId, *, reason: str) -> bool:
+        """`old` gives way to a belief that already exists (docs/12 §15). Both are kept.
+
+        False when `old` is pinned — the user said keep it — or is no longer live.
+        """
+        row = self._db.query_one(
+            "SELECT pinned FROM belief WHERE id = ? AND tombstoned_at IS NULL "
+            "AND status IN ('tentative','active')",
+            (old,),
+        )
+        if row is None or row["pinned"]:
+            return False
+        now = self._now()
+        self._db.execute(
+            "UPDATE belief SET status = 'superseded', valid_to = ?, superseded_by = ?, "
+            "updated_at = ?, version = version + 1 WHERE id = ?",
+            (now, newer, now, old),
+        )
+        await self.record_derivation(newer, old, DerivationRelation.CONTRADICTED_BY)
+        await self._announce(
+            "memory.belief.superseded", {"old_id": old, "new_id": newer, "reason": reason}
+        )
+        return True
+
+    async def set_confidence(self, memory_id: MemoryId, confidence: float) -> None:
+        self._db.execute(
+            "UPDATE belief SET confidence = ?, updated_at = ?, version = version + 1 WHERE id = ?",
+            (max(0.0, min(1.0, confidence)), self._now(), memory_id),
+        )
+
+    async def live_beliefs(self) -> Sequence[Belief]:
+        """Tentative and active beliefs, oldest first — what consolidation works on."""
+        rows = self._db.query(
+            "SELECT * FROM belief WHERE tombstoned_at IS NULL "
+            "AND status IN ('tentative','active') ORDER BY valid_from, id"
+        )
+        return tuple(_to_belief(row) for row in rows)
+
+    def corroborating_sources(self, memory_id: MemoryId) -> set[str]:
+        """The distinct origins behind a belief: its own, and every belief merged into it.
+
+        Two conversations saying the same thing are two sources; the same conversation twice is
+        one. This is what promotion counts (docs/06 §3.2, docs/12 §15).
+        """
+        rows = self._db.query(
+            "SELECT source_ref FROM belief WHERE id = ? "
+            "UNION SELECT b.source_ref FROM memory_derivation d JOIN belief b ON b.id = d.source_id "
+            "WHERE d.derived_id = ? AND d.relation IN ('merged_from','corroborated_by')",
+            (memory_id, memory_id),
+        )
+        return {str(row["source_ref"]) for row in rows if row["source_ref"]}
+
+    async def episodes_between(
+        self, start: datetime, end: datetime, *, kinds: Sequence[EpisodeKind]
+    ) -> Sequence[Episode]:
+        marks = ",".join("?" for _ in kinds)
+        rows = self._db.query(
+            f"SELECT * FROM episode WHERE tombstoned_at IS NULL AND kind IN ({marks}) "
+            "AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at",
+            (*[k.value for k in kinds], _iso(start), _iso(end)),
+        )
+        return tuple(_to_episode(row, ()) for row in rows)
+
+    async def summary_for(self, source_ref: str) -> Episode | None:
+        row = self._db.query_one(
+            "SELECT * FROM episode WHERE source_ref = ? AND kind = 'period_summary' "
+            "AND tombstoned_at IS NULL",
+            (source_ref,),
+        )
+        return _to_episode(row, ()) if row else None
+
     async def promote_belief(self, memory_id: MemoryId, *, confidence: float) -> None:
         """Tentative to active. Requires corroboration; the caller decides that."""
         self._db.execute(

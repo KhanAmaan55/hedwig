@@ -1,6 +1,6 @@
 # 12 — Reflection Engine
 
-**Status:** Partially implemented (§14: T1) · **Depends on:** [06](06-memory-architecture.md), [08](08-state-management.md), [10](10-personality-engine.md) · **Depended on by:** [17](17-backend-architecture.md)
+**Status:** Partially implemented (§14: T1, §15: T2) · **Depends on:** [06](06-memory-architecture.md), [08](08-state-management.md), [10](10-personality-engine.md) · **Depended on by:** [17](17-backend-architecture.md)
 
 ---
 
@@ -379,4 +379,102 @@ itself. `v2` adds a worked example, and `third_person()` rewrites a first-person
 deterministically as a guard ("I live in Porto" becomes `The user said: "I live in Porto."`
 rather than guessing verb agreement). Result: 3/3 runs, all three facts each time, all in the
 third person; the reflection takes 1–3 s after the end.
+
+---
+
+## 15. Implementation record — T2 nightly consolidation (REF-02a/b/c)
+
+REF-02 was split before starting. Built: the nightly run and the stages that act on what HEDWIG
+already records. Deferred, each waiting for something that does not exist yet: procedures (no
+procedural memory), drift analysis (PER-02), FTS/vacuum maintenance, and the weekly and monthly
+tiers T3 and T4.
+
+```mermaid
+graph TB
+    S["reflection.nightly<br/><small>daily at memory.maintenance_hour, or hedwig reflect</small>"] --> R{"resume from the<br/>last run's next stage"}
+    R --> A["summarise days<br/><small>≥5 episodes on a finished local day → one period summary</small>"]
+    A --> B["merge beliefs<br/><small>overlap ≥0.9 → same fact, merged</small>"]
+    B --> C["judge beliefs<br/><small>overlap 0.45–0.9 or same subject → utility model: same · contradicts · different</small>"]
+    C -->|"same / contradicts"| P["proposal<br/><small>belief_judgement, status proposed</small>"]
+    P --> U["Mind Inspector: Needs your eye<br/><small>or hedwig disputes / settle</small>"]
+    U -->|"the user's answer"| W["supersede · merge · nothing<br/><small>kept belief becomes active (0.9)</small>"]
+    C --> D["promote<br/><small>tentative + ≥2 independent conversations → active</small>"]
+    D --> E["decay · forget<br/><small>the MEM-01 pass, now a stage</small>"]
+    E --> F["record run<br/><small>reflection_run: stats, content hash</small>"]
+    A & B & C & D & E -.->|"the user is talking"| Y["yield at the stage boundary;<br/>the next run resumes here"]
+```
+
+* **A plain stage list, not a LangGraph graph.** docs/12 §5 names a `ReflectionGraph`. The run is
+  linear, every stage is idempotent, and resumption needs one thing: which stage is next. That
+  is a column on `reflection_run`, so a graph and a checkpointer would add a framework without a
+  benefit (CLAUDE.md: no frameworks without one). If T2 ever branches, it becomes a graph.
+* **Yielding.** Before every stage the run checks whether the user has spoken in the last two
+  minutes. If so it stops with `status = yielded` and the next stage recorded, and the next run
+  starts there (§5.1).
+* **Summarise.** A finished local day with five or more conversation episodes gets one
+  `period_summary` episode, `source_ref = day:YYYY-MM-DD`, with `summarised_from` edges to every
+  leaf (§8). The prompt requires names, decisions and numbers to survive. One per day: an existing
+  summary means skip. No model means the day waits for the next night.
+* **Merge, judge, supersede.** Beliefs are compared pairwise by word overlap. At 0.9 or above
+  they are the same fact: the older one stays, its confidence combines the two by noisy-OR
+  (still capped while tentative), the newer one is tombstoned as `merged`, and a `merged_from`
+  edge (plus `corroborated_by` when the two came from different conversations) records it.
+  Between 0.45 and 0.9 the pair is about the same subject but may say different things ("sister
+  lives in Porto" vs "… in Lisbon" overlap at 0.75), so word overlap cannot decide it. Pairs below
+  0.45 that share two content words, or open with the same three words when the third is not a
+  generic verb ("The user works…" yes, "The user is…" no), are judged too. These go to the
+  utility model in one batched call, and every verdict is kept in `belief_judgement` so no pair
+  is judged twice.
+* **The model proposes; the user decides.** A *same* or *contradicts* verdict is stored as a
+  proposal and changes nothing. The Memory tab of the Mind Inspector shows open proposals under
+  *Needs your eye* (also `hedwig disputes`, `hedwig settle <pair> <choice>`, and
+  `GET /v1/reflection/disputes`, `POST /v1/reflection/disputes/{pair}/resolve`). The user answers
+  *first is true* / *second is true* (the other is superseded, both kept, `contradicted_by`
+  edge), *same thing* (merged as above) or *both are true* (nothing changes). The user's answer
+  is the strongest corroboration there is, so the belief they keep becomes `active` at 0.9. A
+  pinned belief is never superseded: the answer is refused with "unpin it first", and the
+  proposal stays open. `reflection.auto_apply_judgements = true` restores acting on the model's
+  word alone (newer supersedes older, *same* merges) for a model that has been measured to
+  deserve it.
+* **Promote.** A tentative belief whose own conversation plus the conversations of the beliefs
+  merged into it number two or more is promoted to `active` (confidence 0.7). This is the
+  corroboration rule of docs/06 §3.2 and docs/11 §5.1. Its trust tier never changes: a web fact
+  corroborated by two sites is an active *untrusted* belief.
+* **Decay and forget** are the MEM-01 pass, moved in. The standalone `memory.maintenance` task is
+  removed (docs/06 §7 said it would be). Their idempotency is unchanged (`last_decay_at`).
+* **Record.** One `reflection_run` row per run: stats per stage (the judge stage reports
+  `awaiting_you`), the next stage if it yielded, and a hash of the beliefs and episodes it read,
+  for audit.
+
+### 15.1 Why the model only proposes — measured
+
+The first version applied verdicts directly. Measured live on `gemma4:e2b` (the default utility
+model), that was not safe:
+
+* With worked examples in the prompt it scored 4/4 — on pairs that *were* the examples. On
+  held-out pairs, two runs answered "different" to everything and then "contradicts" to
+  everything. The 4/4 was overfitting, not judgement.
+* After the prompt and candidate changes above, on six held-out pairs (two runs, identical
+  answers): Berlin/Munich and Sam/Alex correctly *contradicts*; "plays the guitar" / "plays the
+  piano" wrongly *contradicts*. Applied, that verdict would have erased a true memory.
+* The candidate rule used to pair "is vegetarian" with "is studying chemistry" (same opening
+  words). Generic verbs are now excluded and that pair is no longer judged.
+* Pairs that mean the same in different words ("is vegetarian" / "does not eat meat", "runs
+  every weekend" / "goes running on Saturdays and Sundays", overlap 0.29 and 0.20) are not found
+  at all. Word overlap cannot see them; embeddings can (future work below).
+
+A wrong proposal costs the user one click. A wrong supersession silently rewrites what HEDWIG
+believes about them. The asymmetry decides it.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Rules decide the clear cases, the model only the ambiguous middle | Cheap, testable, and no model call for identical facts | A 2B model's judgement on the rest | The judgement eval shows errors |
+| Model verdicts are proposals, not actions | No true memory is rewritten on a 2B model's guess | Duplicates and outdated facts wait for the user; unanswered ones stay | A utility model passes the held-out judgement eval: set `auto_apply_judgements` |
+| On the user's answer, the kept belief supersedes the other | Facts that change are updated, by the person who knows | One click per conflict | — |
+| Verdict cache | Never pays twice for a pair | A pair judged "different" stays so | A belief is edited (MEM-03 clears its verdicts) |
+
+**Future improvements.** Candidate pairs by embedding similarity, so paraphrases are found
+(MEM-05/MEM-04 bring embeddings); a held-out judgement scenario in `scripts/eval_models.py` that
+gates `auto_apply_judgements`; proposals that expire when one side is edited or forgotten
+(MEM-03); a badge on the Memory tab when something needs the user's eye.
 

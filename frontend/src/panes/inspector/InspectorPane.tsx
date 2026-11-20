@@ -2,15 +2,23 @@
  * The Mind Inspector (docs/18 §7, UX-03): see inside HEDWIG, and steer it.
  *
  * Four tabs, each a window onto one module through the public API, each with the user's hand on
- * it: memory can be searched, pinned, forgotten and restored; goals activated and closed;
+ * it: memory can be searched, pinned, forgotten and restored, and what the nightly run could not
+ * decide alone is put to the user ("Needs your eye"); goals activated and closed;
  * findings kept or dismissed; personality and mood are shown as they are. Nothing here is
  * decorative — every number is the backend's, and every button is an API call.
  */
 
 import { useCallback, useMemo, useState, type JSX, type KeyboardEvent } from "react";
 
-import { client, type HedwigClient } from "../../transport/client";
-import type { Finding, Gap, Goal, MemoryItem } from "../../transport/types";
+import { ApiError, client, type HedwigClient } from "../../transport/client";
+import type {
+  BeliefDispute,
+  DisputeChoice,
+  Finding,
+  Gap,
+  Goal,
+  MemoryItem,
+} from "../../transport/types";
 
 import { useLoad } from "./useLoad";
 
@@ -22,6 +30,8 @@ export type InspectorApi = Pick<
   | "memories"
   | "searchMemory"
   | "memoryAction"
+  | "disputes"
+  | "resolveDispute"
   | "goals"
   | "createGoal"
   | "updateGoal"
@@ -150,6 +160,12 @@ function MemoryTab({ api }: { api: InspectorApi }): JSX.Element {
 
   return (
     <>
+      <Disputes
+        api={api}
+        onSettled={() => {
+          list.reload();
+        }}
+      />
       <form
         className="inspector__form"
         onSubmit={(event) => {
@@ -191,6 +207,7 @@ function MemoryTab({ api }: { api: InspectorApi }): JSX.Element {
               {memory.trust === "untrusted" ? "read on the web" : `trust: ${memory.trust}`}
               {memory.pinned && " · pinned"}
               {memory.forgotten && " · forgotten"}
+              {memory.status === "superseded" && " · no longer true"}
             </p>
             <div className="item__actions">
               {memory.forgotten ? (
@@ -226,6 +243,76 @@ function MemoryTab({ api }: { api: InspectorApi }): JSX.Element {
         ))}
       </ul>
     </>
+  );
+}
+
+const CHOICES: Record<BeliefDispute["verdict"], { choice: DisputeChoice; label: string }[]> = {
+  contradicts: [
+    { choice: "first", label: "First is true" },
+    { choice: "second", label: "Second is true" },
+    { choice: "both", label: "Both are true" },
+  ],
+  same: [
+    { choice: "same", label: "Same thing" },
+    { choice: "both", label: "Not the same" },
+  ],
+};
+
+/**
+ * What the nightly run could not decide alone (docs/12 §15). A small model's "these conflict" is
+ * a guess, so it is shown here rather than acted on; the user's answer is what changes memory.
+ */
+function Disputes({ api, onSettled }: { api: InspectorApi; onSettled: () => void }): JSX.Element {
+  const disputes = useLoad(useCallback(() => api.disputes(), [api]));
+  const [problem, setProblem] = useState<string | null>(null);
+  const open = Array.isArray(disputes.data) ? disputes.data : [];
+
+  const settle = async (dispute: BeliefDispute, choice: DisputeChoice) => {
+    try {
+      await api.resolveDispute(dispute.pair, choice);
+      setProblem(null);
+    } catch (caught: unknown) {
+      setProblem(caught instanceof ApiError ? caught.message : "That did not work.");
+    }
+    disputes.reload();
+    onSettled();
+  };
+
+  if (open.length === 0) return <></>;
+  return (
+    <section aria-label="Needs your eye" className="disputes">
+      <h3 className="inspector__heading">Needs your eye</h3>
+      {problem && (
+        <p className="panel__hint" role="alert">
+          {problem}
+        </p>
+      )}
+      <ul className="items">
+        {open.map((dispute) => (
+          <li key={dispute.pair} className="item">
+            <p className="item__meta">
+              {dispute.verdict === "contradicts"
+                ? "These may not both be true:"
+                : "These may say the same thing:"}
+            </p>
+            <p className="item__text">1. {dispute.first.statement}</p>
+            <p className="item__text">2. {dispute.second.statement}</p>
+            <div className="item__actions">
+              {CHOICES[dispute.verdict].map(({ choice, label }) => (
+                <button
+                  key={choice}
+                  className="button button--small"
+                  type="button"
+                  onClick={() => void settle(dispute, choice)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

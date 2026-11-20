@@ -158,6 +158,17 @@ export interface Gap {
   created_at: string;
 }
 
+/** Two beliefs the nightly run thinks repeat or conflict: a proposal, not a change (docs/12 §15). */
+export interface BeliefDispute {
+  pair: string;
+  verdict: "same" | "contradicts";
+  proposed_at: string;
+  first: { id: string; statement: string };
+  second: { id: string; statement: string };
+}
+
+export type DisputeChoice = "first" | "second" | "both" | "same";
+
 export interface Finding {
   id: string;
   question: string;

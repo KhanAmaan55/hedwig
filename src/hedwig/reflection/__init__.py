@@ -1,8 +1,9 @@
 """Reflection: HEDWIG reviewing its own experience (docs/12).
 
-Only T1 — session reflection — exists so far (docs/12 §14).
+T1 (session, docs/12 §14) and T2 (nightly, §15).
 """
 
+from hedwig.reflection.nightly import NightlyReflection
 from hedwig.reflection.session import Reflection, SessionReflector
 
-__all__ = ["Reflection", "SessionReflector"]
+__all__ = ["NightlyReflection", "Reflection", "SessionReflector"]
