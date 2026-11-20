@@ -44,6 +44,7 @@ from hedwig.core.ports import (
     StateManager,
     TaskScheduler,
 )
+from hedwig.core.ports.brain import MindReader
 from hedwig.core.ports.personality import PersonaReader, RelationshipReader, Trait
 from hedwig.core.ports.scheduler import Priority, TaskSpec
 from hedwig.core.registry import InMemoryServiceRegistry
@@ -52,6 +53,7 @@ from hedwig.core.state import SqliteStateManager
 from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
 from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
+from hedwig.goals import GoalsMindReader, GoalStore
 from hedwig.llm import LanguageModelGateway, OllamaProvider, RecordedProvider
 from hedwig.llm.responder import GatewayResponder
 from hedwig.memory import (
@@ -109,6 +111,7 @@ class Container:
     maintenance: MemoryMaintenance
     brain: Brain
     plugins: PluginLoader
+    goals: GoalStore
 
     def uptime_seconds(self) -> float:
         """Elapsed time since startup, measured monotonically.
@@ -310,15 +313,30 @@ def build_container(
             anchors={Trait(name): value for name, value in config.personality.anchors.items()},
         )
 
+    # 9b. Goals (docs/08 §6.1). What HEDWIG is helping with over time, swept daily.
+    goals = GoalStore(database, clock=clock, bus=bus)
+    scheduler.register(
+        TaskSpec(
+            name="goals.lifecycle",
+            handler=goals.sweep_task,
+            trigger=DailyTrigger(hour=config.memory.maintenance_hour),
+            priority=Priority.MAINTENANCE,
+            description="Expire stale proposals, block stalled goals, cap the active set.",
+            max_runtime_seconds=60.0,
+        )
+    )
+
     # One reading of cognition per turn. With personality, it composes personality, the
     # relationship and emotion through their ports — importing none of them (ADR-0008).
-    mind = (
+    # Goals wrap whichever reader that is, by composition (docs/08 §6.1).
+    base_mind: MindReader = (
         PersonaMindReader(personality, emotion=emotion, relationship=relationship)
         if personality
         else EmotionMindReader(emotion)
         if emotion
         else DefaultMindReader()
     )
+    mind = GoalsMindReader(base_mind, goals)
 
     # 10. The turn graph, now a closed loop: it observes into the conversation log, recalls
     #    from real memory, and announces what happened so memory can learn from it
@@ -353,6 +371,7 @@ def build_container(
             capture=capture,
             store=memory,
             bus=bus,
+            goals=goals,
             min_user_messages=config.reflection.min_user_messages,
             max_messages=config.reflection.max_transcript_messages,
             max_facts=config.reflection.max_facts,
@@ -384,10 +403,14 @@ def build_container(
             depends_on=("bus", "emotion") if emotion is not None else ("bus",),
             critical=False,
         )
+    registry.register("goals", goals, depends_on=("bus",), critical=False)
     registry.register("brain", brain, depends_on=("bus", "memory", "sessions"), critical=False)
     if reflector is not None:
         registry.register(
-            "reflection", reflector, depends_on=("bus", "memory", "sessions", "llm"), critical=False
+            "reflection",
+            reflector,
+            depends_on=("bus", "memory", "sessions", "llm", "goals"),
+            critical=False,
         )
 
     # 12. Plugins last: they register services of their own against the registry above.
@@ -423,6 +446,7 @@ def build_container(
         maintenance=maintenance,
         brain=brain,
         plugins=plugins,
+        goals=goals,
     )
 
     logger.debug(

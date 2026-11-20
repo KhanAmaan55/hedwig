@@ -85,7 +85,7 @@ the repository, ahead of any new cognitive capability.
 | 8 | Avatar: frames over WebSocket | **MISSING** | Polls `/v1/mind/expression` (acceptable for now, ADR-0021) |
 | 9 | Voice: TTS, ASR, streaming, interruption | **MISSING** | — |
 | 10 | Reflection (T1–T4) | **PARTIAL** | T1 session reflection (REF-01); T2–T4 not built |
-| 11 | Goals | **MISSING** | docs/08 §6 designed; no code |
+| 11 | Goals | **PARTIAL** | Store, lifecycle, API/CLI, goals in the prompt, reflection proposes and progresses (GOA-01/02); no retrieval boost or initiative yet |
 | 13 | Security: loopback bind, CORS, log redaction | **COMPLETE** | `api/app.py`, `core/logging.py` |
 | 13 | Security: API token | **COMPLETE** (was MISSING) | `core/token.py`, `api/auth.py`; `test_token_file.py`, `test_conversation_api.py` (ADR-0022) |
 | 13 | Security: injection defence | **MISSING** | Not needed until untrusted content enters (knowledge, curiosity) |
@@ -357,13 +357,13 @@ user through the utility model, so that semantic memory is finally populated (G3
 ### 4.9 Goals
 
 #### GOA-01 — Goal store and lifecycle
-**Status:** Todo · **P2** · **M** · **Depends on:** FND-01 · **Modules:** `goals/`, migration
+**Status:** Done (2026-11-20) · **P2** · **M** · **Depends on:** FND-01 · **Modules:** `goals/`, migration
 
 As HEDWIG, I want goals with priority, status, context, created date, progress and completion
 conditions, so that ongoing projects and follow-ups persist (docs/08 §6).
 
 #### GOA-02 — Goals in the turn
-**Status:** Todo · **P2** · **M** · **Depends on:** GOA-01 · Goal relevance in retrieval and salience; user request always outranks background goals.
+**Status:** Done (2026-11-20) · **P2** · **M** · **Depends on:** GOA-01 · Goal relevance in retrieval and salience; user request always outranks background goals.
 
 ### 4.10 Avatar
 
@@ -531,4 +531,9 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   and the user's stated facts as tentative, `self`-trust beliefs. Typed default: no model, no
   reflection. Live on `gemma4:e2b`: 3/3 after fixing first-person copying (prompt v2 + a
   deterministic `third_person` guard). Design in [12](12-reflection-engine.md) §14.
+- **GOA-01/02** Goals — `hedwig.goals` (store, transitions, daily lifecycle sweep, cap of 12),
+  migration 0011, `/v1/goals`, `hedwig goals …`, `GoalsMindReader` (composition) and a labelled
+  goals block in the prompt; reflection proposes goals for projects (as `proposed`, never in
+  the prompt until activated) and moves progress forward. Live on `gemma4:e2b`: goals used when
+  relevant 3/3, never intruding 3/3, after rewording the label. Design in [08](08-state-management.md) §6.1.
 

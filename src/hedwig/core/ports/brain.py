@@ -108,6 +108,9 @@ class MindSnapshot:
     relationship: Mapping[str, float] = field(default_factory=dict)
     """The relationship with the user. Its `trust` is per-entity and is not `mood["trust"]`
     (ADR-0020)."""
+    goals: tuple[str, ...] = ()
+    """Active goals, rendered one per line (docs/08 §6.1). Context for the reply, never the
+    agenda: the user's current message comes first."""
 
     @property
     def is_flat(self) -> bool:
@@ -170,6 +173,8 @@ class ResponseContext:
     mood: Mapping[str, float] = field(default_factory=dict)
     """The mood this reply is being composed under. Carried for the record and the
     inspector, not for the responder to narrate (docs/07 §14.4)."""
+    goals: tuple[str, ...] = ()
+    """What HEDWIG is helping with over time (docs/08 §6.1)."""
 
     @property
     def token_count(self) -> int:

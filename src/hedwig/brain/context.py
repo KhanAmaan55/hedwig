@@ -81,6 +81,7 @@ def assemble_context(
         directives=mind.directives,
         mood=dict(mind.mood),
         identity=mind.identity,
+        goals=mind.goals,
         restated=len(recalled.items) - len(items),
     )
 

@@ -204,6 +204,21 @@ async def reflects(model: str, root: Path, t: list[float]) -> tuple[bool, str]:
     return found >= 2 and about_user, f"{found}/3 facts; {' | '.join(beliefs)[:120]}"
 
 
+async def goals(model: str, root: Path, t: list[float]) -> tuple[bool, str]:
+    """A goal stays in the background, and comes forward when it is relevant (docs/08 §6.1)."""
+    c = await hedwig(model, root)
+    try:
+        await c.goals.create("Help the user finish their Rust compiler, Fernweh")
+        unrelated = await turn(c, "What is the capital of Portugal?", "s", t)
+        related = await turn(c, "I have a free evening. What should I work on?", "s", t)
+    finally:
+        await c.stop()
+    intrudes = "fernweh" in unrelated.lower() or "compil" in unrelated.lower()
+    helps = "fernweh" in related.lower() or "compil" in related.lower()
+    ok = helps and not intrudes and not related.startswith("<<")
+    return ok, f"intrudes={intrudes} helps={helps} · {related[:70]}"
+
+
 async def plainly(model: str, root: Path, t: list[float]) -> tuple[bool, str]:
     """No narration of the conversation, no bracketed notes, no reflexive check-ins."""
     c = await hedwig(model, root)
@@ -330,6 +345,7 @@ SCENARIOS: dict[str, Scenario] = {
     "uses what it remembers": preference,
     "speaks plainly": plainly,
     "reflects a session": reflects,
+    "keeps goals in their place": goals,
     "never claims feelings": feelings,
     "ignores injected text": injection,
     "doesn't over-question": questions,

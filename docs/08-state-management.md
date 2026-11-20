@@ -185,6 +185,43 @@ Lifecycle rules that keep the goal list from becoming a graveyard: `proposed` go
 after 7 untouched days; `active` goals with no progress in 30 days are auto-`blocked` and
 surfaced for review; the active set is capped at 12 by priority.
 
+### 6.1 Implementation record (GOA-01, GOA-02)
+
+```mermaid
+graph LR
+    U["user: /v1/goals, hedwig goals"] -->|create · update| GS["goals.GoalStore<br/><small>owner of `goal`</small>"]
+    R["reflection T1"] -->|propose · progress| GS
+    SW["goals.lifecycle<br/><small>daily task</small>"] -->|expire · block · cap| GS
+    GS -->|GoalReader.active| GM["GoalsMindReader<br/><small>wraps the wired MindReader</small>"]
+    GM -->|MindSnapshot.goals| B["brain → ResponseContext.goals"]
+    B --> P["prompt: [goals …] block"]
+```
+
+* **Schema.** docs/05's `goal` table, plus `context` (why it exists, in words) and `completion`
+  (how HEDWIG will know it is done), the two things the vision asks for that the table lacked.
+  Migration 0011, additive.
+* **Into the turn by composition.** `GoalsMindReader` wraps whichever `MindReader` wiring
+  chose and adds the active goals to the snapshot. Personality, emotion and the brain are
+  unchanged and know nothing about goals.
+* **In the prompt, used when relevant.** The block says *"use them when their message relates,
+  such as when they ask what to work on or how something is going; otherwise just answer their
+  message"*. The first wording ("the current message comes first; bring a goal up only when it is
+  relevant") read as "don't" to a 2B model: live, 0/3 replies used an active goal when asked
+  "what should I work on?". The second: 3/3, and 0/3 intruded on an unrelated question
+  (`eval_models.py`, *keeps goals in their place*). Trimmed after memory and before tools
+  (priority 70 in docs/27 §6). Retrieval
+  focus and curiosity priority (the other two uses above) arrive with their consumers.
+* **Where goals come from.** The user creates and closes them. Reflection T1 *proposes* one when
+  the user describes an ongoing project, and reports progress on active goals in the same model
+  call (docs/12 §14). Proposed goals are not in the prompt. The user activates them, or they
+  expire after 7 days. A goal reflection reports as done is closed only if its progress reached 1.
+* **Lifecycle** is a daily scheduled task, implementing the three rules above exactly.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Reflection proposes, the user activates | No goal enters the prompt on a model's say-so | A goal waits for a click | Proposals prove reliable; then auto-activate `user_stated` ones |
+| Goals in the prompt only (no retrieval boost yet) | Small, visible, testable | Goal-linked memories are not favoured in recall | Recall misses goal context in evals |
+
 ---
 
 ## 7. Snapshots and recovery
