@@ -511,6 +511,9 @@ they belong with the personality and relationship work that gives them meaning.
 
 ### 13.2 The semantic channel is deferred, not faked
 
+> **Since MEM-04 (§17.2)** the semantic channel exists, loads `sqlite-vec` where it can, and says
+> so in memory's health where it cannot. The record below is kept as the history.
+
 §5 specifies four retrieval channels. Three are implemented — lexical (FTS5), structural
 (entity links) and temporal. The **semantic/embedding channel is not**, and this is the one
 place where the milestone falls short of the design.
@@ -663,4 +666,120 @@ message of 12+ characters, HEDWIG's replies included. Replies are generated, and
 repeat sentences, so a reply in the window could hide an older, different exchange that contained
 the same sentence. The rule now matches only the user's messages, which an episode always holds
 verbatim (`brain/context.py::restates`, docs/29 G15).
+
+
+---
+
+## 17. Recall, measured — and the semantic channel (MEM-05, MEM-04)
+
+### 17.1 The recall eval (MEM-05)
+
+`tests/evals/recall_corpus.json` is a fixed store of 49 memories (24 beliefs, 25 episodes over
+two months, with distractors that share words with the questions on purpose) and 36 queries in
+three kinds of twelve: **lexical** (shares words with its answer), **paraphrase** (shares none:
+"Do I eat meat?" → "The user is vegetarian.") and **question** (asks what a statement says).
+`tests/evals/recall.py` loads it into a real store and runs each query through `HybridRetrieval`
+exactly as a turn does — the user's words, the default policy — and scores the ranking by score
+(the working set itself is chronological, §5.5): recall@5, hit@5, MRR. `test_recall.py` runs it in
+the normal suite with the measured numbers as floors, so retrieval can only get better.
+
+The first run found three bugs in retrieval that no unit test had:
+
+| Step | lexical | paraphrase | question | all (recall@5) |
+|---|---|---|---|---|
+| Baseline | 0.542 | 0.167 | 0.208 | 0.306 |
+| MMR on one scale | 0.625 | 0.167 | 0.208 | 0.333 |
+| Stopwords out of the FTS query | **1.000** | 0.167 | 0.375 | **0.514** |
+| Episodes and beliefs ranked together | 1.000 | 0.167 | 0.375 | 0.514 |
+
+* **MMR mixed scales.** `0.7·score − 0.3·similarity` with fused scores near 0.01 and word
+  similarity in 0–1: the penalty swamped relevance, so after the first pick MMR chose whatever
+  shared no words with it — unrelated memories. Scores are now divided by the top score first.
+* **Every word was a match.** "When is my birthday?" became `"When" OR "is" OR "my" OR
+  "birthday"`. Fusion uses ranks only (§5.3), so a match on "is" ranked nearly as well as one on
+  "birthday", and recency decided. Common English words are dropped from the FTS query (a
+  general list — one word that came from a corpus query was taken back out: tuning to the test is
+  not fixing retrieval).
+* **Beliefs always ranked after episodes.** The lexical channel appended belief hits after up to
+  thirty episode hits. Both are now ranked together by BM25. It did not move this corpus (the
+  stopword fix had already lifted the beliefs it hurt) but it removed a ceiling.
+
+What remains — paraphrases and question-shaped queries — is what word matching cannot do.
+
+### 17.2 The semantic channel (MEM-04)
+
+```mermaid
+graph LR
+    subgraph write["Writing (event-driven)"]
+        S["memory.episode.stored<br/>memory.belief.formed"] --> X["EmbeddingIndex.index(id)"]
+        T["memory.embed task<br/><small>every 10 min: missing, stale or other-model vectors</small>"] --> X
+        X -->|"search_document: text"| G["LLM gateway · embedding tier<br/><small>nomic-embed-text, local</small>"]
+        X --> V[("memory_embedding<br/><small>memory_id · model · float32 blob · text hash</small>")]
+    end
+    subgraph read["Recalling"]
+        Q["the turn's queries"] -->|"search_query: text"| G
+        G --> N["vec_distance_cosine over live rows<br/><small>sqlite-vec, in hedwig.db</small>"]
+        V --> N
+        N --> F["RRF with lexical · structural · temporal"]
+    end
+```
+
+* **Vectors live in `hedwig.db`** (ADR-0005), one row per memory in `memory_embedding`
+  (migration 0017): the model that made it, its dimensions, a float32 blob and a hash of the text
+  it embedded. Search is `vec_distance_cosine` from `sqlite-vec` over live rows — exact, brute
+  force, which is what `vec0` does too, and enough for a personal store. No virtual table, so
+  purge and export see an ordinary table (classified `RECORD`, swept by id).
+* **The model-identity guard** (§9, docs/05 §5.3) is the `model` column: only vectors from the
+  configured model are searched; the others are re-embedded by the task. Changing the model never
+  mixes two vector spaces.
+* **Written by events, repaired by a task.** A subscriber embeds each stored episode and formed
+  belief; the `memory.embed` task embeds whatever is missing or stale (the model was down, the text
+  changed, the model changed). Nothing on the write path waits for the model.
+* **Prefixes.** nomic-embed-text is trained with `search_query:` / `search_document:` prefixes;
+  they are configuration (`llm.embedding_query_prefix`, `llm.embedding_document_prefix`) so another
+  model can drop them.
+* **Degrades loudly.** If the extension cannot load, or the model is not installed, the channel
+  is off, retrieval is lexical as before, and memory's health says why.
+* **The eval runs with real vectors, without a model.** `scripts/eval_recall.py --record` embeds
+  the corpus with the live model once and saves the vectors (float16) beside it; the test suite
+  replays them, so the semantic floors are real numbers that run anywhere.
+
+**Measured** (`scripts/eval_recall.py`, live nomic-embed-text; the test suite replays the same
+vectors and reproduces these numbers exactly):
+
+| Retrieval | lexical | paraphrase | question | all — recall@5 | all — MRR |
+|---|---|---|---|---|---|
+| Words only (§17.1, after its fixes) | 1.000 | 0.167 | 0.375 | 0.514 | 0.462 |
+| + semantic, as designed in §5 (top 30 per query) | 0.917 | 0.250 | 0.375 | 0.514 | 0.423 |
+| + semantic, near neighbours only | **1.000** | **1.000** | **0.917** | **0.972** | **0.728** |
+
+* **The embeddings were right; the fusion lost them.** On its own the semantic channel put the
+  answer first for 12 of 12 paraphrase queries. Nominating its top thirty of a small store gave
+  most memories semantic credit, and RRF (k = 60) makes rank 1 and rank 30 nearly equal (1/61 vs
+  1/90), so *being nominated by more channels* beat *being close*: the recent episodes the
+  temporal channel nominates for every query won. The channel now nominates only neighbours
+  closer than halfway from its best match to the median distance — relative, so it does not
+  depend on one model's distance scale, and it makes the semantic channel behave like the
+  lexical one, which only ever nominates real matches.
+* **Live, a turn now recalls by meaning.** "Suggest a dinner with no animal flesh, you know why"
+  recalled nothing before and recalls *The user is vegetarian.* with the channel on.
+* **A shutdown race, found live.** The gateway closed its client while the bus was still
+  delivering the turn's last `memory.episode.stored`; the subscriber retried against the closed
+  client and the event was dead-lettered. The index now stops taking events when it is stopped
+  (before the gateway, which it depends on), and a failure that happens after that is left to the
+  repair task. Tested.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Exact search with `vec_distance_cosine` on a plain table, not `vec0` | Purge, export and the classification see an ordinary table; no shadow tables | Brute force per query (milliseconds at thousands of memories) | Tens of thousands of memories: `vec0`, behind the same `nearest()` |
+| A `model` column per vector, not `embedding_state` (docs/05 §5.3) | The guard and the re-embed queue are one query | No explicit "re-embed in progress" status | Documents (KNW-01) need their own scope |
+| Relative near-neighbour cutoff | Scale-free; the channel only nominates real matches | A store of near-identical memories nominates many | The eval shows misses from it |
+| Temporal channel unchanged | No design change for a gain the cutoff already delivered | Paraphrase MRR is 0.55: recent episodes still sometimes rank above the answer | MRR matters (e.g. a smaller working set): nominate recent items only when the query is about time |
+| Recorded vectors in the suite | Real semantic numbers, no model needed | 180 KB of fixture; re-record when the model changes | — |
+
+**Future improvements.** HyDE (§5.2): embed a hypothetical answer, now that there is something to
+search it with. Embedding similarity for capture novelty (§13.2), REF-02's judge candidates
+(paraphrases like "vegetarian" / "does not eat meat") and MMR. A larger corpus with a held-out
+half, so a retrieval change is judged on queries it was not shaped by. Documents (KNW-01) in the
+same index.
 

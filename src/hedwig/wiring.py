@@ -63,6 +63,7 @@ from hedwig.llm.responder import GatewayResponder
 from hedwig.memory import (
     SUBSCRIPTION,
     CaptureService,
+    EmbeddingIndex,
     HybridRetrieval,
     MemoryMaintenance,
     MemoryRecaller,
@@ -268,7 +269,30 @@ def build_container(
     # 7. Memory. Episodic and semantic stores, retrieval, capture and the decay pass
     #    (docs/06).
     memory = SqliteMemoryStore(database, clock=clock, bus=bus)
-    retrieval = HybridRetrieval(database, clock=clock)
+    # Recall by meaning (docs/06 §17.2): written by events, repaired by a task, and off — with
+    # memory's health saying why — when sqlite-vec or the embedding model is missing.
+    embeddings = EmbeddingIndex(
+        database,
+        llm,
+        clock=clock,
+        model=config.llm.embedding,
+        query_prefix=config.llm.embedding_query_prefix,
+        document_prefix=config.llm.embedding_document_prefix,
+        enabled=config.memory.semantic_recall,
+    )
+    for kind in ("memory.episode.stored", "memory.belief.formed"):
+        bus.subscribe(kind, embeddings.handle, name=f"memory-embeddings-{kind.split('.')[1]}")
+    scheduler.register(
+        TaskSpec(
+            name="memory.embed",
+            handler=embeddings.task,
+            trigger=IntervalTrigger(seconds=600),
+            priority=Priority.MAINTENANCE,
+            description="Embed memories that have no vector, a stale one, or another model's.",
+            max_runtime_seconds=300.0,
+        )
+    )
+    retrieval = HybridRetrieval(database, clock=clock, semantic=embeddings)
     capture = CaptureService(memory, clock=clock, max_per_turn=config.memory.max_captures_per_turn)
     maintenance = MemoryMaintenance(
         database,
@@ -478,6 +502,7 @@ def build_container(
     registry.register("sessions", sessions, depends_on=("bus",))
     registry.register("memory", memory, depends_on=("bus",))
     registry.register("maintenance", maintenance, depends_on=("memory",), critical=False)
+    registry.register("embeddings", embeddings, depends_on=("memory", "llm"), critical=False)
     registry.register("relationship", relationship, depends_on=("memory",), critical=False)
     if emotion is not None:
         registry.register("emotion", emotion, depends_on=("bus",), critical=False)

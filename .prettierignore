@@ -17,3 +17,6 @@ coverage/
 
 # Recorded fixtures are kept byte-for-byte as their sources produced them
 tests/fixtures/
+
+# Eval data: the corpus is one memory per line on purpose; the vectors are generated.
+tests/evals/*.json

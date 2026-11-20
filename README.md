@@ -220,7 +220,13 @@ capability assessment and story backlog are in [`docs/29-backlog.md`](docs/29-ba
 
 ## Running it
 
-Requires Python 3.12+, Node 22.12+, and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.12+, Node 22.12+, [uv](https://docs.astral.sh/uv/), and
+[Ollama](https://ollama.com) with a conversational model and the embedding model that lets
+HEDWIG recall by meaning (without it, recall falls back to matching words):
+
+```bash
+ollama pull nomic-embed-text
+```
 
 ```bash
 npm run setup   # uv sync + npm install
@@ -244,6 +250,10 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig goals list` / `add` / `done` | What HEDWIG is helping you with over time |
 | `uv run hedwig egress` | Every request HEDWIG made to the internet, and what it sent |
 | `uv run hedwig curiosity gaps` / `ask` / `findings` / `explore` | What HEDWIG wants to find out, and what it found |
+| `uv run hedwig export` | Everything HEDWIG holds, as one readable zip |
+| `uv run hedwig purge --phrase …` | Erase for good, after a preview (`--memory`, `--session`, `--everything`) |
+| `uv run hedwig reflect` / `disputes` / `settle` | Run the nightly consolidation now; settle the conflicts it found |
+| `uv run python scripts/eval_recall.py` | Measure recall on the fixed corpus, words only and with meaning |
 | `uv run hedwig config` | The effective configuration after all layers resolve |
 
 Configuration layers, lowest precedence first: defaults in code → `config/hedwig.toml` →

@@ -76,7 +76,7 @@ of what exists in code. Update it as each milestone lands.
 | Memory: episodic, semantic, importance, decay, forgetting | **Implemented** (M5) | `src/hedwig/memory/` |
 | Retrieval: lexical, structural, temporal channels | **Implemented** (M5) | `src/hedwig/memory/retrieval.py` |
 | Memory control: `/v1/memory`, `hedwig memory` (list, search, pin, forget, restore) | **Implemented** (MEM-02, [06](06-memory-architecture.md) §16) | `src/hedwig/api/routes/memory.py` |
-| Retrieval: semantic/embedding channel | **Deferred** — [06](06-memory-architecture.md) §13.2 | — |
+| Retrieval: semantic/embedding channel; recall eval (recall@5 0.306 → 0.972) | **Implemented** (MEM-04, MEM-05, [06](06-memory-architecture.md) §17) | `src/hedwig/memory/embeddings.py`, `tests/evals/`, `scripts/eval_recall.py` |
 | Conversation log: sessions, messages, turns, working-set log | **Implemented** (M6) | `src/hedwig/sessions/` |
 | The turn/memory loop: capture, reinforcement, persistence | **Implemented** (M6) | [26](26-turn-memory-loop.md) |
 | Emotion: six dimensions, deterministic transitions, behaviour bindings | **Implemented** (M7, [ADR-0019](adr/0019-the-emotion-vector-is-six-named-drives.md)) | `src/hedwig/emotion/` |

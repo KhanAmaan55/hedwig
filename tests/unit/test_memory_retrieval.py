@@ -19,7 +19,7 @@ from hedwig.core.ports.memory import (
 from hedwig.core.store import Database
 from hedwig.core.types import EntityId, MemoryId, MemoryKind, Provenance, TrustTier
 from hedwig.memory import HybridRetrieval, SqliteMemoryStore
-from hedwig.memory.retrieval import _episode_text, _fuse, _mmr, _pack, _to_match
+from hedwig.memory.retrieval import _fuse, _mmr, _pack, _to_match, episode_text
 
 
 @pytest.fixture
@@ -478,7 +478,7 @@ def test_a_query_of_only_punctuation_yields_no_match_expression() -> None:
 def test_an_interaction_title_is_not_repeated_in_front_of_its_content() -> None:
     """The title is the content's first line, truncated: prefixing it repeated the user's
     words with the first copy cut off mid-word."""
-    text = _episode_text(
+    text = episode_text(
         "Hi HEDWIG! Please remember that my favourite tea is smoky lapsang souch…",
         "User: Hi HEDWIG! Please remember that my favourite tea is smoky lapsang souchong.\n"
         "HEDWIG: Noted.",
@@ -488,6 +488,6 @@ def test_an_interaction_title_is_not_repeated_in_front_of_its_content() -> None:
 
 
 def test_a_title_that_adds_something_is_kept() -> None:
-    assert _episode_text("Learning Rust", "The user is writing a compiler.") == (
+    assert episode_text("Learning Rust", "The user is writing a compiler.") == (
         "Learning Rust: The user is writing a compiler."
     )

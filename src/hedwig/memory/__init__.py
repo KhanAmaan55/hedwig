@@ -21,10 +21,11 @@ from hedwig.memory.capture import (
     has_substance,
     similarity,
 )
+from hedwig.memory.embeddings import EmbeddingIndex
 from hedwig.memory.maintenance import MaintenanceReport, MemoryMaintenance
 from hedwig.memory.recaller import MemoryRecaller
 from hedwig.memory.relationship import USER_ENTITY_ID, RelationshipMemory, SessionTally, updated
-from hedwig.memory.retrieval import HybridRetrieval
+from hedwig.memory.retrieval import HybridRetrieval, SemanticChannel
 from hedwig.memory.salience import (
     DEFAULT_HALF_LIFE_DAYS,
     FORGET_THRESHOLD,
@@ -53,12 +54,14 @@ __all__ = [
     "BeliefCandidate",
     "CaptureReport",
     "CaptureService",
+    "EmbeddingIndex",
     "EpisodeCandidate",
     "HybridRetrieval",
     "MaintenanceReport",
     "MemoryMaintenance",
     "MemoryRecaller",
     "RelationshipMemory",
+    "SemanticChannel",
     "SessionTally",
     "SqliteMemoryStore",
     "TurnCaptureSubscriber",

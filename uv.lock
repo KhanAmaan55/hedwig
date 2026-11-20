@@ -366,6 +366,7 @@ dependencies = [
     { name = "langgraph-checkpoint-sqlite" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "sqlite-vec" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -402,6 +403,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.25" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
+    { name = "sqlite-vec", specifier = ">=0.1.9" },
     { name = "typer", specifier = ">=0.15" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
