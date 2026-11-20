@@ -23,7 +23,8 @@ from pathlib import Path
 
 from hedwig import __version__
 from hedwig.brain import Brain, BusAnnouncer, Collaborators, RulePlanner
-from hedwig.brain.stubs import DefaultMindReader, PermissiveGuard, StubToolRunner
+from hedwig.brain.guard import RuleGuard
+from hedwig.brain.stubs import DefaultMindReader
 from hedwig.core.bus import InProcessBus, platform_catalogue
 from hedwig.core.clock import SystemClock
 from hedwig.core.config import Config, load_config
@@ -69,6 +70,7 @@ from hedwig.memory import (
 from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore, PersonaMindReader
 from hedwig.reflection import SessionReflector
 from hedwig.sessions import SqliteSessionStore
+from hedwig.tools import ToolRegistry, calculate_tool, datetime_tool, search_memory_tool
 
 logger = get_logger(__name__)
 
@@ -341,16 +343,22 @@ def build_container(
     # 10. The turn graph, now a closed loop: it observes into the conversation log, recalls
     #    from real memory, and announces what happened so memory can learn from it
     #    (docs/26 §3). Capture is a *subscriber*, not a node, so it can take its time.
+    # 10a. Tools (docs/13 §12). Read-only today; every call audited in `tool_call`.
+    tools = ToolRegistry(database=database, clock=clock)
+    tools.register(datetime_tool(clock, timezone=config.runtime.timezone))
+    tools.register(calculate_tool())
+    tools.register(search_memory_tool(retrieval))
+
     brain = Brain(
         Collaborators(
-            guard=PermissiveGuard(),
+            guard=RuleGuard(),
             mind=mind,
             recaller=MemoryRecaller(retrieval, store=memory),
-            planner=RulePlanner(),
+            planner=RulePlanner(available_tools=frozenset(tools.names())),
             # The language model, at last (docs/27 §6). Every reply is generated from a
             # prompt that carries the identity core and the rendered directives.
             responder=GatewayResponder(llm, context_window=config.llm.context_window),
-            tools=StubToolRunner(),
+            tools=tools,
             conversation=sessions,
             announcer=BusAnnouncer(bus),
         )

@@ -1,6 +1,6 @@
 # 13 — Knowledge and Tools
 
-**Status:** Design · **Depends on:** [03](03-module-contracts.md), [06](06-memory-architecture.md) · **Depended on by:** [07](07-brain-langgraph-workflow.md), [11](11-curiosity-engine.md), [21](21-security-privacy-ethics.md)
+**Status:** Partially implemented (§12) · **Depends on:** [03](03-module-contracts.md), [06](06-memory-architecture.md) · **Depended on by:** [07](07-brain-langgraph-workflow.md), [11](11-curiosity-engine.md), [21](21-security-privacy-ethics.md)
 
 ---
 
@@ -308,3 +308,49 @@ optional — an unattributed fact in a prompt is a fact HEDWIG cannot later expl
 | Incremental document watching with debounce | Users work in a directory HEDWIG follows |
 | A "why do you trust this?" UI affordance on every claim | Phase 5 inspector; cheap and high-value |
 | Structured tool output types (not just text) | Tools start returning tables the UI should render |
+
+---
+
+## 12. Implementation record — the guard and the tool layer (COG-01, COG-02)
+
+Until this, the planner already sent "what time is it?", arithmetic and "do you remember…"
+to tools, and the runner was a stub: the model was shown the literal string
+`[stub] get_datetime()` as the answer. Real tools are a correctness fix, not a feature.
+
+```mermaid
+graph LR
+    P["RulePlanner<br/><small>which tool, which args</small>"] --> R["tools.ToolRegistry<br/><small>ToolRunner port</small>"]
+    R -->|validate: JSON Schema| R
+    R -->|audit| DB[("tool_call")]
+    R --> T1["get_datetime<br/><small>clock + timezone</small>"]
+    R --> T2["calculate<br/><small>AST arithmetic, no eval</small>"]
+    R --> T3["search_memory<br/><small>HybridRetrieval</small>"]
+    R -.->|KNW-02| T4["web_search · read_page"]
+```
+
+* **`ToolRegistry`** implements the brain's `ToolRunner`. Each tool declares a name, a
+  description, a JSON Schema for its arguments, its side effects and the trust of its output.
+  Arguments are validated before the tool runs. Every call writes a `tool_call` row (migration
+  0012: name, arguments, status, duration, correlation id) whether it succeeds or not. A tool
+  that raises or overruns its timeout becomes a failed `ToolOutcome`, never an exception
+  (docs/07 §8).
+* **`calculate` never calls `eval`.** It walks the Python AST and admits numbers, `+ - * / // %
+  **`, unary signs and parentheses. Exponents are bounded, so `9**9**9` is refused rather than
+  hanging the process.
+* **`get_datetime` reads the injected clock** in `runtime.timezone`, so it is correct in a
+  test at a fake time and in a user's local zone.
+* **The guard (COG-01)** replaces `PermissiveGuard`. The user's messages are always allowed and
+  always `USER` trust: ADR-0011 makes the user the one instruction source, and a companion that
+  refuses its own user on a heuristic is broken, not safe. What it adds is observation. Each
+  input is scored by `knowledge.injection`, and flags (pasted role markers, override phrasing,
+  zero-width characters) are recorded on the verdict, which emotion already appraises
+  (docs/07 §14.3). **It refuses nothing today**, and says so here rather than claiming more.
+* **`knowledge.injection`** is the deterministic layer-3 detector of §6, shared by the guard
+  and by everything that reads the network (KNW-02). It is pure functions with no model, so it
+  cannot be talked out of a verdict.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Rule guard that observes, never refuses | No false refusals of the user | No protection against the user's own pasted injection | Pasted content becomes a channel (documents, KNW-01): score it as `CURATED`, not `USER` |
+| Approval not implemented | Read-only tools need none | Side-effecting tools must wait | COG-03 with the WebSocket |
+

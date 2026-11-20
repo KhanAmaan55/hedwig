@@ -17,10 +17,11 @@ async def test_health_reports_the_documented_shape(client: AsyncClient) -> None:
     assert response.status_code == 200
 
     body = response.json()
-    # Degraded, not ok: the brain reports its capabilities as stubbed, and a system that
-    # cannot yet converse must say so rather than claim health (docs/19 §7).
-    assert body["status"] == "degraded"
-    assert body["subsystems"]["brain"]["status"] == "degraded"
+    # Ok: the brain's last stubs — the guard and the tools — are real (docs/13 §12). While
+    # they were stubbed this said "degraded", because a system must not claim health it
+    # lacks (docs/19 §7).
+    assert body["status"] == "ok"
+    assert body["subsystems"]["brain"]["status"] == "ok"
     assert body["version"]
     assert body["environment"] == "test"
     assert body["started_at"].endswith("+00:00")

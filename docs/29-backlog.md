@@ -58,8 +58,8 @@ the repository, ahead of any new cognitive capability.
 |---|---|---|---|
 | 15 | Open HEDWIG and talk to it | **COMPLETE** (was MISSING) | Desktop/browser conversation pane, `hedwig chat` and the REST API, verified live against Ollama (§6). Non-streaming: a slow model shows only "thinking…" until it finishes (FND-05) |
 | 2 | Brain: turn graph, routing, caps, deterministic planner | **COMPLETE** | `brain/graph.py`, `planner.py`; `test_brain_graph.py`, `test_brain_routing.py` |
-| 2 | Brain: safety guard | **PARTIAL** | `PermissiveGuard` stub — honest in `/health` (`brain` degraded) |
-| 2 | Brain: decides external knowledge / tools are needed | **MISSING** | `StubToolRunner`; planner names only `get_datetime`/`calculate` |
+| 2 | Brain: safety guard | **COMPLETE** (observing) | `RuleGuard` + `knowledge.injection` (COG-01); allows the user always (ADR-0011), records flags; refuses nothing by design |
+| 2 | Brain: decides external knowledge / tools are needed | **PARTIAL** | Real `ToolRegistry` with audited `get_datetime`, `calculate`, `search_memory` (COG-02); web knowledge next |
 | 2 | Brain: clarification | **PARTIAL** | Rule-based `CLARIFY` for too-short input only |
 | 2 | Brain: decides what to remember / goal updates | **PARTIAL** | Capture subscriber stores the exchange; no goal system |
 | 13 | LLM gateway: tiering, streaming, structured output, metrics, replaceable provider | **COMPLETE** | `llm/`; `test_llm_gateway.py`, `test_ollama_provider.py`, `RecordedProvider` |
@@ -201,7 +201,7 @@ retry never makes HEDWIG answer twice.
 ### 4.2 Core cognition
 
 #### COG-01 — Real guard
-**Status:** Todo · **P1** · **M** · **Depends on:** — · **Modules:** `brain/guard.py`
+**Status:** Done (2026-11-20) · **P1** · **M** · **Depends on:** — · **Modules:** `brain/guard.py`
 
 As the system, I want inputs classified for trust and injection before any node reads them, so
 that untrusted content can never instruct HEDWIG (ADR-0011).
@@ -210,7 +210,7 @@ that untrusted content can never instruct HEDWIG (ADR-0011).
 - **Tests:** red-team fixtures; benign corpus false-positive rate < 2 %.
 
 #### COG-02 — Tool registry and the Phase-2 tool set
-**Status:** Todo · **P1** · **L** · **Depends on:** COG-01 · **Modules:** `tools/`, `brain/`
+**Status:** Done (2026-11-20) · **P1** · **L** · **Depends on:** COG-01 · **Modules:** `tools/`, `brain/`
 
 As HEDWIG, I want `get_datetime`, `calculate`, `search_memory` to be real tools with schema
 validation and a `tool_call` audit row, so that the planner's decisions have effects.
@@ -536,4 +536,10 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   goals block in the prompt; reflection proposes goals for projects (as `proposed`, never in
   the prompt until activated) and moves progress forward. Live on `gemma4:e2b`: goals used when
   relevant 3/3, never intruding 3/3, after rewording the label. Design in [08](08-state-management.md) §6.1.
+- **COG-01/02** Guard and tools — `ToolRegistry` (JSON-Schema validation, timeouts, every call
+  in `tool_call`, migration 0012), `get_datetime` (injected clock, user's zone), `calculate`
+  (AST walk, never `eval`, bounded), `search_memory`; `RuleGuard` over the deterministic
+  `knowledge.injection` scanner. Fixed in passing: the model used to be shown the literal
+  `[stub] get_datetime()` as the time. `/v1/health` no longer reports the brain degraded.
+  Design in [13](13-knowledge-and-tools.md) §12.
 

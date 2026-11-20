@@ -268,7 +268,7 @@ graph LR
 | `memory` | The four durable memory stores and their write paths | [06](06-memory-architecture.md) |
 | `retrieval` | Query planning, hybrid search, fusion, diversification, context packing | [06](06-memory-architecture.md) §6 |
 | `knowledge` | Local document ingestion, web reading, provenance and trust tiers | [13](13-knowledge-and-tools.md) |
-| `tools` | Tool registry, argument validation, execution, approval gates, audit | [13](13-knowledge-and-tools.md) §5 |
+| `tools` | Tool registry, argument validation, execution, approval gates, audit. Built: registry + read-only tools | [13](13-knowledge-and-tools.md) §5, §12 |
 | `llm` | Provider abstraction, model tiering, prompt assembly, structured decoding | [14](14-language-model-gateway.md) |
 | `embeddings` | Embedding generation, model identity tracking, re-embed jobs | [14](14-language-model-gateway.md) §7 |
 | `fetch` | Outbound HTTP with allowlist, robots, caching, sanitisation | [13](13-knowledge-and-tools.md) §4 |
