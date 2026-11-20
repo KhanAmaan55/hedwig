@@ -372,6 +372,22 @@ def memory_restore(memory_id: str) -> None:
     _act(memory_id, "restore")
 
 
+@memory_app.command("correct")
+def memory_correct(
+    memory_id: str,
+    text: Annotated[str | None, typer.Option(help="What is actually true.")] = None,
+    confidence: Annotated[
+        float | None, typer.Option(min=0.0, max=1.0, help="How sure, 0 to 1.")
+    ] = None,
+) -> None:
+    """Correct a memory. The old version is kept as history; yours is trusted as your word."""
+    if text is None and confidence is None:
+        raise typer.BadParameter("Give --text, --confidence, or both.")
+    memory = _call(lambda c: c.memory_correct(memory_id, text=text, confidence=confidence))
+    assert isinstance(memory, dict)
+    print(f"corrected; now {_line(memory)}")
+
+
 goals_app = typer.Typer(
     help="What HEDWIG is helping you with over time (docs/08 §6.1).", no_args_is_help=True
 )

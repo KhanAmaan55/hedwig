@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from hedwig.api.auth import require_token
 from hedwig.api.deps import ContainerDep
-from hedwig.core.errors import ConflictError, NotFoundError
+from hedwig.core.errors import ConflictError, InvalidRequestError, NotFoundError
 from hedwig.core.ports.memory import Belief, Episode, ForgetReason, RetrievalPolicy
 from hedwig.core.types import MemoryId
 
@@ -33,6 +33,14 @@ class MemoryRead(BaseModel):
     trust: str = Field(description="Whose word this rests on (docs/13 §3).")
     source: str | None
     status: str | None = Field(default=None, description="Beliefs only: tentative, active, …")
+    replaced_by: str | None = Field(
+        default=None, description="Beliefs only: the belief that superseded this one."
+    )
+
+
+class Correction(BaseModel):
+    text: Annotated[str | None, Field(min_length=1, max_length=2000)] = None
+    confidence: Annotated[float | None, Field(ge=0, le=1)] = None
 
 
 class MemoryList(BaseModel):
@@ -86,6 +94,18 @@ async def search(
 @router.get("/{memory_id}", response_model=MemoryRead, summary="One memory, forgotten or not")
 async def show(memory_id: str, container: ContainerDep) -> MemoryRead:
     return _read(await _require(container, memory_id))
+
+
+@router.patch("/{memory_id}", response_model=MemoryRead, summary="Correct a memory")
+async def correct(memory_id: str, body: Correction, container: ContainerDep) -> MemoryRead:
+    """The correction replaces the memory, in the user's words and with their trust; the old
+    version is kept as history (docs/06 §18). Returns the replacement, which has a new id."""
+    if body.text is None and body.confidence is None:
+        raise InvalidRequestError("Send the corrected text, a confidence, or both.")
+    new = await container.memory.correct(
+        MemoryId(memory_id), text=body.text, confidence=body.confidence
+    )
+    return _read(await _require(container, new))
 
 
 @router.post("/{memory_id}/pin", response_model=MemoryRead, summary="Never forget this")
@@ -158,6 +178,7 @@ def _read(memory: Episode | Belief) -> MemoryRead:
         trust=memory.provenance.tier.value,
         source=memory.provenance.source_ref,
         status=memory.status.value,
+        replaced_by=memory.superseded_by,
     )
 
 

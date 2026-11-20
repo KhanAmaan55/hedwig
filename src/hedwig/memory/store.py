@@ -21,9 +21,11 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import AsyncIterator, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
+from hedwig.core.errors import ConflictError, InvalidRequestError, NotFoundError
 from hedwig.core.ids import new_id
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock, EventBus, Health, HealthStatus
@@ -47,6 +49,9 @@ from hedwig.core.types import (
     TrustTier,
 )
 from hedwig.memory.salience import reinforced_salience
+
+USER_CONFIDENCE = 0.9
+"""What a belief in the user's own words starts at (docs/06 §18): their word, not certainty."""
 
 logger = get_logger(__name__)
 
@@ -247,7 +252,14 @@ class SqliteMemoryStore:
         )
         return _to_belief(row) if row else None
 
-    async def supersede_belief(self, old: MemoryId, new: Belief) -> MemoryId:
+    async def supersede_belief(
+        self,
+        old: MemoryId,
+        new: Belief,
+        *,
+        reason: str = "superseded by a newer belief",
+        relation: DerivationRelation = DerivationRelation.MERGED_FROM,
+    ) -> MemoryId:
         """Replace a belief while keeping the old one as history."""
         existing = await self.get_belief(old)
         if existing is None:
@@ -265,12 +277,84 @@ class SqliteMemoryStore:
             (now, new.id, now, old),
         )
 
-        await self.record_derivation(new.id, old, DerivationRelation.MERGED_FROM)
+        await self.record_derivation(new.id, old, relation)
         await self._announce(
-            "memory.belief.superseded",
-            {"old_id": old, "new_id": new.id, "reason": "superseded by a newer belief"},
+            "memory.belief.superseded", {"old_id": old, "new_id": new.id, "reason": reason}
         )
         return new.id
+
+    async def correct(
+        self, memory_id: MemoryId, *, text: str | None = None, confidence: float | None = None
+    ) -> MemoryId:
+        """The user corrects a memory: a replacement in their words, the old kept as history.
+
+        Beliefs are superseded; episodes, which have no superseded state, are tombstoned with
+        reason `contradicted` (restorable). The replacement is `trust = user`, carries the pin,
+        and a belief is active at once — corroboration guards HEDWIG's guesses, and this is not
+        one (docs/06 §18). Returns the replacement's id.
+        """
+        old = await self.inspect(memory_id)
+        if old is None:
+            raise NotFoundError("No such memory.", memory_id=memory_id)
+        if old.tombstoned_at is not None:
+            raise ConflictError("That memory is forgotten. Restore it first.", memory_id=memory_id)
+        if isinstance(old, Belief) and old.status not in (
+            BeliefStatus.TENTATIVE,
+            BeliefStatus.ACTIVE,
+        ):
+            raise ConflictError(
+                "That belief was already replaced; correct the one that replaced it.",
+                memory_id=memory_id,
+                replaced_by=old.superseded_by,
+            )
+        current = old.statement if isinstance(old, Belief) else old.content
+        wording = text.strip() if text is not None else current
+        if not wording:
+            raise InvalidRequestError("A correction needs some text.")
+        if wording == current and (confidence is None or confidence == old.confidence):
+            raise InvalidRequestError("That is what HEDWIG already has.", memory_id=memory_id)
+
+        new = MemoryId(new_id("bel" if isinstance(old, Belief) else "ep"))
+        said_by_user = Provenance(tier=TrustTier.USER, source_ref=f"correction:{memory_id}")
+        if isinstance(old, Belief):
+            await self.supersede_belief(
+                memory_id,
+                replace(
+                    old,
+                    id=new,
+                    statement=wording,
+                    valid_from=self._clock.now(),
+                    valid_to=None,
+                    status=BeliefStatus.ACTIVE,
+                    confidence=USER_CONFIDENCE if confidence is None else confidence,
+                    superseded_by=None,
+                    access_count=0,
+                    last_accessed_at=None,
+                    provenance=said_by_user,
+                    tombstoned_at=None,
+                ),
+                reason="corrected by the user",
+                relation=DerivationRelation.CONTRADICTED_BY,
+            )
+        else:
+            await self.add_episode(
+                replace(
+                    old,
+                    id=new,
+                    content=wording,
+                    confidence=old.confidence if confidence is None else confidence,
+                    access_count=0,
+                    last_accessed_at=None,
+                    provenance=said_by_user,
+                    tombstoned_at=None,
+                )
+            )
+            if old.pinned:  # the pin moved to the correction; the old version may step aside
+                await self.set_pinned(memory_id, False)
+            await self.tombstone(memory_id, ForgetReason.CONTRADICTED)
+            await self.record_derivation(new, memory_id, DerivationRelation.CONTRADICTED_BY)
+        logger.info("memory corrected", extra=fields(old=memory_id, new=new))
+        return new
 
     async def supersede_with(self, old: MemoryId, newer: MemoryId, *, reason: str) -> bool:
         """`old` gives way to a belief that already exists (docs/12 §15). Both are kept.

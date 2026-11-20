@@ -150,6 +150,17 @@ class HedwigClient:
             raise ValueError(f"unknown memory action {action!r}")
         return self._request("POST", f"/v1/memory/{memory_id}/{action}")
 
+    def memory_correct(
+        self, memory_id: str, *, text: str | None = None, confidence: float | None = None
+    ) -> dict[str, Any]:
+        """Replace a memory with the user's correction; returns the replacement."""
+        body: dict[str, Any] = {}
+        if text is not None:
+            body["text"] = text
+        if confidence is not None:
+            body["confidence"] = confidence
+        return self._request("PATCH", f"/v1/memory/{memory_id}", json=body)
+
     # -- goals (docs/08 §6.1) --------------------------------------------------
 
     def goals(self, *, statuses: tuple[str, ...] = ()) -> list[dict[str, Any]]:

@@ -658,7 +658,7 @@ graph LR
 | Tradeoff | Gained | Given up | Revisit if |
 |---|---|---|---|
 | `inspect` sees tombstoned rows; recall never does | Restore is possible from the UI | Two read paths with different visibility | Never; the difference is the point |
-| No `PATCH` (correction) yet | Story stays small | A wrong memory can only be forgotten, not fixed | REF-01 makes beliefs; MEM-03 corrects them |
+| No `PATCH` (correction) yet | Story stays small | A wrong memory can only be forgotten, not fixed | Done: MEM-03, §18 |
 
 **Found while testing restore.** A restored memory was recalled and then dropped as "restated".
 `assemble_context` drops a memory that restates the window, and the rule matched *any* window
@@ -782,4 +782,57 @@ search it with. Embedding similarity for capture novelty (§13.2), REF-02's judg
 (paraphrases like "vegetarian" / "does not eat meat") and MMR. A larger corpus with a held-out
 half, so a retrieval change is judged on queries it was not shaped by. Documents (KNW-01) in the
 same index.
+
+
+---
+
+## 18. Correcting a memory (MEM-03)
+
+A memory system without correction accumulates errors forever, and the user is the
+highest-trust source there is (docs/16 §4.2). A correction **replaces, never overwrites**: the
+wrong version stays as history, so "what did HEDWIG used to think?" keeps an answer, and undoing a
+correction is possible (docs/21 §7.2).
+
+```mermaid
+graph LR
+    U["PATCH /v1/memory/{id}<br/>{text?, confidence?}<br/><small>hedwig memory correct · inspector Correct</small>"] --> K{"kind"}
+    K -->|belief| B["new belief: the corrected statement<br/><small>trust user · active · confidence 0.9 unless given<br/>pin carried over</small>"]
+    B --> S["old belief → superseded<br/><small>superseded_by = new · valid_to = now</small>"]
+    K -->|episode| E["new episode: same time, corrected text<br/><small>trust user · pin carried over</small>"]
+    E --> T["old episode → tombstoned, reason contradicted<br/><small>restorable</small>"]
+    S & T --> L["contradicted_by edge · source_ref correction:&lt;old id&gt;"]
+    L --> V["events: memory.belief.formed / episode.stored<br/><small>→ embedded, recalled from now on</small>"]
+```
+
+* **Beliefs** are superseded, which is what beliefs already do when facts change. The new belief
+  is the user's word: `trust = user`, `active` at once (no corroboration needed — docs/06 §3.2's
+  rule exists to stop HEDWIG's guesses hardening into fact, and this is not a guess), confidence
+  0.9 unless the user gives one. A confidence-only correction ("I'm not so sure about that")
+  is the same statement, superseded by a copy carrying the user's confidence.
+* **Episodes** have no superseded state: they are records of what happened. A correction writes a
+  new episode at the same moment and tombstones the old with reason `contradicted`, so it leaves
+  recall and stays restorable.
+* **A pin follows the memory.** Pinned means "keep this"; correcting it is the user changing what
+  "this" says, so the correction is pinned and the old version may step aside.
+* **Refused:** a forgotten memory (restore it first), a belief already superseded (correct the
+  one that replaced it — the error names it), and a request that changes nothing.
+* **Everything downstream follows from existing events.** The new memory is embedded and
+  recalled; the old one leaves recall by status or tombstone; open REF-02 proposals that involved
+  the old belief stop showing (they were filtered on liveness already); purge does not follow a
+  `contradicted_by` edge, so erasing the wrong version leaves the correction.
+* `MemoryRead` gains `replaced_by`, so the inspector and the CLI can show the chain.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Supersede / tombstone, never edit in place | History and undo, one rule for every change | A corrected memory has a new id | Never |
+| `contradicted_by` edge, not a new `corrected_from` relation | No rebuild of `memory_derivation` (its CHECK lists the relations) | The edge does not say "by the user"; the new memory's `trust = user` and `source_ref = correction:<id>` do | Lineage views need to tell them apart |
+| Corrections are explicit (API, CLI, inspector) | Unambiguous | "No, she lives in Lisbon" in chat is not yet a correction | The brain detects correction intent (future) |
+
+**Future improvements.** Corrections in conversation: the turn recognises "no, actually…" and
+proposes a correction the user confirms. Undo a correction in one click (restore the old,
+supersede the new). A belief browser showing each chain of supersessions.
+
+**Verified live** in the app: a belief corrected from the inspector became *trust: user · your
+correction*, active, and was embedded for recall; the old one stayed, marked *no longer true*,
+with no *Correct* button (a superseded belief is corrected through what replaced it).
 

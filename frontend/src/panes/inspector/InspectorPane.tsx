@@ -33,6 +33,7 @@ export type InspectorApi = Pick<
   | "memories"
   | "searchMemory"
   | "memoryAction"
+  | "correctMemory"
   | "disputes"
   | "resolveDispute"
   | "exportAll"
@@ -169,7 +170,22 @@ function MemoryTab({ api }: { api: InspectorApi }): JSX.Element {
   const [showForgotten, setShowForgotten] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<MemoryItem[] | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
   const list = useLoad(useCallback(() => api.memories(showForgotten), [api, showForgotten]));
+
+  const saveCorrection = async () => {
+    if (!editing) return;
+    try {
+      await api.correctMemory(editing.id, { text: editing.text.trim() });
+      setEditing(null);
+      setProblem(null);
+      list.reload();
+      if (results) setResults((await api.searchMemory(query)).hits.map((hit) => hit.memory));
+    } catch (caught: unknown) {
+      setProblem(caught instanceof ApiError ? caught.message : "That did not work.");
+    }
+  };
 
   const act = async (memory: MemoryItem, action: "pin" | "unpin" | "forget" | "restore") => {
     await api.memoryAction(memory.id, action);
@@ -222,17 +238,58 @@ function MemoryTab({ api }: { api: InspectorApi }): JSX.Element {
         show forgotten
       </label>
       {list.error && <p className="panel__hint">{list.error}</p>}
+      {problem && (
+        <p className="panel__hint" role="alert">
+          {problem}
+        </p>
+      )}
       {shown.length === 0 && !list.error && <p className="panel__hint">Nothing remembered yet.</p>}
       <ul className="items">
         {shown.map((memory) => (
           <li key={memory.id} className={`item${memory.forgotten ? " item--muted" : ""}`}>
-            <p className="item__text">{memory.text}</p>
+            {editing?.id === memory.id ? (
+              <form
+                className="inspector__form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveCorrection();
+                }}
+              >
+                <textarea
+                  aria-label="Corrected memory"
+                  className="inspector__input"
+                  value={editing.text}
+                  onChange={(event) => {
+                    setEditing({ id: memory.id, text: event.target.value });
+                  }}
+                />
+                <button
+                  className="button button--small"
+                  type="submit"
+                  disabled={!editing.text.trim() || editing.text.trim() === memory.text}
+                >
+                  Save
+                </button>
+                <button
+                  className="button button--small"
+                  type="button"
+                  onClick={() => {
+                    setEditing(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <p className="item__text">{memory.text}</p>
+            )}
             <p className="item__meta">
               {memory.kind} ·{" "}
               {memory.trust === "untrusted" ? "read on the web" : `trust: ${memory.trust}`}
               {memory.pinned && " · pinned"}
               {memory.forgotten && " · forgotten"}
               {memory.status === "superseded" && " · no longer true"}
+              {memory.source?.startsWith("correction:") && " · your correction"}
             </p>
             <div className="item__actions">
               {memory.forgotten ? (
@@ -252,6 +309,17 @@ function MemoryTab({ api }: { api: InspectorApi }): JSX.Element {
                   >
                     {memory.pinned ? "Unpin" : "Pin"}
                   </button>
+                  {memory.status !== "superseded" && (
+                    <button
+                      className="button button--small"
+                      type="button"
+                      onClick={() => {
+                        setEditing({ id: memory.id, text: memory.text });
+                      }}
+                    >
+                      Correct
+                    </button>
+                  )}
                   {!memory.pinned && (
                     <button
                       className="button button--small"
