@@ -24,6 +24,7 @@ from datetime import datetime
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock, EventBus, Health, HealthStatus
 from hedwig.core.ports.memory import ForgetReason
+from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.core.store import Database
 from hedwig.core.types import MemoryId, MemoryKind
 from hedwig.memory.salience import (
@@ -95,6 +96,12 @@ class MemoryMaintenance:
         )
         logger.info("memory maintenance complete", extra=fields(**report.as_stats()))
         return report
+
+    async def run_task(self, context: TaskContext) -> TaskResult:
+        """The scheduler's entry point (MEM-01). The report becomes the run's stats, so
+        `task_run` shows what every night decayed and forgot."""
+        report = await self.run()
+        return TaskResult(stats=report.as_stats())
 
     async def decay_pass(self) -> int:
         """Apply exponential decay to every active memory.

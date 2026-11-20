@@ -64,7 +64,7 @@ the repository, ahead of any new cognitive capability.
 | 2 | Brain: decides what to remember / goal updates | **PARTIAL** | Capture subscriber stores the exchange; no goal system |
 | 13 | LLM gateway: tiering, streaming, structured output, metrics, replaceable provider | **COMPLETE** | `llm/`; `test_llm_gateway.py`, `test_ollama_provider.py`, `RecordedProvider` |
 | 3 | Episodic memory: capture, novelty gate, decay maths, tombstones | **COMPLETE** | `memory/capture.py`, `store.py`; `test_memory_*` |
-| 3 | Memory decay and forgetting **in the running system** | **BROKEN** | `MemoryMaintenance` is registered as a service but **never scheduled** (`wiring.py`); decay only runs in tests |
+| 3 | Memory decay and forgetting **in the running system** | **COMPLETE** (was BROKEN) | Scheduled nightly as `memory.maintenance` (MEM-01); `test_memory_maintenance_scheduled.py` |
 | 3 | Semantic memory (beliefs) | **PARTIAL** | Store, supersession, promotion exist and are tested; **nothing writes beliefs in the live loop** — extraction belongs to reflection, which does not exist |
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
@@ -97,7 +97,7 @@ the repository, ahead of any new cognitive capability.
 | # | Gap | Kind | Story |
 |---|---|---|---|
 | G1 | No conversation surface at all | Integration | FND-01, FND-02, UX-01 done; UX-02 open |
-| G2 | Memory maintenance never scheduled | Broken wiring | MEM-01 |
+| G2 | Memory maintenance never scheduled | Broken wiring | Fixed by MEM-01 |
 | G3 | Beliefs never written outside tests | Incomplete workflow | REF-01 |
 | G4 | Avatar unaware of turn activity (thinking/speaking) | Integration | AVA-01 |
 | G5 | `README.md` still said "Milestone 1 … no memory, cognition or model yet" | Doc drift | Fixed with FND-02 |
@@ -211,7 +211,7 @@ version numbers, low recall scores), so that I search instead of guessing.
 ### 4.3 Memory
 
 #### MEM-01 — Schedule memory maintenance
-**Status:** Todo · **P0** · **S** · **Depends on:** — · **Modules:** `wiring.py`, `memory/maintenance.py`
+**Status:** Done (2026-11-20) · **P0** · **S** · **Depends on:** — · **Modules:** `wiring.py`, `memory/maintenance.py`
 
 As HEDWIG, I want decay and forgetting to run nightly in the real process, so that trivia fades
 and the store stays bounded — today it only runs in tests (G2).
@@ -413,7 +413,7 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 Dependency order, highest value first:
 
 1. **UX-02** — conversation pane (the app becomes usable)
-2. **MEM-01** — schedule maintenance (fixes G2; small)
+2. ~~MEM-01~~ — done
 3. **PER-03** — reply voice on small models (small; most visible quality issue)
 4. **FND-03**, **FND-04** — session end, per-session turn lock (small, unblock REF-01)
 5. **AVA-01** — the avatar reacts to turns
@@ -438,10 +438,13 @@ Dependency order, highest value first:
   `Brain.open_session`. Design in [16](16-api-structure.md) §12.
 - **UX-01** `hedwig chat` — `client.py` (HTTP only, enforced by an import-linter contract),
   `cli.py`.
+- **MEM-01** Nightly memory maintenance — `memory.maintenance` task, `DailyTrigger` at
+  `memory.maintenance_hour` (default 03:00 local). Fixes G2: decay and forgetting had never run
+  outside tests.
 - Fixed in passing: G5 (README status), G6 (token scope), G9 (422 handler crash).
 
-**Tests:** 924 passed (41 new: `test_token_file.py`, `test_conversation_api.py`,
-`test_cli_chat.py`). mypy, ruff, import-linter (4 contracts) clean.
+**Tests:** 926 passed (43 new: `test_token_file.py`, `test_conversation_api.py`,
+`test_cli_chat.py`, `test_memory_maintenance_scheduled.py`). mypy, ruff, import-linter (4 contracts) clean.
 
 **Verified live** against Ollama `gemma4:e2b` on a throwaway data directory: 401 without the
 token, token file `0600`, a two-turn `hedwig chat`, and a *new* session recalling the first

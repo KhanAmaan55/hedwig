@@ -95,7 +95,7 @@ of what exists in code. Update it as each milestone lands.
 | Architecture tests (layering, clock seam, port purity) | **Implemented** (M1) | `tests/architecture/` |
 | Avatar: VRM renderer, expression resolver, `/v1/mind/expression` | **Implemented** (M10, [ADR-0021](adr/0021-vrm-first-semantic-seam-kept.md)) | `src/hedwig/expression/`, `frontend/src/panes/avatar/` |
 | Avatar: 2D renderer, WebSocket frames, speech, lip sync, gestures | Not started | — |
-| Memory maintenance scheduled in the running process | **Not wired** — backlog MEM-01 | `src/hedwig/memory/maintenance.py` |
+| Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01) | `src/hedwig/wiring.py`, `src/hedwig/memory/maintenance.py` |
 | Frontend conversation pane | Not started — backlog UX-02 | — |
 | Reflection, curiosity, goals, tools | Not started — [29](29-backlog.md) | — |
 
