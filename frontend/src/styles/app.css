@@ -35,7 +35,7 @@ code {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-width: 68rem;
+  max-width: 80rem;
   margin: 0 auto;
   padding: 0 var(--space-6);
 }
@@ -390,4 +390,189 @@ code {
 
 .avatar__readout dd {
   margin: 0;
+}
+
+/* --- layout: conversation beside the avatar (docs/18 §13.1) -------------- */
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.layout__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The conversation is never the pane that gets sacrificed (docs/18 §2): below 900 px the
+   avatar goes first as a short strip, and the conversation takes the rest. */
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layout__side {
+    order: -1;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* --- conversation ------------------------------------------------------- */
+
+.conversation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.conversation__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.conversation__header .panel__title {
+  margin: 0;
+}
+
+.conversation__messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 12rem;
+  max-height: min(62vh, 44rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.conversation__empty {
+  color: var(--colour-text-faint);
+  font-size: var(--text-sm);
+  padding: var(--space-4) 0;
+}
+
+.conversation__error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--colour-warn) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--colour-warn) 10%, transparent);
+  font-size: var(--text-sm);
+}
+
+.message {
+  max-width: 85%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--colour-border);
+  background: var(--colour-surface-raised);
+}
+
+.message--user {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--colour-accent) 14%, var(--colour-surface));
+  border-color: color-mix(in srgb, var(--colour-accent) 35%, var(--colour-border));
+}
+
+.message--hedwig {
+  align-self: flex-start;
+}
+
+.message--failed {
+  border-color: color-mix(in srgb, var(--colour-warn) 45%, var(--colour-border));
+}
+
+.message--thinking .message__text {
+  color: var(--colour-text-muted);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message--thinking .message__text {
+    animation: none;
+  }
+}
+
+.message__speaker {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+  margin-bottom: var(--space-1);
+}
+
+.message__text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message__meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.composer {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+}
+
+.composer__input {
+  flex: 1;
+  resize: vertical;
+  min-height: 2.75rem;
+  max-height: 14rem;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  color: var(--colour-text);
+  background: var(--colour-bg);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius);
+}
+
+.composer__input:focus-visible {
+  outline: 2px solid var(--colour-accent);
+  outline-offset: 1px;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- system (collapsed health readout) ------------------------------------ */
+
+.system__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  margin: 0;
+}
+
+.system[open] .system__summary {
+  margin-bottom: var(--space-3);
+}
+
+.system__heading {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--colour-text-muted);
 }

@@ -3,6 +3,8 @@ interface HedwigShell {
   readonly apiBaseUrl: string;
   readonly platform: string;
   readonly isDesktop: true;
+  /** The API token (ADR-0022), via the shell. `refresh` after a 401. */
+  readonly readToken?: (refresh?: boolean) => Promise<string | null>;
 }
 
 interface Window {

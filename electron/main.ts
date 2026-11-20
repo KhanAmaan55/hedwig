@@ -11,16 +11,22 @@
  *                 disk. Nothing is served over HTTP except the loopback API.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { join } from "node:path";
-import { BrowserWindow, app, shell } from "electron";
+import { promisify } from "node:util";
+import { BrowserWindow, app, ipcMain, shell } from "electron";
 
 const isDevelopment = process.env.HEDWIG_DEV === "1" || !app.isPackaged;
 
 const API_BASE_URL = process.env.HEDWIG_API_BASE_URL ?? "http://127.0.0.1:8730";
 const RENDERER_URL = process.env.HEDWIG_RENDERER_URL ?? "http://localhost:5173";
 const BACKEND_READY_TIMEOUT_MS = 30_000;
+/** How to run the CLI. `uv run hedwig` in development; the installed `hedwig` when packaged. */
+const HEDWIG_CLI = process.env.HEDWIG_CLI ?? (isDevelopment ? "uv run hedwig" : "hedwig");
+const TOKEN_TIMEOUT_MS = 20_000;
+
+const execFileAsync = promisify(execFile);
 
 let mainWindow: BrowserWindow | null = null;
 let backend: ChildProcess | null = null;
@@ -91,6 +97,52 @@ async function waitForBackend(): Promise<boolean> {
   log("backend did not become ready", { timeout_ms: BACKEND_READY_TIMEOUT_MS });
   return false;
 }
+
+/**
+ * The API token (ADR-0022, docs/18 §13.2).
+ *
+ * Asked of the CLI rather than read from `~/.hedwig/token`, because only the Python config
+ * loader knows every place the data directory can be moved to. Cached; a renderer that gets a
+ * 401 asks again with `refresh`, which is how a rotation reaches an open window. Never logged.
+ */
+let cachedToken: string | null = null;
+let pendingToken: Promise<string | null> | null = null;
+
+async function resolveToken(refresh: boolean): Promise<string | null> {
+  if (cachedToken && !refresh) return cachedToken;
+  pendingToken ??= (async () => {
+    const [command, ...args] = HEDWIG_CLI.split(/\s+/).filter(Boolean);
+    if (!command) return null;
+    try {
+      const { stdout } = await execFileAsync(command, [...args, "token", "show"], {
+        timeout: TOKEN_TIMEOUT_MS,
+        env: process.env,
+      });
+      return stdout.trim() || null;
+    } catch (error) {
+      log("could not obtain the API token", {
+        command: HEDWIG_CLI,
+        error: error instanceof Error ? error.message.split("\n")[0] : "unknown",
+      });
+      return null;
+    }
+  })().finally(() => {
+    pendingToken = null;
+  });
+  cachedToken = await pendingToken;
+  return cachedToken;
+}
+
+/** Only the app's own page may ask for the token — not a frame it happened to load. */
+function isOwnFrame(url: string | undefined): boolean {
+  if (!url) return false;
+  return isDevelopment ? url.startsWith(RENDERER_URL) : url.startsWith("file://");
+}
+
+ipcMain.handle("hedwig:token", async (event, refresh: unknown) => {
+  if (!isOwnFrame(event.senderFrame?.url)) return null;
+  return resolveToken(refresh === true);
+});
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({

@@ -56,7 +56,7 @@ the repository, ahead of any new cognitive capability.
 
 | Vision § | Capability | Status | Evidence |
 |---|---|---|---|
-| 15 | Open HEDWIG and talk to it | **PARTIAL** (was MISSING) | `hedwig chat` and the REST API work end to end against Ollama (§6); the desktop app has no chat pane yet (UX-02) |
+| 15 | Open HEDWIG and talk to it | **COMPLETE** (was MISSING) | Desktop/browser conversation pane, `hedwig chat` and the REST API, verified live against Ollama (§6). Non-streaming: a slow model shows only "thinking…" until it finishes (FND-05) |
 | 2 | Brain: turn graph, routing, caps, deterministic planner | **COMPLETE** | `brain/graph.py`, `planner.py`; `test_brain_graph.py`, `test_brain_routing.py` |
 | 2 | Brain: safety guard | **PARTIAL** | `PermissiveGuard` stub — honest in `/health` (`brain` degraded) |
 | 2 | Brain: decides external knowledge / tools are needed | **MISSING** | `StubToolRunner`; planner names only `get_datetime`/`calculate` |
@@ -96,7 +96,7 @@ the repository, ahead of any new cognitive capability.
 
 | # | Gap | Kind | Story |
 |---|---|---|---|
-| G1 | No conversation surface at all | Integration | FND-01, FND-02, UX-01 done; UX-02 open |
+| G1 | No conversation surface at all | Integration | Fixed: FND-01, FND-02, UX-01, UX-02 |
 | G2 | Memory maintenance never scheduled | Broken wiring | Fixed by MEM-01 |
 | G3 | Beliefs never written outside tests | Incomplete workflow | REF-01 |
 | G4 | Avatar unaware of turn activity (thinking/speaking) | Integration | AVA-01 |
@@ -106,6 +106,9 @@ the repository, ahead of any new cognitive capability.
 | G8 | Concurrent turns on one session are not serialised | Latent bug | FND-04 |
 | G9 | Any custom-validator rejection made the 422 handler crash into a 500 (`ctx` held a `ValueError`) | Bug | Fixed with FND-02 (`api/errors.py`) |
 | G10 | With `gemma4:e2b`, replies open with a meta-commentary ("That lands as…") and end with a clarifying question every time | Quality | PER-03 |
+| G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | PER-03 |
+| G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | FND-05; investigate warm-up |
+| G13 | `VITE_HEDWIG_API` both moved the Vite proxy and was exposed to the page, so setting it bypassed the proxy (and the token it adds) | Config trap | Fixed with UX-02: the proxy also reads `HEDWIG_API_BASE_URL` |
 
 ---
 
@@ -260,15 +263,17 @@ beliefs, or its own table (ADR).
 As the user, I want to see traits, drift history and revert a drift, so that HEDWIG's identity is
 inspectable and reversible (docs/16 §4.3).
 
-#### PER-03 — Reply voice on small models
-**Status:** Todo · **P1** · **S** · **Depends on:** UX-01 · **Modules:** `llm/prompts.py`, `personality/rendering.py`
+#### PER-03 — Reply quality on small models: voice and use of memory
+**Status:** Todo · **P1** · **M** · **Depends on:** UX-01 · **Modules:** `llm/prompts.py`, `personality/rendering.py`
 
-As the user, I want HEDWIG to answer naturally — no narration of what my message "lands as", no
-reflexive "does that clarify…?" — so that it sounds like a companion rather than a form.
-Observed in the 2026-11-20 smoke test with `gemma4:e2b`.
+As the user, I want HEDWIG to answer naturally and to *use* what it recalled — no narration of what
+my message "lands as", no reflexive "does that clarify…?", no "I don't know what tea you like" with
+the answer in its context — so that memory is felt rather than merely stored. G10, G11.
 
-- Find which rendered directive or prompt line produces each habit; fix at the source.
-- **Tests:** prompt snapshot; a recorded-fixture eval of ten replies with zero meta-openers.
+- Find which rendered directive or prompt line produces each habit; fix at the source. Look first
+  at how recalled memories are framed (the `[Caveat: …]` echo).
+- **Tests:** prompt snapshot; a recorded-fixture eval of ten replies with zero meta-openers; a
+  live eval script (`scripts/eval_models.py` exists) asserting recalled facts are used.
 
 #### PER-02 — Drift proposals from reflection evidence
 **Status:** Todo · **P2** · **M** · **Depends on:** REF-02 · **Modules:** `reflection/`, `personality/`
@@ -386,7 +391,7 @@ As the user, I want to talk to HEDWIG from a terminal, so that it is usable toda
 - **Tests:** against an in-process app; error rendering; `/quit`.
 
 #### UX-02 — Conversation pane in the desktop app
-**Status:** Todo · **P0** · **M** · **Depends on:** FND-02 · **Modules:** `frontend/src/panes/conversation/`, `electron/preload.ts`, `vite.config.ts`
+**Status:** Done (2026-11-20) · **P0** · **M** · **Depends on:** FND-02 · **Modules:** `frontend/src/panes/conversation/`, `electron/preload.ts`, `vite.config.ts`
 
 As the user, I want to chat with HEDWIG beside its avatar, so that opening the app means talking
 to it. Token delivered by the Electron preload and, in browser dev, injected by the Vite proxy
@@ -412,9 +417,9 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 
 Dependency order, highest value first:
 
-1. **UX-02** — conversation pane (the app becomes usable)
-2. ~~MEM-01~~ — done
-3. **PER-03** — reply voice on small models (small; most visible quality issue)
+1. ~~UX-02~~, ~~MEM-01~~ — done
+2. **PER-03** — reply quality on small models (the most visible problem now that it is usable)
+3. **FND-05** — streaming, which also answers G12
 4. **FND-03**, **FND-04** — session end, per-session turn lock (small, unblock REF-01)
 5. **AVA-01** — the avatar reacts to turns
 6. **MEM-02** — memory control for the user
@@ -450,8 +455,20 @@ Dependency order, highest value first:
 token, token file `0600`, a two-turn `hedwig chat`, and a *new* session recalling the first
 session's fact through memory (2 memories cited).
 
-**Known issues:** G8 (concurrent turns on one session), no retry dedupe (FND-06), G10 (reply
-voice). The uncommitted `reasoning`/`think` change to the LLM gateway that was in the working
+**Known issues:** G8 (concurrent turns on one session — the UI sends one at a time), no retry
+dedupe (FND-06), G10/G11 (reply quality), G12 (cold first reply). The uncommitted `reasoning`/`think` change to the LLM gateway that was in the working
 tree at the start belongs to the user and was left uncommitted.
 
-**Next:** UX-02 — the conversation pane, so opening the app means talking to HEDWIG.
+- **UX-02** Conversation pane — `frontend/src/panes/conversation/`; the API token reaches the
+  renderer through Electron IPC and, in browser development, the Vite proxy, both by asking the
+  CLI. Design in [18](18-frontend-architecture.md) §13. Fixed G13 in passing.
+
+**Frontend tests:** 75 passed (16 new: the pane, the composer, the token in the transport).
+
+**Verified live in the browser pane** against `gemma4:e2b` on a scratch data directory: the
+pane connects through the proxy with the token, shows the message optimistically and
+"thinking…", renders the reply, resumes the conversation after a reload, starts over with *New
+conversation*, and shows "drew on 1 memory" for a cross-session question. That run surfaced G11
+and G12.
+
+**Next:** PER-03 — make the small model use what memory hands it.

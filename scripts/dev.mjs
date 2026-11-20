@@ -168,6 +168,7 @@ async function main() {
       HEDWIG_DEV: "1",
       HEDWIG_API_BASE_URL: API_BASE_URL,
       HEDWIG_RENDERER_URL: RENDERER_URL,
+      HEDWIG_CLI: "uv run hedwig", // how the shell asks for the API token (docs/18 §13.2)
       ELECTRON_DISABLE_SECURITY_WARNINGS: "1", // dev-server CSP warning; production is strict
     },
   });

@@ -60,3 +60,45 @@ export interface ExpressionIntent {
   /** Changes whenever the underlying emotional state does. */
   emotion_version: number | null;
 }
+
+// --- conversation (docs/16 §12) ---------------------------------------------
+
+/** `POST /v1/sessions`, `GET /v1/sessions/{id}`. */
+export interface SessionInfo {
+  id: string;
+  channel: string;
+  started_at: string;
+  ended_at: string | null;
+  end_reason: string | null;
+  turn_count: number;
+  last_active_at: string;
+  is_open: boolean;
+}
+
+/** `POST /v1/sessions/{id}/messages`: one completed turn. */
+export interface TurnReply {
+  turn_id: string;
+  session_id: string;
+  user_message_id: string;
+  message_id: string;
+  reply: string;
+  status: "completed" | "refused" | "truncated";
+  intent: string | null;
+  /** Memories shown to the model for this reply. */
+  cited_memory_ids: string[];
+  mood: Record<string, number>;
+}
+
+export interface HistoryMessage {
+  id: string;
+  seq: number;
+  role: "user" | "hedwig" | "system" | "tool";
+  text: string;
+  created_at: string;
+}
+
+/** `GET /v1/sessions/{id}/messages`: oldest first. */
+export interface MessagePage {
+  messages: HistoryMessage[];
+  next_before: string | null;
+}

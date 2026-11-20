@@ -1,6 +1,6 @@
 # 18 — Frontend Architecture
 
-**Status:** Design · **Depends on:** [15](15-avatar-controller.md), [16](16-api-structure.md) · **Depended on by:** [22](22-roadmap.md)
+**Status:** Partially implemented (§13) · **Depends on:** [15](15-avatar-controller.md), [16](16-api-structure.md) · **Depended on by:** [22](22-roadmap.md)
 
 ---
 
@@ -274,3 +274,91 @@ client fails the build rather than the browser.
 | Mobile client | The WS protocol has been stable for a phase |
 | Theming / multiple character skins | Character profiles already support it |
 | Offline shell (service worker) with a read-only cached inspector | Users want to browse memory while the backend is stopped |
+
+---
+
+## 13. Implementation record — the conversation pane (UX-02)
+
+The first pane that talks to HEDWIG. Backlog: [29](29-backlog.md); API: [16](16-api-structure.md) §12.
+
+### 13.1 Layout
+
+```
+┌──────────────────────── header: brand · connection ───────────────────────┐
+│ ┌──────── Conversation (3fr) ────────┐  ┌──── Avatar (2fr) ────┐          │
+│ │ [New conversation]                 │  │   VRM canvas         │          │
+│ │  messages (aria-live)              │  ├──────────────────────┤          │
+│ │  "HEDWIG is thinking…"             │  │ ▸ System (details)   │          │
+│ │  composer  ⏎ send · ⇧⏎ newline     │  └──────────────────────┘          │
+│ └────────────────────────────────────┘                                    │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+Below 900 px the columns stack with the avatar as a short strip above the conversation; the
+conversation is never the pane that gets sacrificed (§2). The health panels that were the whole
+Milestone-1 UI fold into a collapsed **System** section.
+
+### 13.2 Getting the token to the renderer
+
+```mermaid
+graph LR
+    subgraph desktop["Desktop (Electron)"]
+        M["main process"] -- "execFile: hedwig token show" --> CLI1["hedwig CLI"]
+        P["preload (sandboxed)"] -- "ipc invoke hedwig:token" --> M
+        R1["renderer"] -- "window.hedwig.readToken()" --> P
+        R1 -- "Authorization: Bearer" --> API["backend :8730"]
+    end
+    subgraph browser["Browser development"]
+        R2["page on :5173"] -- "relative /v1, no token" --> V["Vite proxy"]
+        V -- "execFile once: hedwig token show" --> CLI2["hedwig CLI"]
+        V -- "adds Authorization" --> API
+    end
+```
+
+* **Both paths ask the CLI rather than reading `~/.hedwig/token`.** The data directory can be
+  moved by `config/hedwig.local.toml`, `.env` or `HEDWIG_RUNTIME__DATA_DIR`; only the Python
+  config loader resolves all of those. `HEDWIG_CLI` names the command (`uv run hedwig` in
+  development, `hedwig` when packaged).
+* **IPC, not `additionalArguments`.** Arguments land on the renderer's command line, which `ps`
+  shows. The preload stays a shell: one function, returning one credential, to a frame the main
+  process checks is its own.
+* **Rotation.** A 401 makes the transport ask for the token again, once, and retry. The shell
+  and the proxy drop their cached value when asked again.
+* **The page in browser development never holds the token.** The proxy cost is recorded in
+  [ADR-0022](adr/0022-the-token-gates-user-content.md).
+
+### 13.3 State
+
+A single `useConversation` hook owns the pane's state: session id, messages, pending flag,
+error. REST only. §3's Zustand stores and TanStack Query arrive with the WebSocket reducer
+(FND-05). For one pane over three REST calls they would add two dependencies and no capability.
+
+* **Resume.** The last session id is kept in `localStorage` (a per-window convenience; the server
+  is the record). On load its last 50 messages are fetched; a stale id (404) is dropped quietly.
+* **Lazy sessions.** A session is opened on the first send, not on page load, so opening the app
+  does not create empty conversations.
+* **One turn at a time.** The composer is disabled while a turn is in flight. That also keeps the
+  UI clear of backlog G8 until the brain serialises turns itself (FND-04).
+* **Optimistic.** The user's message appears immediately and is reconciled with the reply.
+* **Failure is shown, not hidden.** A 503 shows HEDWIG's own sentence from `detail.reply` with a
+  hint (`hedwig models`). An unreachable backend shows the command that starts it. Nothing is lost
+  from the composer on failure.
+* **Plain text.** Replies render as text with `white-space: pre-wrap`; React escapes them. The
+  sanitised Markdown of §5 is future work, and `dangerouslySetInnerHTML` is never used.
+* **Recall is visible.** A reply that drew on memory says how many memories ("drew on 2
+  memories"), the precursor to §5's citation chips, which need the inspector to point at.
+
+### 13.4 Tradeoffs
+
+| Decision | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Hook, not stores | No new dependencies; trivially testable | Cross-pane sharing (avatar ← turn state) needs lifting | AVA-01 or FND-05 |
+| CLI for the token | Correct under every config layer | ~1 s of `uv run` at shell/proxy start, once | A packaged build ships without the CLI on `PATH` |
+| Disabled composer while pending | No interleaved turns, simple UI | Cannot queue a second thought | The brain serialises turns (FND-04) and streaming lands |
+| Text, not Markdown | Zero XSS surface | Code blocks and lists render plainly | A sanitiser is added deliberately (§5) |
+
+### 13.5 Future improvements
+
+Streaming and stage indicators (FND-05), feedback controls (`POST /messages/{id}/feedback`),
+citation chips into the Mind Inspector (UX-03), session list and switching, and the avatar's
+thinking/speaking states driven by the same turn state (AVA-01).

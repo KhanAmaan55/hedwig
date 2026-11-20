@@ -1,8 +1,45 @@
 /// <reference types="vitest/config" />
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-const BACKEND = process.env.VITE_HEDWIG_API ?? "http://127.0.0.1:8730";
+// Where the proxy sends `/v1`. `HEDWIG_API_BASE_URL` (the shell's name for it) moves the proxy
+// alone; `VITE_HEDWIG_API` is also exposed to the page, which then calls the backend directly
+// and bypasses the proxy — and with it the token the proxy adds (docs/18 §13.2).
+const BACKEND =
+  process.env.HEDWIG_API_BASE_URL ?? process.env.VITE_HEDWIG_API ?? "http://127.0.0.1:8730";
+const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const HEDWIG_CLI = process.env.HEDWIG_CLI ?? "uv run hedwig";
+
+/**
+ * The API token for browser development (ADR-0022, docs/18 §13.2).
+ *
+ * The proxy adds it, so the page itself never holds it. Asked of the CLI — once, lazily, on
+ * the first proxied request — because only the Python config loader knows where the data
+ * directory is. A 401 drops the cache, so a rotation is picked up on the next request.
+ */
+let proxyToken: string | null | undefined;
+
+function apiToken(): string | null {
+  if (proxyToken !== undefined) return proxyToken;
+  const [command, ...args] = HEDWIG_CLI.split(/\s+/).filter(Boolean);
+  try {
+    proxyToken = command
+      ? execFileSync(command, [...args, "token", "show"], {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          timeout: 20_000,
+          stdio: ["ignore", "pipe", "ignore"],
+        }).trim() || null
+      : null;
+  } catch {
+    console.warn(`[hedwig] could not obtain the API token with \`${HEDWIG_CLI} token show\``);
+    proxyToken = null;
+  }
+  return proxyToken;
+}
 
 export default defineConfig({
   plugins: [react()],
@@ -17,7 +54,20 @@ export default defineConfig({
     proxy: {
       // Browser development goes through the proxy, so the app can use relative URLs
       // and never needs CORS. The desktop shell talks to the backend directly.
-      "/v1": { target: BACKEND, changeOrigin: true },
+      "/v1": {
+        target: BACKEND,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq, request) => {
+            if (request.headers.authorization) return;
+            const token = apiToken();
+            if (token) proxyReq.setHeader("Authorization", `Bearer ${token}`);
+          });
+          proxy.on("proxyRes", (response) => {
+            if (response.statusCode === 401) proxyToken = undefined;
+          });
+        },
+      },
     },
   },
 

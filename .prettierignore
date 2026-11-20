@@ -10,6 +10,7 @@ node_modules/
 uv.lock
 package-lock.json
 coverage/
+.import_linter_cache/
 
 # Python is formatted by ruff
 *.py
