@@ -547,3 +547,50 @@ prompt with the assembler of [14](14-language-model-gateway.md) §5 and asks the
 * **`ResponseContext` gained `identity` and `restated`**: who is speaking, and how many recalled
   memories were left out because the window already carried them.
 * **`/v1/health` now lists `guard` and `tools` as the only stubs.**
+
+---
+
+## 16. One turn at a time per session (FND-04)
+
+Two messages sent to the same session at once used to run as two interleaved turns: each read
+the window before the other had written its reply, so each answered a conversation missing a
+message (docs/29 G8). The UI avoided it by disabling Send; the API did not.
+
+**`Brain` serialises turns per session.** `run_turn` and `end_session` take a per-session
+`asyncio.Lock`, so a session's turns run strictly one after another, and ending a session waits
+for its in-flight turn. Different sessions still run concurrently.
+
+```mermaid
+sequenceDiagram
+    participant A as request A (sess_1)
+    participant B as request B (sess_1)
+    participant C as request C (sess_2)
+    participant L as Brain locks
+    A->>L: acquire sess_1
+    B->>L: acquire sess_1 (waits)
+    C->>L: acquire sess_2
+    Note over C: runs alongside A
+    A-->>L: release
+    L-->>B: sess_1 granted. B's window includes A's reply
+```
+
+* **In `Brain`, not the API.** The edge holds no domain logic (docs/16 §2), and the CLI, the UI
+  and a future WebSocket all reach turns through `Brain`. A lock at the edge would cover one
+  door.
+* **Process-local is enough.** HEDWIG is one process (ADR-0001), and the shell refuses a second
+  instance (docs/17 §12). A database lock would buy nothing that one process needs.
+* **Bounded.** Locks are reference-counted and dropped when the last waiter leaves, so the map
+  holds only sessions with a turn in flight or waiting.
+* **Ending waits for the turn.** This is what makes the relationship ordering of docs/27 §5.1
+  hold: the turn's `conversation.turn.completed` is always published before
+  `conversation.session.ended`.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Queue, don't reject | A second message is answered, in order, with the first in its window | A caller cannot tell it waited (no 409) | A client needs to cancel queued turns (FND-05's `interrupt`) |
+| Process-local lock | No new infrastructure | Wrong if two processes ever serve one database | Multi-process serving, which ADR-0001 rules out |
+
+The idle reaper (`sessions.end_idle`) does not take the lock. A session is only idle after 30
+minutes without a message, which is far longer than the turn cap (docs/07 §3.2), so the two cannot
+overlap.
+

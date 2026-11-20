@@ -110,21 +110,31 @@ class SqliteSessionStore:
             "SELECT id, turn_count FROM session WHERE ended_at IS NULL AND updated_at < ?",
             (cutoff,),
         )
-        ended: list[str] = []
-        for row in rows:
-            changed = self._db.execute(
-                "UPDATE session SET ended_at = ?, end_reason = 'timeout', updated_at = ?, "
-                "version = version + 1 WHERE id = ? AND ended_at IS NULL",
-                (self._now(), self._now(), row["id"]),
-            )
-            if not changed:
-                continue  # someone else ended or resumed it in between
-            session_id = str(row["id"])
-            ended.append(session_id)
-            await self._announce_end(session_id, reason="timeout", turns=int(row["turn_count"]))
+        ended = [str(row["id"]) for row in rows if await self.end(str(row["id"]), reason="timeout")]
         if ended:
             logger.info("idle sessions ended", extra=fields(count=len(ended)))
         return ended
+
+    async def end(self, session_id: str, *, reason: str = "explicit") -> bool:
+        """End it if it is open, and announce it once (FND-03).
+
+        The conditional `UPDATE` is the idempotency: of two concurrent ends — a client's and the
+        idle reaper's — exactly one changes the row, and only that one announces.
+        """
+        now = self._now()
+        changed = self._db.execute(
+            "UPDATE session SET ended_at = ?, end_reason = ?, updated_at = ?, "
+            "version = version + 1 WHERE id = ? AND ended_at IS NULL",
+            (now, reason, now, session_id),
+        )
+        if not changed:
+            return False
+        row = self._db.query_one("SELECT turn_count FROM session WHERE id = ?", (session_id,))
+        await self._announce_end(
+            session_id, reason=reason, turns=int(row["turn_count"]) if row else 0
+        )
+        logger.info("session ended", extra=fields(session=session_id, reason=reason))
+        return True
 
     async def end_idle_task(self, context: TaskContext) -> TaskResult:
         """The scheduler's entry point."""

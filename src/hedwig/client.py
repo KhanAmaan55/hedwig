@@ -98,6 +98,11 @@ class HedwigClient:
             raise
         return True
 
+    def end_session(self, session_id: str) -> None:
+        """End the conversation now, so its relationship update is not left to the idle
+        timeout. Idempotent on the server."""
+        self._request("POST", f"/v1/sessions/{session_id}/end")
+
     def send(self, session_id: str, text: str) -> Reply:
         body = self._request("POST", f"/v1/sessions/{session_id}/messages", json={"text": text})
         return Reply(

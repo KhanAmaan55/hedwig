@@ -4,8 +4,8 @@
 nothing implemented that owner: the tables existed with one reader and no writer, so every
 conversation was the first conversation.
 
-`Conversation` is deliberately five methods wide — what a graph node needs, not a general
-conversation API (docs/03 §5). The store implements it directly rather than through an
+`Conversation` is deliberately narrow — what the brain sequences, not a general conversation
+API (docs/03 §5): open and end a session, record into it, read its window. The store implements it directly rather than through an
 adapter, because it was written after the port rather than before it.
 
 `ConversationHistory` is the other half: what a *client* needs to read back — sessions and
@@ -97,6 +97,14 @@ class Conversation(Protocol):
 
         An upsert rather than a create: a session that has gone missing mid-turn is
         recreated instead of failing the turn (docs/26 §9).
+        """
+        ...
+
+    async def end(self, session_id: str, *, reason: str = "explicit") -> bool:
+        """End an open session and announce it. Returns whether *this* call ended it.
+
+        Idempotent: ending an ended or unknown session changes nothing and announces nothing,
+        so a retried request cannot close the relationship tally twice (docs/27 §5.1).
         """
         ...
 

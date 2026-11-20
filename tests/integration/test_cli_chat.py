@@ -68,6 +68,34 @@ def test_a_conversation_from_the_terminal(
     assert "hedwig chat --session sess_" in terminal.said("info")[-1]
 
 
+def _session_of(terminal: Terminal) -> str:
+    return terminal.said("info")[-1].rsplit(" ", 1)[-1]
+
+
+def test_leaving_ends_the_conversation(client: HedwigClient, http: TestClient) -> None:
+    """So the relationship update does not wait for the idle timeout (FND-03)."""
+    terminal = Terminal("Hello there, HEDWIG.", "/quit")
+    run_chat(client, session_id=None, read=terminal.read, write=terminal.write)
+
+    session = http.get(
+        f"/v1/sessions/{_session_of(terminal)}",
+        headers={"Authorization": f"Bearer {client._token}"},
+    ).json()
+    assert session["is_open"] is False
+    assert session["end_reason"] == "explicit"
+
+
+def test_new_ends_the_previous_conversation(client: HedwigClient, http: TestClient) -> None:
+    terminal = Terminal("First conversation here.", "/new", "/quit")
+    run_chat(client, session_id=None, read=terminal.read, write=terminal.write)
+
+    sessions = http.get(
+        "/v1/sessions", headers={"Authorization": f"Bearer {client._token}"}
+    ).json()["sessions"]
+    assert len(sessions) == 2
+    assert all(not session["is_open"] for session in sessions)
+
+
 def test_resuming_shows_where_we_left_off(client: HedwigClient) -> None:
     session_id = client.open_session()
     client.send(session_id, "We were talking about the memory architecture.")

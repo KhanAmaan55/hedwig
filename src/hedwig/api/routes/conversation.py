@@ -168,6 +168,23 @@ async def send_message(session_id: str, body: MessageCreate, container: Containe
     )
 
 
+@router.post(
+    "/{session_id}/end",
+    response_model=SessionRead,
+    summary="End a conversation now",
+    responses={404: {"description": "No such session"}},
+)
+async def end_session(session_id: str, container: ContainerDep) -> SessionRead:
+    """Applies the relationship update at once rather than after the idle timeout (FND-03).
+
+    Waits for a turn in flight on this session. Idempotent: ending an ended session returns it
+    unchanged. A later message resumes it as a new conversation (docs/27 §5.1).
+    """
+    await _require_session(container, session_id)
+    await container.brain.end_session(session_id)
+    return _session(await _require_session(container, session_id))
+
+
 @router.get(
     "/{session_id}/messages",
     response_model=MessagePage,

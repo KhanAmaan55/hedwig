@@ -102,12 +102,13 @@ the repository, ahead of any new cognitive capability.
 | G4 | Avatar unaware of turn activity (thinking/speaking) | Integration | AVA-01 |
 | G5 | `README.md` still said "Milestone 1 … no memory, cognition or model yet" | Doc drift | Fixed with FND-02 |
 | G6 | docs/16 §3 said the token is required on *every* request; `routes/mind.py` documented a deliberate exception | Doc inconsistency | Resolved by ADR-0022 |
-| G7 | No session end from a client — only the idle reaper ends sessions | Incomplete workflow | FND-03 |
-| G8 | Concurrent turns on one session are not serialised | Latent bug | FND-04 |
+| G7 | No session end from a client — only the idle reaper ends sessions | Incomplete workflow | Fixed by FND-03 |
+| G8 | Concurrent turns on one session are not serialised | Latent bug | Fixed by FND-04 |
 | G9 | Any custom-validator rejection made the 422 handler crash into a 500 (`ctx` held a `ValueError`) | Bug | Fixed with FND-02 (`api/errors.py`) |
 | G10 | With `gemma4:e2b`, replies open with a meta-commentary ("That lands as…") and end with a clarifying question every time | Quality | Fixed by PER-03 |
 | G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | Fixed by PER-03 |
 | G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | FND-05; investigate warm-up |
+| G14 | Event recovery runs once, inside `bus.start()`, before emotion, personality and relationship subscribe in their own `start()`. After a crash their missed events are never re-delivered: at-least-once silently does not cover them | Reliability bug (pre-existing) | FND-07 |
 | G13 | `VITE_HEDWIG_API` both moved the Vite proxy and was exposed to the page, so setting it bypassed the proxy (and the token it adds) | Config trap | Fixed with UX-02: the proxy also reads `HEDWIG_API_BASE_URL` |
 
 ---
@@ -149,7 +150,7 @@ read the history over HTTP, so that a person can actually talk to HEDWIG.
   recalls the first; history paginates; unknown session → 404; outage → 503.
 
 #### FND-03 — Explicit session end
-**Status:** Todo · **P1** · **S** · **Depends on:** FND-02 · **Modules:** `sessions/`, `api/`
+**Status:** Done (2026-11-20) · **P1** · **S** · **Depends on:** FND-02 · **Modules:** `sessions/`, `api/`
 
 As the user, I want closing a conversation to end the session immediately, so that the
 relationship update (and later T1 reflection) runs then rather than after the idle timeout.
@@ -158,7 +159,7 @@ relationship update (and later T1 reflection) runs then rather than after the id
 - **Tests:** ending twice emits once; relationship tally closes.
 
 #### FND-04 — One turn at a time per session
-**Status:** Todo · **P1** · **S** · **Depends on:** FND-02 · **Modules:** `brain/graph.py`
+**Status:** Done (2026-11-20) · **P1** · **S** · **Depends on:** FND-02 · **Modules:** `brain/graph.py`
 
 As the system, I want concurrent messages on one session to run one after another, so that
 two turns never interleave their windows.
@@ -176,6 +177,19 @@ mind updates and notices, so that replies appear as they are written and the ava
 - docs/16 §5 envelope; lossy vs. non-lossy queues; `client_message_id` dedupe; reconnect replay.
 - Token via `Sec-WebSocket-Protocol`, not the query string.
 - **Tests:** full lifecycle; flood test (tokens never dropped, frames are); duplicate send.
+
+#### FND-07 — Recovery reaches every durable subscriber
+**Status:** Todo · **P1** · **S** · **Depends on:** — · **Modules:** `core/bus/in_process.py`
+
+As HEDWIG, I want events missed during a crash re-delivered to *every* durable subscriber,
+including those that subscribe after the bus starts, so that a restart mid-session loses no
+appraisal, tally or drift evidence (G14).
+
+- Recover per subscription when it is registered on a running bus, not only in `start()`.
+- Migration 0010 already gives the renamed relationship subscription its delivery history, so
+  this fix will not double-count turns (docs/27 §5.1).
+- **Tests:** a subscriber registered after `start()` receives an event emitted before a
+  simulated crash; `test_migration_0010.py` then fails without 0010 (today it cannot).
 
 #### FND-06 — Idempotent message send
 **Status:** Todo · **P2** · **S** · **Depends on:** FND-02 · **Modules:** `sessions/`, migration
@@ -417,9 +431,10 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 
 Dependency order, highest value first:
 
-1. ~~UX-02~~, ~~MEM-01~~, ~~PER-03~~ — done
-2. **FND-05** — streaming, which also answers G12
-3. **FND-03**, **FND-04** — session end and per-session turn lock (small, unblock REF-01)
+1. ~~UX-02~~, ~~MEM-01~~, ~~PER-03~~, ~~FND-03~~, ~~FND-04~~ — done
+2. **FND-07** — recovery reaches every subscriber (small; a reliability bug)
+3. **FND-05** — streaming, which also answers G12
+4. **REF-01** — T1 reflection on `session.ended`, now that ends are prompt
 4. **FND-03**, **FND-04** — session end, per-session turn lock (small, unblock REF-01)
 5. **AVA-01** — the avatar reacts to turns
 6. **MEM-02** — memory control for the user
@@ -483,3 +498,18 @@ and G12.
 **Python tests:** 935 passed.
 
 **Next:** FND-05 (streaming), or FND-03/FND-04 as the small unblockers for reflection.
+
+- **FND-03** Explicit session end — `POST /v1/sessions/{id}/end`, `Conversation.end` (idempotent:
+  only the call that ends a session announces it), `Brain.end_session`. `hedwig chat` ends on
+  leaving and on `/new`; the app on *New conversation*. Relationship memory reads turns and ends
+  through one ordered subscription; migration 0010 (additive) carries over the old
+  subscriptions' delivery history. Design in [27](27-personality-relationship-and-the-prompt.md) §5.1.
+- **FND-04** One turn at a time per session — reference-counted per-session locks in `Brain`;
+  ending waits for the in-flight turn. Design in [07](07-brain-langgraph-workflow.md) §16.
+- Found while testing: **G14**, recovery never reaches subscribers registered after the bus
+  starts (→ FND-07). The ordering race FND-03 guards against was not observable with today's bus
+  either; both are recorded as such rather than claimed as fixes of observed failures.
+
+**Tests:** 951 Python (16 new), 76 frontend (1 new). `npm run check` clean.
+
+**Next:** FND-07, then FND-05 or REF-01.

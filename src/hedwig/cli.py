@@ -12,6 +12,7 @@ through `hedwig.client`, which only speaks the public API (docs/16 §12.3).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from collections.abc import Callable
@@ -146,7 +147,7 @@ def models(
 Kind = Literal["hedwig", "info", "error"]
 Writer = Callable[[str, Kind], None]
 
-CHAT_HELP = "/new starts a new conversation · /quit leaves (or Ctrl-D)"
+CHAT_HELP = "/new starts a new conversation · /quit ends this one and leaves (or Ctrl-D)"
 RESUME_PREVIEW = 6
 
 
@@ -192,6 +193,7 @@ def run_chat(
             continue
         if line == "/new":
             try:
+                _end_quietly(client, session_id)
                 session_id = client.open_session(channel="cli")
             except ClientError as error:
                 write(_explain(error), "error")
@@ -211,8 +213,17 @@ def run_chat(
             continue
         write(reply.text, "hedwig")
 
+    # Leaving ends the conversation now, so the relationship update does not wait for the idle
+    # timeout (FND-03). Resuming later is still possible: it becomes a new conversation.
+    _end_quietly(client, session_id)
     write(f"Resume with: hedwig chat --session {session_id}", "info")
     return 0
+
+
+def _end_quietly(client: HedwigClient, session_id: str) -> None:
+    """Best effort: the idle reaper ends it anyway if the backend is gone."""
+    with contextlib.suppress(ClientError):
+        client.end_session(session_id)
 
 
 def _speaker(role: str) -> str:
