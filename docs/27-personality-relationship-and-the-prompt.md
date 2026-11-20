@@ -219,6 +219,32 @@ The update needs an end, and sessions had none. A scheduled task ends sessions i
 resumed after it ended counts as a new conversation: `open` reopens it and reports it as
 started, so a long-lived session id does not update the relationship once and never again.
 
+**Sessions can also be ended explicitly (FND-03).** `POST /v1/sessions/{id}/end` ends a
+session at once with `end_reason = 'explicit'`, and so applies the relationship update then
+rather than half an hour later. `hedwig chat` ends its session when you leave, and the app does
+so on *New conversation*. Ending is idempotent: only the call that ends a session announces it.
+
+**The update must see every turn, so it reads both events in order.** The tally is fed by
+`conversation.turn.completed` and applied on `conversation.session.ended`. Delivered through two
+subscriptions, the two had no order between them by contract (docs/04 §4: per-subscription FIFO
+only). The in-process bus happened to keep them in order, since its dispatchers drain a queue without
+yielding while handlers do no real I/O, so the race was never observed. But the first handler to await
+real I/O would let an end close the tally before the last turn was counted. The
+relationship now takes both through **one** subscription, `memory-relationship`, on
+`conversation.*.*`, which is docs/04 §9's own remedy for a cross-type ordering need. Combined with
+`Brain.end_session` waiting for the in-flight turn (docs/07 §16), the turn is always counted
+first.
+
+Migration `0010` gives the new subscription the delivery history of the two it replaces, by
+copying their `processed_event` rows. Without that, startup recovery would re-deliver every turn
+in the replay window to a subscription that had never seen it, and tally each one twice. The
+migration adds rows and changes none. The old names' rows remain, inert.
+
+Writing its test found that recovery does not reach this subscription at all yet. It runs once,
+inside `bus.start()`, before relationship, emotion and personality subscribe in their own
+`start()` (docs/29 G14). So 0010 is inert today. It becomes essential the day G14 is fixed,
+which is why it shipped first.
+
 ### 5.2 Two trusts
 
 The emotion vector has `trust` (ADR-0019) and the relationship has `trust`. ADR-0019 anticipated

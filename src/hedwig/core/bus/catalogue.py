@@ -151,7 +151,7 @@ def platform_catalogue() -> EventCatalogue:
     )
     catalogue.register(
         "conversation.session.ended",
-        "A session ended — today only by inactivity. The relationship update is applied "
+        "A session ended — explicitly or by inactivity. The relationship update is applied "
         "here, never per turn, because relationships do not lurch (docs/06 §3.3).",
         payload_keys={"session_id", "reason", "turn_count"},
     )

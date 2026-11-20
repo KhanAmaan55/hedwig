@@ -48,8 +48,10 @@ TURNS_FOR_FULL_WEIGHT = 5
 """A session of five turns or more counts fully toward familiarity. One exchange is
 acquaintance, not familiarity."""
 
-SUBSCRIPTION_TURNS = "memory-relationship-turns"
-SUBSCRIPTION_SESSIONS = "memory-relationship-sessions"
+SUBSCRIPTION = "memory-relationship"
+"""One subscription for turns *and* session ends, so they arrive in the order they happened
+(docs/27 §5.1). It replaced `memory-relationship-turns` and `memory-relationship-sessions`, whose
+delivery history migration 0010 carried over."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,12 +117,9 @@ class RelationshipMemory:
 
     async def start(self) -> None:
         if self._bus is not None and not self._subscribed:
-            self._bus.subscribe(
-                "conversation.turn.completed", self._on_turn, name=SUBSCRIPTION_TURNS
-            )
-            self._bus.subscribe(
-                "conversation.session.ended", self._on_session_ended, name=SUBSCRIPTION_SESSIONS
-            )
+            # Per-subscription FIFO is the bus's only ordering (docs/04 §4). Two subscriptions
+            # let an end overtake the last turn's tally; one keeps them in publish order.
+            self._bus.subscribe("conversation.*.*", self._on_conversation, name=SUBSCRIPTION)
             self._subscribed = True
 
     async def stop(self) -> None:
@@ -243,6 +242,12 @@ class RelationshipMemory:
         return after
 
     # -- events in -----------------------------------------------------------
+
+    async def _on_conversation(self, event: Event) -> None:
+        if event.type == "conversation.turn.completed":
+            await self._on_turn(event)
+        elif event.type == "conversation.session.ended":
+            await self._on_session_ended(event)
 
     async def _on_turn(self, event: Event) -> None:
         session_id = str(event.payload.get("session_id", ""))

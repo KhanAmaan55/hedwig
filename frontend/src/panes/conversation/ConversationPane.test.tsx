@@ -41,6 +41,7 @@ function fakeApi(overrides: Partial<ConversationApi> = {}) {
     openSession: vi.fn().mockResolvedValue(session("sess_1")),
     history: vi.fn().mockResolvedValue({ messages: [], next_before: null } satisfies MessagePage),
     send: vi.fn().mockResolvedValue(reply("Hello! Lovely to meet you.")),
+    endSession: vi.fn().mockResolvedValue(session("sess_1")),
     ...overrides,
   };
 }
@@ -228,6 +229,21 @@ describe("ConversationPane", () => {
 
     expect(screen.getByText(/Say hello/)).toBeInTheDocument();
     expect(storage.value).toBeNull();
+    // The old conversation is ended now, not half an hour from now (FND-03).
+    expect(api.endSession).toHaveBeenCalledWith("sess_1");
+  });
+
+  it("starts over even when ending the old conversation fails", async () => {
+    const api = fakeApi({ endSession: vi.fn().mockRejectedValue(new TypeError("offline")) });
+    render(<ConversationPane api={api} storage={memoryStorage()} />);
+
+    type("hi there");
+    pressEnter();
+    await screen.findByText("Hello! Lovely to meet you.");
+    fireEvent.click(screen.getByRole("button", { name: "New conversation" }));
+
+    expect(screen.getByText(/Say hello/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("renders a reply as text, never as markup", async () => {

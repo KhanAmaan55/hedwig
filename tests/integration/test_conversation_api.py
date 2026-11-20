@@ -6,6 +6,8 @@ FastAPI app, with a `FakeClock` and the scripted model provider. Nothing is patc
 
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import AsyncIterator
 
 import pytest
@@ -264,3 +266,103 @@ async def test_the_session_counts_its_turns(api: AsyncClient) -> None:
     await api.post(f"/v1/sessions/{session_id}/messages", json={"text": "and another one"})
 
     assert (await api.get(f"/v1/sessions/{session_id}")).json()["turn_count"] == 2
+
+
+# =========================================================================
+# Ending a session (FND-03) and one turn at a time (FND-04)
+# =========================================================================
+
+
+def _events(container: Container, event_type: str) -> int:
+    return len(container.database.query("SELECT id FROM event WHERE type = ?", (event_type,)))
+
+
+async def test_ending_a_session_applies_the_relationship_now(
+    api: AsyncClient, running_container: Container
+) -> None:
+    session_id = await _session(api)
+    await api.post(f"/v1/sessions/{session_id}/messages", json={"text": "Hello there, HEDWIG."})
+    await running_container.bus.drain()
+    before = (await running_container.relationship.with_user()).interaction_count
+
+    response = await api.post(f"/v1/sessions/{session_id}/end")
+    await running_container.bus.drain()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_open"] is False
+    assert body["end_reason"] == "explicit"
+    after = (await running_container.relationship.with_user()).interaction_count
+    assert after == before + 1, "the relationship waited for the idle timeout"
+
+
+async def test_ending_is_idempotent(api: AsyncClient, running_container: Container) -> None:
+    session_id = await _session(api)
+    await api.post(f"/v1/sessions/{session_id}/messages", json={"text": "One turn, then done."})
+
+    first = await api.post(f"/v1/sessions/{session_id}/end")
+    second = await api.post(f"/v1/sessions/{session_id}/end")
+    await running_container.bus.drain()
+
+    assert first.status_code == second.status_code == 200
+    assert second.json()["ended_at"] == first.json()["ended_at"]
+    assert _events(running_container, "conversation.session.ended") == 1
+
+
+async def test_ending_an_unknown_session_is_404(api: AsyncClient) -> None:
+    response = await api.post("/v1/sessions/sess_nope/end")
+    assert response.status_code == 404
+
+
+async def test_an_end_right_after_a_reply_still_counts_that_turn(
+    api: AsyncClient, running_container: Container
+) -> None:
+    """The race FND-03 closed: `turn.completed` and `session.ended` used to travel through two
+    unordered subscriptions, so an immediate end could close the tally before the last turn
+    was counted (docs/27 §5.1). No drain between the reply and the end, on purpose."""
+    session_id = await _session(api)
+    for text in ("first thing to say", "second thing to say", "third thing to say"):
+        await api.post(f"/v1/sessions/{session_id}/messages", json={"text": text})
+    await api.post(f"/v1/sessions/{session_id}/end")
+    await running_container.bus.drain()
+
+    leftover = running_container.database.query(
+        "SELECT turns FROM relationship_tally WHERE session_id = ?", (session_id,)
+    )
+    assert leftover == [], "a turn was tallied after its session had already closed"
+    updated = running_container.database.query(
+        "SELECT payload FROM event WHERE type = 'memory.relationship.updated'"
+    )
+    assert len(updated) == 1
+    assert json.loads(updated[0]["payload"])["turns"] == 3
+
+
+async def test_a_message_after_the_end_starts_a_new_conversation(
+    api: AsyncClient, running_container: Container
+) -> None:
+    session_id = await _session(api)
+    await api.post(f"/v1/sessions/{session_id}/messages", json={"text": "Before the end."})
+    await api.post(f"/v1/sessions/{session_id}/end")
+
+    response = await api.post(f"/v1/sessions/{session_id}/messages", json={"text": "After it."})
+    await running_container.bus.drain()
+
+    assert response.status_code == 200
+    assert (await api.get(f"/v1/sessions/{session_id}")).json()["is_open"] is True
+    assert _events(running_container, "conversation.session.started") == 2
+
+
+async def test_concurrent_messages_to_one_session_are_answered_in_order(
+    api: AsyncClient,
+) -> None:
+    session_id = await _session(api)
+    texts = [f"message number {index} here" for index in range(4)]
+
+    responses = await asyncio.gather(
+        *(api.post(f"/v1/sessions/{session_id}/messages", json={"text": t}) for t in texts)
+    )
+
+    assert all(r.status_code == 200 for r in responses)
+    history = (await api.get(f"/v1/sessions/{session_id}/messages")).json()["messages"]
+    roles = [m["role"] for m in history]
+    assert roles == ["user", "hedwig"] * 4, "turns interleaved"

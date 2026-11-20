@@ -14,7 +14,10 @@ Read the edges below and you have read the control flow of a turn:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -89,6 +92,14 @@ def build_turn_graph(deps: Collaborators, *, checkpointer: Any | None = None) ->
 
 
 @dataclass(slots=True)
+class _SessionLock:
+    """A lock, and how many callers hold or await it — so it can be dropped when idle."""
+
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    users: int = 0
+
+
+@dataclass(slots=True)
 class Brain:
     """The turn graph as a service.
 
@@ -99,6 +110,8 @@ class Brain:
     collaborators: Collaborators
     checkpointer: Any | None = None
     _graph: Any = None
+    _sessions: dict[str, _SessionLock] = field(default_factory=dict)
+    """One lock per session with a turn in flight or waiting (docs/07 §16)."""
 
     def __post_init__(self) -> None:
         self._graph = build_turn_graph(self.collaborators, checkpointer=self.checkpointer)
@@ -141,9 +154,35 @@ class Brain:
         )
         config = {"configurable": {"thread_id": resolved_turn}}
 
-        final: TurnState = await self._graph.ainvoke(state, config=config)
+        # One turn at a time per session: a second message waits, then sees the first's reply
+        # in its window (docs/07 §16).
+        async with self._session_turn(session_id):
+            final: TurnState = await self._graph.ainvoke(state, config=config)
         logger.info("turn completed", extra=fields(**summarise(final)))
         return final
+
+    async def end_session(self, session_id: str) -> bool:
+        """End a session once its in-flight turn, if any, has finished (FND-03).
+
+        Waiting is what guarantees the turn's `turn.completed` is published before
+        `session.ended`, so the relationship update counts that turn (docs/27 §5.1).
+        """
+        async with self._session_turn(session_id):
+            return await self.collaborators.conversation.end(session_id, reason="explicit")
+
+    @asynccontextmanager
+    async def _session_turn(self, session_id: str) -> AsyncIterator[None]:
+        entry = self._sessions.get(session_id)
+        if entry is None:
+            entry = self._sessions[session_id] = _SessionLock()
+        entry.users += 1
+        try:
+            async with entry.lock:
+                yield
+        finally:
+            entry.users -= 1
+            if entry.users == 0:
+                del self._sessions[session_id]
 
     async def health(self) -> Any:
         """Report what the graph is made of.

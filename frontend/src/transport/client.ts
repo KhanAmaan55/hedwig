@@ -116,6 +116,14 @@ export class HedwigClient {
     return this.request<SessionInfo>("POST", "/v1/sessions", { body: { channel }, auth: true });
   }
 
+  /** End the conversation now; its relationship update need not wait for the idle timeout
+   *  (FND-03). Idempotent on the server. */
+  async endSession(sessionId: string): Promise<SessionInfo> {
+    return this.request<SessionInfo>("POST", `/v1/sessions/${encodeURIComponent(sessionId)}/end`, {
+      auth: true,
+    });
+  }
+
   /** Last `limit` messages, oldest first. */
   async history(sessionId: string, limit = 50): Promise<MessagePage> {
     const query = new URLSearchParams({ limit: String(limit) });

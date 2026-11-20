@@ -194,10 +194,19 @@ class InMemoryConversation:
     emotion_refs: list[str] = field(default_factory=list)
     size: int = 8
 
+    ended: set[str] = field(default_factory=set)
+
     async def open(self, session_id: str, *, channel: str = "api") -> bool:
-        created = session_id not in self.sessions
+        created = session_id not in self.sessions or session_id in self.ended
         self.sessions[session_id] = channel
+        self.ended.discard(session_id)
         return created
+
+    async def end(self, session_id: str, *, reason: str = "explicit") -> bool:
+        if session_id not in self.sessions or session_id in self.ended:
+            return False
+        self.ended.add(session_id)
+        return True
 
     async def record_message(
         self,

@@ -9,7 +9,7 @@ import { ApiError, client as defaultClient, type HedwigClient } from "../../tran
  * (FND-05); until then this is the whole of it, and it is what a test drives.
  */
 
-export type ConversationApi = Pick<HedwigClient, "openSession" | "history" | "send">;
+export type ConversationApi = Pick<HedwigClient, "openSession" | "history" | "send" | "endSession">;
 
 export interface SessionStorage {
   get(): string | null;
@@ -191,11 +191,14 @@ export function useConversation(
   );
 
   const startOver = useCallback(() => {
+    // End the old conversation now (FND-03). Best effort: if it fails, the idle reaper ends it,
+    // and starting over must not wait on it or be blocked by it.
+    if (sessionId !== null) void api.endSession(sessionId).catch(() => undefined);
     storage.clear();
     setSessionId(null);
     setMessages([]);
     setError(null);
-  }, [storage]);
+  }, [api, sessionId, storage]);
 
   return { sessionId, messages, busy, loading, error, send, startOver };
 }

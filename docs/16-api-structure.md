@@ -364,8 +364,10 @@ HEDWIG outside the test suite. Backlog: [29](29-backlog.md).
 | `GET` | `/v1/sessions/{id}` | yes | One session, or 404 |
 | `POST` | `/v1/sessions/{id}/messages` | yes | `{text}` (1–32 768 chars) → the complete reply. 404 for an unknown session |
 | `GET` | `/v1/sessions/{id}/messages?limit=&before=` | yes | Oldest first; `before` is a message id; `next_before` is the cursor for the older page |
+| `POST` | `/v1/sessions/{id}/end` | yes | Ends it now (`end_reason: "explicit"`); waits for an in-flight turn; idempotent; 404 if unknown (FND-03, docs/27 §5.1) |
 
-Everything else in §4.1 — `end`, feedback, the WebSocket — is a backlog story (FND-03, FND-05).
+Concurrent messages to one session are answered one after another, never interleaved (FND-04,
+docs/07 §16). Feedback and the WebSocket remain backlog stories (FND-05).
 
 ### 12.2 One request, end to end
 
@@ -422,11 +424,10 @@ sequenceDiagram
 | REST before WS | A small, testable surface the CLI can use today | No token streaming; a slow model shows nothing until it finishes | FND-05 |
 | `before=<message id>` resolved to `seq` | Cursor stable under concurrent writes; ids stay opaque | One extra lookup per page | Never |
 | Unknown session → 404 rather than auto-create | Typos and stale ids fail loudly | Client must `POST /sessions` first | Never |
-| No per-session turn lock yet | Story stays small | Two concurrent sends on one session can interleave | FND-04 |
 | No `client_message_id` dedupe yet | Story stays small | A retried POST runs a second turn | FND-06 |
 
 ### 12.5 Future improvements
 
-* `POST /sessions/{id}/end` → relationship update and T1 reflection immediately (FND-03).
+* T1 session reflection on `session.ended`, now that ends are prompt (REF-01).
 * `/explain/{message_id}` from the records this path already writes (SEC-01).
 * Rate limit (§7: 60 messages/min) once a client exists that could exceed it.

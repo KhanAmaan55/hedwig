@@ -474,6 +474,9 @@ async def test_a_fully_wired_brain_reports_ok() -> None:
         async def open(self, session_id: str, **kwargs: object) -> bool:
             return True
 
+        async def end(self, session_id: str, **kwargs: object) -> bool:
+            return True
+
         async def record_message(self, **kwargs: object) -> int:
             return 1
 
