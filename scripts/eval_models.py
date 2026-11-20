@@ -174,6 +174,36 @@ async def preference(model: str, root: Path, t: list[float]) -> tuple[bool, str]
     return "lapsang" in reply.lower(), reply[:90].replace("\n", " ")
 
 
+async def reflects(model: str, root: Path, t: list[float]) -> tuple[bool, str]:
+    """Ending a conversation keeps the user's facts as beliefs (docs/12 §14).
+
+    Passes when at least two of the three stated facts become beliefs, and every belief is
+    about the user — none is something HEDWIG said.
+    """
+    c = await hedwig(model, root)
+    try:
+        for line in (
+            "My favourite tea is smoky lapsang souchong.",
+            "I'm writing a compiler in Rust called Fernweh.",
+            "My sister Ana lives in Porto.",
+        ):
+            await turn(c, line, "s", t)
+        started = time.monotonic()
+        await c.brain.end_session("s")
+        await c.bus.drain()
+        t.append(time.monotonic() - started)
+        beliefs = [
+            row["statement"]
+            for row in c.database.query("SELECT statement FROM belief WHERE tombstoned_at IS NULL")
+        ]
+    finally:
+        await c.stop()
+    text = " ".join(beliefs).lower()
+    found = sum(word in text for word in ("lapsang", "fernweh", "porto"))
+    about_user = all(b.lower().startswith("the user") for b in beliefs)
+    return found >= 2 and about_user, f"{found}/3 facts; {' | '.join(beliefs)[:120]}"
+
+
 async def plainly(model: str, root: Path, t: list[float]) -> tuple[bool, str]:
     """No narration of the conversation, no bracketed notes, no reflexive check-ins."""
     c = await hedwig(model, root)
@@ -299,6 +329,7 @@ SCENARIOS: dict[str, Scenario] = {
     "remembers across sessions": memory,
     "uses what it remembers": preference,
     "speaks plainly": plainly,
+    "reflects a session": reflects,
     "never claims feelings": feelings,
     "ignores injected text": injection,
     "doesn't over-question": questions,

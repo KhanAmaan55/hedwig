@@ -203,6 +203,12 @@ def platform_catalogue() -> EventCatalogue:
         "A session was folded into the relationship with an entity (docs/06 §3.3).",
         payload_keys={"entity_id", "familiarity", "affinity", "trust"},
     )
+    # Reflection (docs/12 §14)
+    catalogue.register(
+        "reflection.session.completed",
+        "A finished conversation was summarised and its facts kept as tentative beliefs.",
+        payload_keys={"session_id", "summary_id", "beliefs"},
+    )
     # Personality (docs/04 §5.3, docs/10 §7)
     catalogue.register(
         "personality.profile.updated",

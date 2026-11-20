@@ -65,7 +65,7 @@ the repository, ahead of any new cognitive capability.
 | 13 | LLM gateway: tiering, streaming, structured output, metrics, replaceable provider | **COMPLETE** | `llm/`; `test_llm_gateway.py`, `test_ollama_provider.py`, `RecordedProvider` |
 | 3 | Episodic memory: capture, novelty gate, decay maths, tombstones | **COMPLETE** | `memory/capture.py`, `store.py`; `test_memory_*` |
 | 3 | Memory decay and forgetting **in the running system** | **COMPLETE** (was BROKEN) | Scheduled nightly as `memory.maintenance` (MEM-01); `test_memory_maintenance_scheduled.py` |
-| 3 | Semantic memory (beliefs) | **PARTIAL** | Store, supersession, promotion exist and are tested; **nothing writes beliefs in the live loop** — extraction belongs to reflection, which does not exist |
+| 3 | Semantic memory (beliefs) | **PARTIAL** | T1 reflection writes tentative beliefs from each ended conversation (REF-01); no promotion or contradiction handling yet (T2) |
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
 | 3 | Project memory | **MISSING** | No schema or module |
@@ -84,7 +84,7 @@ the repository, ahead of any new cognitive capability.
 | 8 | Avatar: lip sync | **MISSING** | Needs voice |
 | 8 | Avatar: frames over WebSocket | **MISSING** | Polls `/v1/mind/expression` (acceptable for now, ADR-0021) |
 | 9 | Voice: TTS, ASR, streaming, interruption | **MISSING** | — |
-| 10 | Reflection (T1–T4) | **MISSING** | docs/12 designed; no code |
+| 10 | Reflection (T1–T4) | **PARTIAL** | T1 session reflection (REF-01); T2–T4 not built |
 | 11 | Goals | **MISSING** | docs/08 §6 designed; no code |
 | 13 | Security: loopback bind, CORS, log redaction | **COMPLETE** | `api/app.py`, `core/logging.py` |
 | 13 | Security: API token | **COMPLETE** (was MISSING) | `core/token.py`, `api/auth.py`; `test_token_file.py`, `test_conversation_api.py` (ADR-0022) |
@@ -98,7 +98,7 @@ the repository, ahead of any new cognitive capability.
 |---|---|---|---|
 | G1 | No conversation surface at all | Integration | Fixed: FND-01, FND-02, UX-01, UX-02 |
 | G2 | Memory maintenance never scheduled | Broken wiring | Fixed by MEM-01 |
-| G3 | Beliefs never written outside tests | Incomplete workflow | REF-01 |
+| G3 | Beliefs never written outside tests | Incomplete workflow | Fixed by REF-01 |
 | G4 | Avatar unaware of turn activity (thinking/speaking) | Integration | AVA-01 |
 | G5 | `README.md` still said "Milestone 1 … no memory, cognition or model yet" | Doc drift | Fixed with FND-02 |
 | G6 | docs/16 §3 said the token is required on *every* request; `routes/mind.py` documented a deliberate exception | Doc inconsistency | Resolved by ADR-0022 |
@@ -343,7 +343,7 @@ topics), so that curiosity has something to pursue — works with the network of
 ### 4.8 Reflection
 
 #### REF-01 — T1 session reflection: summary and belief extraction
-**Status:** Todo · **P1** · **L** · **Depends on:** FND-03 · **Modules:** `reflection/`
+**Status:** Done (2026-11-20) · **P1** · **L** · **Depends on:** FND-03 · **Modules:** `reflection/`
 
 As HEDWIG, I want to summarise a session when it ends and extract candidate beliefs about the
 user through the utility model, so that semantic memory is finally populated (G3).
@@ -526,4 +526,9 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   forgotten, pin/unpin, forget → 409 when pinned, restore) and `hedwig memory …`. Searching never
   reinforces. Design in [06](06-memory-architecture.md) §16. Fixed G15 in passing: the
   restatement rule could hide an older memory behind a repeated reply.
+- **REF-01** T1 session reflection — `hedwig.reflection.SessionReflector` on `session.ended`:
+  one background utility-model call with a JSON schema; a `session_summary` episode with lineage
+  and the user's stated facts as tentative, `self`-trust beliefs. Typed default: no model, no
+  reflection. Live on `gemma4:e2b`: 3/3 after fixing first-person copying (prompt v2 + a
+  deterministic `third_person` guard). Design in [12](12-reflection-engine.md) §14.
 
