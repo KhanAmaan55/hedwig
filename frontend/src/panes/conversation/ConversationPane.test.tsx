@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../transport/client";
 import type { MessagePage, SessionInfo, TurnReply } from "../../transport/types";
 
+import { activityStore } from "../../stores/activity";
+import type { VoiceApi } from "../../voice/useVoice";
+
 import ConversationPane from "./ConversationPane";
 import type { ConversationApi, SessionStorage } from "./useConversation";
 
@@ -255,5 +258,64 @@ describe("ConversationPane", () => {
 
     expect(await screen.findByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
     expect(container.querySelector("img")).toBeNull();
+  });
+});
+
+describe("ConversationPane voice (docs/15 §13)", () => {
+  function voiceApi(available: boolean): VoiceApi & { speak: ReturnType<typeof vi.fn> } {
+    return {
+      speechStatus: vi.fn().mockResolvedValue({
+        available,
+        engine: "piper",
+        voice: "en_US-lessac-medium",
+        reason: available ? "" : "piper is not installed",
+      }),
+      speak: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    };
+  }
+
+  it("shows thinking on the click, then speaks the reply without audio when voice is off", async () => {
+    const voice = voiceApi(true);
+    render(<ConversationPane api={fakeApi()} storage={memoryStorage()} voiceApi={voice} />);
+
+    type("hi there");
+    pressEnter();
+    expect(activityStore.get()).toBe("thinking");
+
+    await screen.findByText("Hello! Lovely to meet you.");
+    await waitFor(() => {
+      expect(activityStore.get()).toBe("speaking");
+    });
+    expect(voice.speak).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(activityStore.get()).toBe("idle");
+  });
+
+  it("speaks the reply through the backend when voice is on", async () => {
+    window.localStorage.setItem("hedwig.voice.enabled", "1");
+    const voice = voiceApi(true);
+    render(<ConversationPane api={fakeApi()} storage={memoryStorage()} voiceApi={voice} />);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Voice on" })).not.toBeDisabled();
+    });
+
+    type("hi there");
+    pressEnter();
+
+    await waitFor(() => {
+      expect(voice.speak).toHaveBeenCalledWith("Hello! Lovely to meet you.");
+    });
+    window.localStorage.removeItem("hedwig.voice.enabled");
+  });
+
+  it("explains why the voice cannot be switched on", async () => {
+    render(
+      <ConversationPane api={fakeApi()} storage={memoryStorage()} voiceApi={voiceApi(false)} />,
+    );
+    const toggle = await screen.findByRole("button", { name: "Voice off" });
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute("title", "piper is not installed");
+    });
+    expect(toggle).toBeDisabled();
   });
 });

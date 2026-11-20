@@ -104,3 +104,39 @@ describe("AvatarAnimator", () => {
     expect(animator.intent).toBe(RESTING_INTENT);
   });
 });
+
+describe("AvatarAnimator activity (docs/15 §13)", () => {
+  it("looks up and aside while thinking, and back after", () => {
+    const animator = new AvatarAnimator(DEFAULT_PROFILE, true, seeded(3));
+    const rig = new RecordingRig();
+    animator.setActivity("thinking");
+    run(animator, rig, 2);
+    expect(rig.gaze.x).toBeGreaterThan(0.1);
+    expect(rig.gaze.y).toBeGreaterThan(0.1);
+
+    animator.setActivity("idle");
+    run(animator, rig, 2);
+    expect(Math.abs(rig.gaze.x)).toBeLessThan(0.05);
+  });
+
+  it("thinks when the backend says so, too — a turn from another client", () => {
+    const animator = new AvatarAnimator(DEFAULT_PROFILE, true, seeded(3));
+    const rig = new RecordingRig();
+    animator.setIntent(intent({ action: "thinking", gaze: "thinking" }));
+    run(animator, rig, 2);
+    expect(rig.gaze.y).toBeGreaterThan(0.1);
+  });
+
+  it("opens the mouth with the speech level, and only while speaking", () => {
+    const animator = new AvatarAnimator(DEFAULT_PROFILE, false, seeded(3));
+    const rig = new RecordingRig();
+    animator.setActivity("speaking");
+    animator.setMouth(1);
+    run(animator, rig, 0.5);
+    expect(rig.expressions.get("aa") ?? 0).toBeGreaterThan(0.5);
+
+    animator.setActivity("idle");
+    run(animator, rig, 0.5);
+    expect(rig.expressions.get("aa") ?? 0).toBeLessThan(0.05);
+  });
+});

@@ -25,6 +25,8 @@ import {
 
 import type { ExpressionIntent } from "../../transport/types";
 
+import { activityStore } from "../../stores/activity";
+
 import { AvatarAnimator } from "./animator";
 import { DEFAULT_PROFILE, validateProfile, type CharacterProfile } from "./profile";
 import type { RigTarget } from "./rig";
@@ -128,6 +130,9 @@ export function VrmAvatar({
       const dt = Math.min(timer.getDelta(), MAX_DT);
       const current = stage.current;
       if (current?.vrm && current.rig) {
+        // Read, not subscribed: per-frame values never go through React (docs/18 §4 rule 3).
+        animator.setActivity(activityStore.get());
+        animator.setMouth(activityStore.mouth());
         animator.step(dt, current.rig);
         current.vrm.update(dt);
       }

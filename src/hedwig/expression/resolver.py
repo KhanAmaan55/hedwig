@@ -3,9 +3,10 @@
 A pure function. The whole expressive behaviour of the avatar is decided here and testable
 without a renderer; the renderer only animates toward what this returns.
 
-**Reads emotion only**, by requirement. That removes three of docs/15's inputs — the turn's
-action, the user's presence, personality traits — and with them `concentration`, `surprise` and
-the trait-scaled `amusement`. What remains is everything emotion alone can honestly say.
+Reads emotion, and since AVA-01 one fact about activity: whether HEDWIG is composing a reply.
+Thinking looks up and aside, as people do when they are working something out. The user's
+presence and personality traits remain out (docs/15 §5), as do `concentration` and `surprise`.
+Speaking is the renderer's to show: it knows when audio is playing (docs/15 §13).
 """
 
 from __future__ import annotations
@@ -16,10 +17,14 @@ from hedwig.core.ports.emotion import EmotionState
 from hedwig.core.ports.expression import ExpressionIntent, GazeTarget, Mood, Overlay
 
 
-def resolve(state: EmotionState | None) -> ExpressionIntent:
+def resolve(state: EmotionState | None, *, thinking: bool = False) -> ExpressionIntent:
     """The expression for an emotional state. `None` (no emotion engine) is a neutral face."""
     if state is None:
-        return ExpressionIntent()
+        return (
+            ExpressionIntent(gaze=GazeTarget.THINKING, action="thinking")
+            if thinking
+            else ExpressionIntent()
+        )
 
     valence = state.valence
     arousal = state.arousal
@@ -36,9 +41,9 @@ def resolve(state: EmotionState | None) -> ExpressionIntent:
     return ExpressionIntent(
         mood=Mood(valence=round(valence, 4), arousal=round(arousal, 4)),
         overlay=normalise({k: _unit(v) for k, v in raw.items()}),
-        gaze=GazeTarget.USER,
+        gaze=GazeTarget.THINKING if thinking else GazeTarget.USER,
         energy=round(_unit(state.energy), 4),
-        action="idle",
+        action="thinking" if thinking else "idle",
     )
 
 

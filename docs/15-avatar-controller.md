@@ -323,3 +323,66 @@ background CPU cost with zero value, and on a laptop that matters.
 | Expression during streaming reflecting confidence per clause | Requires per-token confidence, which we do not have |
 | Multiple characters / user-selectable appearance | Character profiles already make this cheap; do it when someone asks |
 | A "calm mode" that reduces all motion | Accessibility need, and it should probably be a Phase-6 setting rather than a future item |
+
+---
+
+## 13. Implementation record — thinking, speaking, voice (AVA-01, VOI-01, AVA-02)
+
+```mermaid
+graph LR
+    B["Brain.busy<br/><small>a turn in flight</small>"] -->|thinking| R["expression.resolve"]
+    E["emotion state"] --> R
+    R -->|"/v1/mind/expression<br/>action, gaze"| AV["avatar animator"]
+    CP["conversation pane"] -->|thinking · speaking| ACT["stores/activity<br/><small>+ mouth level, per frame</small>"]
+    ACT --> AV
+    CP -->|reply text| SP["POST /v1/speech"]
+    SP --> PS["speech.PiperSpeaker<br/><small>separate process, GPL kept out</small>"]
+    PS -->|WAV| PLAY["WebAudio + analyser"]
+    PLAY -->|amplitude| ACT
+```
+
+* **Thinking (AVA-01).** `Brain.busy` is true while any turn holds or awaits its session lock
+  (docs/07 §16). The resolver turns it into `action: thinking`, `gaze: thinking`, so a turn from
+  the CLI makes the app's avatar think too. The animator looks up and aside and tilts the head
+  slightly. The conversation pane also marks thinking locally, so the face reacts on the click,
+  not on the next poll.
+* **Speaking is the renderer's.** Only the renderer knows when audio is actually playing. A small
+  shared store (`frontend/src/stores/activity.ts`) carries `idle | thinking | speaking` and a
+  mouth level the render loop reads each frame without React re-renders (docs/18 §4 rule 3).
+  Panes still never import each other.
+* **Voice (VOI-01), decided with the user: Piper, local.** `Speaker` is a port, and
+  `PiperSpeaker` its adapter. The maintained Piper (`piper-tts` 1.x, OHF-Voice) is **GPL-3.0**,
+  so it is installed as its own tool (`uv tool install piper-tts`) and run as a separate process,
+  never imported. HEDWIG stays MIT. Text goes in on stdin and WAV comes out through a temp file,
+  with no shell and a timeout. The voice model lives in `<data_dir>/voices`.
+* **What is spoken.** `speakable()` removes what should not be read aloud: citation markers
+  `[1]`, URLs ("a link"), Markdown symbols. It caps the length.
+* **Tone follows mood, within bounds.** Piper's `length_scale` is set from the emotional state:
+  more arousal slightly faster, less energy slightly slower, clamped to 0.85–1.2. The voice
+  reflects presentation without claiming feeling.
+* **Mouth (AVA-02).** With audio, the mouth (`aa`) follows the live RMS amplitude from a WebAudio
+  analyser, smoothed. Without voice, a text-paced movement (about 12 characters a second, capped
+  at 6 s) stands in. Phoneme-accurate visemes need timing output Piper's CLI does not give
+  (AVA-03).
+* **Interruptions (part of VOI-03).** Sending a new message, or pressing *Stop*, stops playback at
+  once.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Piper as a subprocess | Licence kept apart; replaceable; no model in the API process | ~0.1 s process start per reply | Latency matters: a long-lived Piper worker |
+| Whole-reply WAV, not streaming | Simple, testable | Speech starts only after synthesis (~0.6 s a sentence) | Replies stream (FND-05) |
+| Amplitude mouth | Works with any voice | Not true lip sync | AVA-03 |
+
+**Verified live** in the app (browser pane, `gemma4:e2b`, Piper `en_US-lessac-medium`): voice on,
+message sent, then *thinking* on the click, the reply, `POST /v1/speech` 200 through the proxy,
+*speaking* with *Stop* shown, and idle when the audio ended. Synthesis: 5 s of speech in 0.48 s;
+pace 0.86 when lively, 1.14 when tired. Known: a ~0.5 s idle moment between the reply and the
+audio while Piper synthesises.
+
+**Installing the voice** (once, outside HEDWIG's environment, GPL kept separate):
+
+```bash
+uv tool install piper-tts
+~/.local/share/uv/tools/piper-tts/bin/python -m piper.download_voices en_US-lessac-medium --download-dir ~/.hedwig/voices
+```
+

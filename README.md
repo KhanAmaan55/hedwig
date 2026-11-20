@@ -212,7 +212,8 @@ is in [`docs/README.md`](docs/README.md).
 episodic memory, a six-drive emotion engine, a ten-trait personality and a local Ollama model,
 and you can talk to it in the desktop app (`npm run dev`), with `hedwig chat`, or through the
 conversation API. Replies are not streamed yet. Reflection (per conversation), goals, opt-in web research and
-opt-in curiosity are built; voice is next. Module status is in [`docs/README.md`](docs/README.md#implementation-status); the
+opt-in curiosity are built, and HEDWIG can speak through a local Piper voice (see
+[docs/15 §13](docs/15-avatar-controller.md) to install it). Module status is in [`docs/README.md`](docs/README.md#implementation-status); the
 capability assessment and story backlog are in [`docs/29-backlog.md`](docs/29-backlog.md).
 
 ---

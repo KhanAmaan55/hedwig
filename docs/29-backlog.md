@@ -80,10 +80,10 @@ the repository, ahead of any new cognitive capability.
 | 7 | Knowledge: local docs, web search, provenance, citations | **PARTIAL** | Opt-in DuckDuckGo research with fetch controls, injection quarantine, citations and egress audit (KNW-02/03); local documents not built (KNW-01) |
 | 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
 | 8 | Avatar: VRM renderer, expression from emotion, blink, saccade, breath, head drift | **COMPLETE** | `frontend/src/panes/avatar/`; `idle.test.ts`, `compose.test.ts`, `test_expression.py` |
-| 8 | Avatar: speaking / thinking / attention states | **MISSING** | `action` is always idle — the backend never tells the avatar a turn is running |
-| 8 | Avatar: lip sync | **MISSING** | Needs voice |
+| 8 | Avatar: speaking / thinking / attention states | **COMPLETE** | Thinking from `Brain.busy` and the pane; speaking from the voice (AVA-01, docs/15 §13) |
+| 8 | Avatar: lip sync | **PARTIAL** | Mouth follows the voice's live amplitude, or a text-paced fallback (AVA-02); phoneme visemes not built (AVA-03) |
 | 8 | Avatar: frames over WebSocket | **MISSING** | Polls `/v1/mind/expression` (acceptable for now, ADR-0021) |
-| 9 | Voice: TTS, ASR, streaming, interruption | **MISSING** | — |
+| 9 | Voice: TTS, ASR, streaming, interruption | **PARTIAL** | Local Piper TTS with mood-paced delivery, Stop and send-to-interrupt (VOI-01, part of VOI-03); no ASR, no streaming |
 | 10 | Reflection (T1–T4) | **PARTIAL** | T1 session reflection (REF-01); T2–T4 not built |
 | 11 | Goals | **PARTIAL** | Store, lifecycle, API/CLI, goals in the prompt, reflection proposes and progresses (GOA-01/02); no retrieval boost or initiative yet |
 | 13 | Security: loopback bind, CORS, log redaction | **COMPLETE** | `api/app.py`, `core/logging.py` |
@@ -368,13 +368,13 @@ conditions, so that ongoing projects and follow-ups persist (docs/08 §6).
 ### 4.10 Avatar
 
 #### AVA-01 — Thinking and speaking states from turn activity
-**Status:** Todo · **P1** · **S** · **Depends on:** FND-02 · **Modules:** `expression/`, `api/routes/mind.py`, `frontend/src/panes/avatar/`
+**Status:** Done (2026-11-20) · **P1** · **S** · **Depends on:** FND-02 · **Modules:** `expression/`, `api/routes/mind.py`, `frontend/src/panes/avatar/`
 
 As the user, I want the avatar to look thoughtful while HEDWIG composes and animate while it
 replies, so that the face reflects what HEDWIG is doing, not only how it feels.
 
 #### AVA-02 — Text-paced mouth movement
-**Status:** Todo · **P2** · **S** · **Depends on:** AVA-01 · Fallback lip motion before TTS exists.
+**Status:** Done (2026-11-20; amplitude-driven with voice, text-paced without) · **P2** · **S** · **Depends on:** AVA-01 · Fallback lip motion before TTS exists.
 
 #### AVA-03 — Phoneme lip sync
 **Status:** Todo · **P3** · **M** · **Depends on:** VOI-01
@@ -382,7 +382,7 @@ replies, so that the face reflects what HEDWIG is doing, not only how it feels.
 ### 4.11 Voice
 
 #### VOI-01 — Local TTS adapter (Piper)
-**Status:** Todo · **P2** · **L** · **Depends on:** FND-05 · **Modules:** `voice/`
+**Status:** Done (2026-11-20) · **P2** · **L** · **Depends on:** FND-05 · **Modules:** `voice/`
 
 As the user, I want HEDWIG to speak replies locally with a configurable voice and rate.
 **Requires the user's go-ahead** on the dependency (Piper binary + voice model download).
@@ -561,4 +561,13 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   `hedwig curiosity …`. `needs_web`/`is_personal` moved to `knowledge.cues`. Live: a cited
   finding from DuckDuckGo; shared on a greeting 2/3 after a directive fix. Design in
   [11](11-curiosity-engine.md) §13.
+- **AVA-01, VOI-01, AVA-02 (+ part of VOI-03)** Thinking, speaking, voice — `Brain.busy` →
+  `action: thinking` in the expression; a shared `stores/activity` for the renderer; the
+  animator looks up and aside while thinking and opens the mouth (`aa`) with the speech level.
+  `hedwig.speech`: `Speaker` port, `PiperSpeaker` (separate process; Piper is GPL and stays
+  out of HEDWIG's imports), `speakable()` (no citation marks, links or markup read aloud),
+  mood-paced `length_scale` (0.85–1.2), guarded `GET/POST /v1/speech`. In the app: a *Voice* toggle
+  (off by default, disabled with the reason when no voice is installed), *Stop*, and sending a
+  message stops speech. Piper 1.8.0 and `en_US-lessac-medium` installed with the user's approval.
+  Verified live in the browser. Design in [15](15-avatar-controller.md) §13.
 

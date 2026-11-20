@@ -61,6 +61,15 @@ export interface ExpressionIntent {
   emotion_version: number | null;
 }
 
+// --- speech (docs/15 §13) ----------------------------------------------------
+
+export interface SpeechStatus {
+  available: boolean;
+  engine: string;
+  voice: string;
+  reason: string;
+}
+
 // --- conversation (docs/16 §12) ---------------------------------------------
 
 /** `POST /v1/sessions`, `GET /v1/sessions/{id}`. */

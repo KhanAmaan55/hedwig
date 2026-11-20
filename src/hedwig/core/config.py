@@ -245,6 +245,18 @@ class KnowledgeConfig(BaseModel):
     timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 10.0
 
 
+class SpeechConfig(BaseModel):
+    """Voice output (docs/15 §13). Piper, installed as its own tool; the app's toggle turns it on."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    command: tuple[str, ...] = ("piper",)
+    voice: str = "en_US-lessac-medium"
+    voices_dir: Path | None = None
+    """Defaults to `<data_dir>/voices`."""
+    timeout_seconds: Annotated[float, Field(gt=0, le=120)] = 30.0
+
+
 class CuriosityConfig(BaseModel):
     """Curiosity (docs/11 §13). Off by default (ADR-0012); exploring also needs the web on."""
 
@@ -332,6 +344,7 @@ class Config(BaseSettings):
     reflection: ReflectionConfig = ReflectionConfig()
     knowledge: KnowledgeConfig = KnowledgeConfig()
     curiosity: CuriosityConfig = CuriosityConfig()
+    speech: SpeechConfig = SpeechConfig()
     plugins: PluginsConfig = PluginsConfig()
 
     @property

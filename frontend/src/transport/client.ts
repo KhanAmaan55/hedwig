@@ -12,6 +12,7 @@ import type {
   Health,
   MessagePage,
   SessionInfo,
+  SpeechStatus,
   TurnReply,
 } from "./types";
 
@@ -93,6 +94,8 @@ interface RequestOptions {
   readonly signal?: AbortSignal | undefined;
   /** User-content routes need the token; health and HEDWIG's own state do not (ADR-0022). */
   readonly auth?: boolean;
+  /** The body is bytes (audio), not JSON. */
+  readonly binary?: boolean;
 }
 
 export class HedwigClient {
@@ -143,6 +146,22 @@ export class HedwigClient {
     );
   }
 
+  // -- speech (docs/15 §13) -----------------------------------------------------
+
+  async speechStatus(): Promise<SpeechStatus> {
+    return this.request<SpeechStatus>("GET", "/v1/speech", { auth: true });
+  }
+
+  /** The reply as audio/wav. */
+  async speak(text: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+    return this.request<ArrayBuffer>("POST", "/v1/speech", {
+      body: { text },
+      auth: true,
+      signal,
+      binary: true,
+    });
+  }
+
   // -- transport ---------------------------------------------------------------
 
   private async request<T>(
@@ -151,7 +170,9 @@ export class HedwigClient {
     options: RequestOptions = {},
     refreshToken = false,
   ): Promise<T> {
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = {
+      Accept: options.binary ? "audio/wav" : "application/json",
+    };
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
     if (options.auth) {
       const token = await this.tokenSource(refreshToken);
@@ -173,6 +194,7 @@ export class HedwigClient {
       return this.request<T>(method, path, options, true);
     }
     if (!response.ok) throw await ApiError.fromResponse(response);
+    if (options.binary) return (await response.arrayBuffer()) as T;
     return (await response.json()) as T;
   }
 }

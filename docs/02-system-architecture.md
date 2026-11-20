@@ -272,7 +272,7 @@ graph LR
 | `llm` | Provider abstraction, model tiering, prompt assembly, structured decoding | [14](14-language-model-gateway.md) |
 | `embeddings` | Embedding generation, model identity tracking, re-embed jobs | [14](14-language-model-gateway.md) §7 |
 | `fetch` | Outbound HTTP with allowlist, robots, caching, sanitisation | [13](13-knowledge-and-tools.md) §4 |
-| `speech` | TTS/ASR adapters, phoneme timings for lip sync | [15](15-avatar-controller.md) §6 |
+| `speech` | TTS/ASR adapters, phoneme timings for lip sync. Built: Piper TTS behind `Speaker` | [15](15-avatar-controller.md) §6, §13 |
 | `expression` | Emotion + speech → expression frames | [15](15-avatar-controller.md) |
 | `core.bus` | Publish/subscribe, durable outbox, replay | [04](04-communication-and-event-bus.md) |
 | `core.config` | Layered config load, validation, hot-reload of safe keys | §7 below |
