@@ -126,7 +126,8 @@ class ExpressionRead(BaseModel):
 async def expression(container: ContainerDep) -> ExpressionRead:
     """A neutral face, not a 503, when emotion is disabled: a flat companion still has a face."""
     state = await container.emotion.state() if container.emotion is not None else None
-    intent = resolve(state)
+    # Any client's turn counts — a question from `hedwig chat` makes the app's avatar think too.
+    intent = resolve(state, thinking=container.brain.busy)
     return ExpressionRead(
         mood=MoodRead(valence=intent.mood.valence, arousal=intent.mood.arousal),
         overlay={overlay.value: weight for overlay, weight in intent.overlay.items()},

@@ -96,7 +96,8 @@ of what exists in code. Update it as each milestone lands.
 | Electron desktop shell | **Implemented** (M1, [ADR-0015](adr/0015-electron-desktop-shell.md)) | `electron/` |
 | Architecture tests (layering, clock seam, port purity) | **Implemented** (M1) | `tests/architecture/` |
 | Avatar: VRM renderer, expression resolver, `/v1/mind/expression` | **Implemented** (M10, [ADR-0021](adr/0021-vrm-first-semantic-seam-kept.md)) | `src/hedwig/expression/`, `frontend/src/panes/avatar/` |
-| Avatar: 2D renderer, WebSocket frames, speech, lip sync, gestures | Not started | — |
+| Avatar thinking/speaking states; voice (Piper) with amplitude mouth | **Implemented** (AVA-01, VOI-01, AVA-02, [15](15-avatar-controller.md) §13) | `src/hedwig/speech/`, `frontend/src/voice/`, `frontend/src/stores/activity.ts` |
+| Avatar: 2D renderer, WebSocket frames, phoneme lip sync, gestures; speech recognition | Not started | — |
 | Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01) | `src/hedwig/wiring.py`, `src/hedwig/memory/maintenance.py` |
 | Frontend conversation pane, token delivery (Electron IPC, Vite proxy) | **Implemented** (UX-02, [18](18-frontend-architecture.md) §13) | `frontend/src/panes/conversation/`, `electron/` |
 | Reflection T1: session summary and belief extraction | **Implemented** (REF-01, [12](12-reflection-engine.md) §14) | `src/hedwig/reflection/` |

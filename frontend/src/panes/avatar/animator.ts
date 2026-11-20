@@ -18,6 +18,16 @@ import { OVERLAYS, type CharacterProfile } from "./profile";
 import { clamp, type RigTarget } from "./rig";
 import { Spring, TIME_CONSTANTS } from "./spring";
 
+/** What the face is doing besides feeling (docs/15 §13). */
+export type Activity = "idle" | "thinking" | "speaking";
+
+/** Thinking looks up and aside, as people do when working something out. Fractions of the
+ *  profile's limits, so a character profile still bounds them. */
+const THINKING_GAZE = { x: 0.55, y: 0.45 };
+const THINKING_HEAD = { yaw: 0.35, pitch: -0.3, roll: 0.4 };
+/** How far the mouth opens at full speech level: speech, not a yawn. */
+const MOUTH_OPEN = 0.75;
+
 /** What the face shows before the first intent arrives: calm, faintly attentive. */
 export const RESTING_INTENT: ExpressionIntent = {
   mood: { valence: 0, arousal: 0.3 },
@@ -37,6 +47,10 @@ export class AvatarAnimator {
   );
   private readonly gazeX = new Spring(0, TIME_CONSTANTS.gaze);
   private readonly gazeY = new Spring(0, TIME_CONSTANTS.gaze);
+  private readonly ponder = new Spring(0, TIME_CONSTANTS.gaze);
+  private readonly mouthSpring = new Spring(0, 0.04);
+  private activity: Activity = "idle";
+  private mouthLevel = 0;
   private readonly idle: IdleScheduler;
   private target: ExpressionIntent = RESTING_INTENT;
   private expressionNames = new Set<string>();
@@ -52,6 +66,16 @@ export class AvatarAnimator {
   /** The emotion API: tell the face what to express. It gets there at its own pace. */
   setIntent(intent: ExpressionIntent): void {
     this.target = intent;
+  }
+
+  /** Local activity from the conversation. Thinking also arrives in the backend's intent. */
+  setActivity(activity: Activity): void {
+    this.activity = activity;
+  }
+
+  /** 0..1, from the voice's amplitude or the text pacer. Read every frame. */
+  setMouth(level: number): void {
+    this.mouthLevel = level;
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -77,11 +101,17 @@ export class AvatarAnimator {
       overlay[name] = follow(spring, intent.overlay[name] ?? 0);
 
     const idle = this.idle.step(dt, { arousal, energy, reducedMotion: this.reducedMotion });
+    const speaking = this.activity === "speaking";
+    const thinking = !speaking && (this.activity === "thinking" || intent.action === "thinking");
+    const ponder = follow(this.ponder, thinking ? 1 : 0);
+    const mouth = follow(this.mouthSpring, speaking ? this.mouthLevel : 0);
 
     // -- face --------------------------------------------------------------------
     const weights = expressionWeights({ valence, arousal, overlay }, this.profile);
     // An eyelid is closed by whichever is stronger: a blink, or fatigue holding it half down.
     weights.blink = Math.max(weights.blink ?? 0, idle.blink);
+    // The mouth is speech, not emotion: outside the emotional blend cap, like the blink.
+    if (mouth > 0.01) weights.aa = Math.max(weights.aa ?? 0, mouth * MOUTH_OPEN);
 
     // Expressions that faded to nothing must be set back to zero, not merely left out.
     for (const name of this.expressionNames) if (!(name in weights)) rig.setExpression(name, 0);
@@ -90,14 +120,19 @@ export class AvatarAnimator {
 
     // -- eyes, head, breath --------------------------------------------------------
     const { limits } = this.profile;
+    const gazeX = idle.gaze.x * (1 - ponder) + THINKING_GAZE.x * ponder;
+    const gazeY = idle.gaze.y * (1 - ponder) + THINKING_GAZE.y * ponder;
     rig.setGaze(
-      clamp(follow(this.gazeX, idle.gaze.x) * limits.gaze, limits.gaze),
-      clamp(follow(this.gazeY, idle.gaze.y) * limits.gaze, limits.gaze),
+      clamp(follow(this.gazeX, gazeX) * limits.gaze, limits.gaze),
+      clamp(follow(this.gazeY, gazeY) * limits.gaze, limits.gaze),
     );
     rig.setHead(
-      clamp(idle.head.yaw * limits.head_yaw, limits.head_yaw),
-      clamp(idle.head.pitch * limits.head_pitch, limits.head_pitch),
-      clamp(idle.head.roll * limits.head_roll, limits.head_roll),
+      clamp((idle.head.yaw + THINKING_HEAD.yaw * ponder) * limits.head_yaw, limits.head_yaw),
+      clamp(
+        (idle.head.pitch + THINKING_HEAD.pitch * ponder) * limits.head_pitch,
+        limits.head_pitch,
+      ),
+      clamp((idle.head.roll + THINKING_HEAD.roll * ponder) * limits.head_roll, limits.head_roll),
     );
     rig.setBreath(clamp(idle.breath * limits.breath, limits.breath));
   }

@@ -48,6 +48,7 @@ from hedwig.core.ports import (
 from hedwig.core.ports.brain import MindReader
 from hedwig.core.ports.personality import PersonaReader, RelationshipReader, Trait
 from hedwig.core.ports.scheduler import Priority, TaskSpec
+from hedwig.core.ports.speech import Speaker
 from hedwig.core.registry import InMemoryServiceRegistry
 from hedwig.core.scheduler import AsyncTaskScheduler, DailyTrigger, IntervalTrigger
 from hedwig.core.state import SqliteStateManager
@@ -72,6 +73,7 @@ from hedwig.memory import (
 from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore, PersonaMindReader
 from hedwig.reflection import SessionReflector
 from hedwig.sessions import SqliteSessionStore
+from hedwig.speech import PiperSpeaker
 from hedwig.tools import (
     ToolRegistry,
     calculate_tool,
@@ -125,6 +127,7 @@ class Container:
     goals: GoalStore
     curiosity: CuriosityStore
     explorer: Explorer
+    speaker: Speaker
 
     def uptime_seconds(self) -> float:
         """Elapsed time since startup, measured monotonically.
@@ -419,6 +422,14 @@ def build_container(
         )
     )
 
+    # 10c. Voice (docs/15 §13): Piper as a separate process. Absent, the app stays text-only.
+    speaker: Speaker = PiperSpeaker(
+        command=config.speech.command,
+        voice=config.speech.voice,
+        voices_dir=config.speech.voices_dir or config.runtime.data_dir / "voices",
+        timeout_seconds=config.speech.timeout_seconds,
+    )
+
     # 10b. Reflection, T1 (docs/12 §14): when a conversation ends, keep a summary and the
     #      facts the user stated, as tentative beliefs. A subscriber, like capture.
     reflector: SessionReflector | None = None
@@ -508,6 +519,7 @@ def build_container(
         goals=goals,
         curiosity=curiosity,
         explorer=explorer,
+        speaker=speaker,
     )
 
     logger.debug(

@@ -8,10 +8,12 @@ import {
   type SessionStorage,
 } from "./useConversation";
 import { client } from "../../transport/client";
+import { useVoice, type VoiceApi } from "../../voice/useVoice";
 
 export interface ConversationPaneProps {
   readonly api?: ConversationApi;
   readonly storage?: SessionStorage;
+  readonly voiceApi?: VoiceApi;
 }
 
 /**
@@ -23,8 +25,19 @@ export interface ConversationPaneProps {
 export default function ConversationPane({
   api = client,
   storage = browserStorage,
+  voiceApi = client,
 }: ConversationPaneProps): JSX.Element {
-  const { messages, busy, loading, error, send, startOver } = useConversation(api, storage);
+  const voice = useVoice(voiceApi);
+  const { messages, busy, loading, error, send, startOver } = useConversation(
+    api,
+    storage,
+    voice.say,
+  );
+  // Speaking over the user is the one interruption that must never happen (VOI-03).
+  const sendAndHush = async (text: string) => {
+    voice.stop();
+    return send(text);
+  };
 
   const listRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
@@ -36,14 +49,31 @@ export default function ConversationPane({
     <section className="panel conversation" aria-label="Conversation">
       <div className="conversation__header">
         <h2 className="panel__title">Conversation</h2>
-        <button
-          className="button button--small"
-          type="button"
-          onClick={startOver}
-          disabled={busy || messages.length === 0}
-        >
-          New conversation
-        </button>
+        <div className="conversation__actions">
+          {voice.speaking && (
+            <button className="button button--small" type="button" onClick={voice.stop}>
+              Stop
+            </button>
+          )}
+          <button
+            className="button button--small"
+            type="button"
+            aria-pressed={voice.enabled}
+            onClick={voice.toggle}
+            disabled={!voice.available && !voice.enabled}
+            title={voice.available ? "Speak replies aloud" : voice.reason || "No voice installed"}
+          >
+            {voice.enabled ? "Voice on" : "Voice off"}
+          </button>
+          <button
+            className="button button--small"
+            type="button"
+            onClick={startOver}
+            disabled={busy || messages.length === 0}
+          >
+            New conversation
+          </button>
+        </div>
       </div>
 
       <ol className="conversation__messages" ref={listRef} aria-live="polite">
@@ -79,7 +109,7 @@ export default function ConversationPane({
         </p>
       )}
 
-      <Composer onSend={send} disabled={busy || loading} />
+      <Composer onSend={sendAndHush} disabled={busy || loading} />
     </section>
   );
 }

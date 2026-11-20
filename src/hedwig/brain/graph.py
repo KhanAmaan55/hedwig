@@ -161,6 +161,15 @@ class Brain:
         logger.info("turn completed", extra=fields(**summarise(final)))
         return final
 
+    @property
+    def busy(self) -> bool:
+        """Whether any turn is running or waiting — what the avatar shows as thinking (AVA-01).
+
+        True exactly while a session lock is held or awaited: the lock map is reference-counted
+        and empties when the last turn leaves (docs/07 §16).
+        """
+        return bool(self._sessions)
+
     async def end_session(self, session_id: str) -> bool:
         """End a session once its in-flight turn, if any, has finished (FND-03).
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { activityStore } from "../../stores/activity";
 import { ApiError, client as defaultClient, type HedwigClient } from "../../transport/client";
 
 /**
@@ -87,6 +88,7 @@ export function describeError(caught: unknown): string {
 export function useConversation(
   api: ConversationApi = defaultClient,
   storage: SessionStorage = browserStorage,
+  onReply?: (text: string) => void,
 ): Conversation {
   const [sessionId, setSessionId] = useState<string | null>(() => storage.get());
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
@@ -141,6 +143,8 @@ export function useConversation(
       setMessages((current) => [...current, { key: userKey, role: "user", text: trimmed }]);
       setBusy(true);
       setError(null);
+      // The face reacts on the click, not on the next poll (docs/15 §13).
+      activityStore.set("thinking");
 
       try {
         // Lazily: opening the app must not create empty conversations (docs/18 §13.3).
@@ -161,6 +165,8 @@ export function useConversation(
             recalled: reply.cited_memory_ids.length,
           },
         ]);
+        activityStore.set("idle");
+        onReply?.(reply.reply);
         return true;
       } catch (caught) {
         setError(describeError(caught));
@@ -185,9 +191,10 @@ export function useConversation(
         return false;
       } finally {
         setBusy(false);
+        if (activityStore.get() === "thinking") activityStore.set("idle");
       }
     },
-    [api, busy, sessionId, storage],
+    [api, busy, sessionId, storage, onReply],
   );
 
   const startOver = useCallback(() => {
