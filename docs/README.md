@@ -28,7 +28,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 15 | [Avatar Controller](15-avatar-controller.md) ◐ | Expression intent, frame protocol, renderer independence, lip sync |
 | 16 | [API Structure](16-api-structure.md) ◐ | REST resources, WebSocket protocol, versioning, auth |
 | 17 | [Backend Architecture](17-backend-architecture.md) | Process model, worker supervision, resource governance, startup/shutdown |
-| 18 | [Frontend Architecture](18-frontend-architecture.md) | Panes, state flow, avatar rendering, Mind Inspector |
+| 18 | [Frontend Architecture](18-frontend-architecture.md) ◐ | Panes, state flow, avatar rendering, Mind Inspector |
 | 19 | [Observability](19-observability.md) | Tracing, correlation, metrics, the explainability endpoint |
 | 20 | [Testing Strategy](20-testing-strategy.md) | Determinism harness, property tests, behaviour evals, red-team suite |
 | 21 | [Security, Privacy and Ethics](21-security-privacy-ethics.md) | Threat model, trust tiers, honesty invariants, export and deletion |
@@ -96,7 +96,7 @@ of what exists in code. Update it as each milestone lands.
 | Avatar: VRM renderer, expression resolver, `/v1/mind/expression` | **Implemented** (M10, [ADR-0021](adr/0021-vrm-first-semantic-seam-kept.md)) | `src/hedwig/expression/`, `frontend/src/panes/avatar/` |
 | Avatar: 2D renderer, WebSocket frames, speech, lip sync, gestures | Not started | — |
 | Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01) | `src/hedwig/wiring.py`, `src/hedwig/memory/maintenance.py` |
-| Frontend conversation pane | Not started — backlog UX-02 | — |
+| Frontend conversation pane, token delivery (Electron IPC, Vite proxy) | **Implemented** (UX-02, [18](18-frontend-architecture.md) §13) | `frontend/src/panes/conversation/`, `electron/` |
 | Reflection, curiosity, goals, tools | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);

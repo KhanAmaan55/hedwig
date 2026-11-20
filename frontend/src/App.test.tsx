@@ -72,6 +72,15 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByText("Data directory is missing.")).toBeInTheDocument();
     });
-    expect(screen.getByText("degraded")).toBeInTheDocument();
+    // Once on the System summary, once on the subsystem itself.
+    expect(screen.getAllByText("degraded")).toHaveLength(2);
+  });
+
+  it("puts the conversation beside the avatar", async () => {
+    mockFetch({});
+    render(<App />);
+
+    expect(await screen.findByRole("region", { name: "Conversation" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Message HEDWIG")).toBeInTheDocument();
   });
 });

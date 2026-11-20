@@ -73,3 +73,91 @@ describe("HedwigClient", () => {
     await expect(new HedwigClient("").health()).rejects.toBeInstanceOf(ApiError);
   });
 });
+
+describe("the API token (ADR-0022)", () => {
+  function ok(body: unknown): Response {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  function headersOf(call: unknown[]): Record<string, string> {
+    return (call[1] as RequestInit).headers as Record<string, string>;
+  }
+
+  it("is sent on conversation routes and not on health", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(ok({ id: "sess_1" })));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new HedwigClient("http://h", () => Promise.resolve("tok"));
+
+    await client.health();
+    await client.openSession();
+
+    expect(headersOf(fetchMock.mock.calls[0] as unknown[]).Authorization).toBeUndefined();
+    expect(headersOf(fetchMock.mock.calls[1] as unknown[]).Authorization).toBe("Bearer tok");
+    expect((fetchMock.mock.calls[1] as unknown[])[0]).toBe("http://h/v1/sessions");
+  });
+
+  it("is left to the Vite proxy when the page has none", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(ok({ id: "sess_1" })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new HedwigClient("", () => Promise.resolve(null)).openSession();
+
+    expect(headersOf(fetchMock.mock.calls[0] as unknown[]).Authorization).toBeUndefined();
+  });
+
+  it("is asked for again, once, after a 401 — which is how a rotation is picked up", async () => {
+    const unauthorized = () =>
+      new Response(JSON.stringify({ error: { code: "unauthorized", message: "no" } }), {
+        status: 401,
+      });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(ok({ id: "sess_1" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const tokens = vi.fn((refresh: boolean) => Promise.resolve(refresh ? "new" : "old"));
+
+    const session = await new HedwigClient("http://h", tokens).openSession();
+
+    expect(session.id).toBe("sess_1");
+    expect(tokens.mock.calls).toEqual([[false], [true]]);
+    expect(headersOf(fetchMock.mock.calls[1] as unknown[]).Authorization).toBe("Bearer new");
+  });
+
+  it("gives up after one retry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ error: { code: "unauthorized", message: "no" } }), {
+            status: 401,
+          }),
+        ),
+      ),
+    );
+    await expect(
+      new HedwigClient("http://h", () => Promise.resolve("t")).send("s", "hi"),
+    ).rejects.toMatchObject({ code: "unauthorized" });
+  });
+
+  it("carries the error detail, so a failed turn's reply reaches the pane", async () => {
+    const error = await ApiError.fromResponse(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "capability_unavailable",
+            message: "down",
+            detail: { reply: "I can't think right now." },
+            correlation_id: null,
+            retryable: true,
+          },
+        }),
+        { status: 503 },
+      ),
+    );
+    expect(error.detail.reply).toBe("I can't think right now.");
+  });
+});
