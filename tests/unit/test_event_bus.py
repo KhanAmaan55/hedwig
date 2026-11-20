@@ -308,6 +308,53 @@ async def test_events_missed_while_down_are_redelivered_on_start(
     assert [event.payload["n"] for event in seen] == [1]
 
 
+async def test_a_subscriber_registered_after_start_still_recovers(
+    database: Database, clock: FakeClock, catalogue: EventCatalogue
+) -> None:
+    """docs/29 G14. Emotion, personality and relationship subscribe in their own `start()`,
+    after the bus has started — and recovery used to run only inside `bus.start()`, so after a
+    crash their missed events were never re-delivered."""
+    first = InProcessBus(database, clock=clock, catalogue=catalogue)
+    await first.start()
+    await first.emit("test.thing.happened", {"n": 1}, source="tests")
+    await first.stop()
+
+    seen: list[Event] = []
+    second = InProcessBus(database, clock=clock, catalogue=catalogue)
+    await second.start()
+    second.subscribe("test.*.*", lambda e: _append(seen, e), name="subscribes-in-its-own-start")
+    await second.drain()
+    await second.stop()
+
+    assert [event.payload["n"] for event in seen] == [1]
+
+
+async def test_late_recovery_comes_before_live_events_and_never_twice(
+    database: Database, clock: FakeClock, catalogue: EventCatalogue
+) -> None:
+    first = InProcessBus(database, clock=clock, catalogue=catalogue)
+    await first.start()
+    for n in (1, 2):
+        await first.emit("test.thing.happened", {"n": n}, source="tests")
+    await first.stop()
+
+    seen: list[Event] = []
+    second = InProcessBus(database, clock=clock, catalogue=catalogue)
+    await second.start()
+    second.subscribe("test.*.*", lambda e: _append(seen, e), name="late")
+    await second.emit("test.thing.happened", {"n": 3}, source="tests")
+    await second.drain()
+    await second.stop()
+
+    third = InProcessBus(database, clock=clock, catalogue=catalogue)
+    await third.start()
+    third.subscribe("test.*.*", lambda e: _append(seen, e), name="late")
+    await third.drain()
+    await third.stop()
+
+    assert [event.payload["n"] for event in seen] == [1, 2, 3]
+
+
 async def test_replay_is_bounded_and_filtered(bus: InProcessBus, clock: FakeClock) -> None:
     await bus.emit("test.thing.happened", {"n": 1}, source="tests")
     await bus.emit("test.other.happened", {"n": 2}, source="tests")

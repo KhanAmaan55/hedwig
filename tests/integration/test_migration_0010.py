@@ -5,10 +5,8 @@ recovery runs. Without 0010, the first recovery after the upgrade would tally ev
 second time. This runs the upgrade the way a real install meets it: a 0009 database whose
 relationship has already counted a turn, migrated, then started.
 
-**Today this passes without 0010 too**, and that is a bug of its own (docs/29 G14): recovery runs
-once, inside `bus.start()`, before relationship, emotion and personality have subscribed, so
-their missed events are never re-delivered at all. The test is here for the day G14 is fixed. From
-then on, 0010 is what stops that fix from double-counting the relationship.
+Before FND-07 this passed without 0010 too, because recovery never reached subscribers that
+register in their own `start()` (docs/29 G14). Now it fails without 0010, as it should.
 """
 
 from __future__ import annotations

@@ -108,7 +108,7 @@ the repository, ahead of any new cognitive capability.
 | G10 | With `gemma4:e2b`, replies open with a meta-commentary ("That lands as…") and end with a clarifying question every time | Quality | Fixed by PER-03 |
 | G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | Fixed by PER-03 |
 | G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | FND-05; investigate warm-up |
-| G14 | Event recovery runs once, inside `bus.start()`, before emotion, personality and relationship subscribe in their own `start()`. After a crash their missed events are never re-delivered: at-least-once silently does not cover them | Reliability bug (pre-existing) | FND-07 |
+| G14 | Event recovery runs once, inside `bus.start()`, before emotion, personality and relationship subscribe in their own `start()`. After a crash their missed events are never re-delivered: at-least-once silently does not cover them | Reliability bug (pre-existing) | Fixed by FND-07 |
 | G13 | `VITE_HEDWIG_API` both moved the Vite proxy and was exposed to the page, so setting it bypassed the proxy (and the token it adds) | Config trap | Fixed with UX-02: the proxy also reads `HEDWIG_API_BASE_URL` |
 
 ---
@@ -179,7 +179,7 @@ mind updates and notices, so that replies appear as they are written and the ava
 - **Tests:** full lifecycle; flood test (tokens never dropped, frames are); duplicate send.
 
 #### FND-07 — Recovery reaches every durable subscriber
-**Status:** Todo · **P1** · **S** · **Depends on:** — · **Modules:** `core/bus/in_process.py`
+**Status:** Done (2026-11-20) · **P1** · **S** · **Depends on:** — · **Modules:** `core/bus/in_process.py`
 
 As HEDWIG, I want events missed during a crash re-delivered to *every* durable subscriber,
 including those that subscribe after the bus starts, so that a restart mid-session loses no
@@ -513,3 +513,12 @@ and G12.
 **Tests:** 951 Python (16 new), 76 frontend (1 new). `npm run check` clean.
 
 **Next:** FND-07, then FND-05 or REF-01.
+
+### 2026-11-20 — Session 1, continued: "complete the project"
+
+Decisions taken with the user: web search through **DuckDuckGo, opt-in** (off by default, every
+outbound query audited); voice through **Piper** (local neural TTS; download approved).
+
+- **FND-07** Recovery reaches every durable subscriber — `subscribe()` on a running bus recovers
+  synchronously (docs/04 §3.3). Fixes G14. `test_migration_0010.py` now fails without 0010.
+
