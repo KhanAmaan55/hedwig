@@ -134,6 +134,18 @@ sequenceDiagram
     Note over P: beyond the replay window, events are archived,<br/>not replayed. Cognitive state is checkpointed<br/>separately (doc 08 §7), so we do not depend on<br/>infinite replay.
 ```
 
+**Recovery happens at registration, not only at start (FND-07).** Most subscribers register in
+their own `start()`, after the bus has started: emotion, personality, relationship memory.
+Recovery used to run only inside `bus.start()`, so for those subscribers a crash lost every
+undelivered event, silently (docs/29 G14). A durable subscription registered on a running bus now
+recovers inside `subscribe()`, synchronously, so its missed events are queued before any live
+event can reach it. Delivery still checks `processed_event` first, so an event both recovered and
+published live is handled once.
+
+A consequence for anyone renaming a subscription: the new name has no delivery history, so it
+recovers everything in the replay window. Give it the old name's `processed_event` rows in a
+migration, as 0010 does for relationship memory (docs/27 §5.1).
+
 We deliberately do **not** build event sourcing. The events table is an audit log and a
 short-horizon recovery mechanism; the authoritative state lives in ordinary tables.
 Rebuilding all cognitive state by replaying six months of events sounds elegant and is a

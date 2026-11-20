@@ -304,6 +304,11 @@ class InProcessBus:
         )
         self._subscriptions[name] = subscription
         if self._running:
+            # Registered on a running bus — which is how every module that subscribes in its own
+            # `start()` registers. Recovery in `start()` has already run without it, so it
+            # recovers here, synchronously, before any live event can reach its queue: missed
+            # events first, in order (docs/29 G14).
+            self._recover_late(subscription)
             self._ensure_dispatcher(subscription)
 
         logger.debug(
@@ -543,39 +548,68 @@ class InProcessBus:
 
     async def _recover(self) -> None:
         """Re-deliver durable events that were never processed (docs/04 §3.3)."""
-        since = (self._clock.now() - self._replay_window).isoformat(timespec="milliseconds")
         recovered = 0
-
         for subscription in self._subscriptions.values():
-            if not subscription.durable:
-                continue
-            cursor_row = self._database.query_one(
-                "SELECT last_event_id FROM subscription_cursor WHERE subscription = ?",
-                (subscription.name,),
-            )
-            cursor = cursor_row["last_event_id"] if cursor_row else None
-
-            rows = self._database.query(
-                """
-                SELECT e.* FROM event e
-                LEFT JOIN processed_event p
-                       ON p.event_id = e.id AND p.subscription = ?
-                WHERE e.occurred_at >= ?
-                  AND (? IS NULL OR e.id > ?)
-                  AND (p.status IS NULL OR p.status = 'failed')
-                ORDER BY e.id
-                LIMIT 1000
-                """,
-                (subscription.name, since, cursor, cursor),
-            )
-            for row in rows:
-                event = _row_to_event(row)
-                if self._matches(subscription, event.type):
-                    await self._enqueue(subscription, _Envelope(event=event))
-                    recovered += 1
-
+            for event in self._missed(subscription):
+                await self._enqueue(subscription, _Envelope(event=event))
+                recovered += 1
         if recovered:
             logger.info("recovered undelivered events", extra=fields(count=recovered))
+
+    def _recover_late(self, subscription: _Subscription) -> None:
+        """Recovery for a subscription registered after `start()`.
+
+        Synchronous so nothing live is queued ahead of what was missed. Whatever does not fit
+        the queue is handed to a task, which still runs before the dispatcher sees it.
+        Duplicates are harmless: delivery checks the ledger first (`_already_processed`).
+        """
+        missed = self._missed(subscription)
+        pending: list[Event] = []
+        for event in missed:
+            try:
+                subscription.queue.put_nowait(_Envelope(event=event))
+            except asyncio.QueueFull:
+                pending.append(event)
+        if pending:
+
+            async def overflow() -> None:
+                for event in pending:
+                    await self._enqueue(subscription, _Envelope(event=event))
+
+            task = asyncio.create_task(overflow(), name=f"bus-recover:{subscription.name}")
+            self._retries.add(task)
+            task.add_done_callback(self._retries.discard)
+        if missed:
+            logger.info(
+                "recovered undelivered events",
+                extra=fields(subscription=subscription.name, count=len(missed)),
+            )
+
+    def _missed(self, subscription: _Subscription) -> list[Event]:
+        """Durable events in the replay window this subscription matches and never processed."""
+        if not subscription.durable:
+            return []
+        since = (self._clock.now() - self._replay_window).isoformat(timespec="milliseconds")
+        cursor_row = self._database.query_one(
+            "SELECT last_event_id FROM subscription_cursor WHERE subscription = ?",
+            (subscription.name,),
+        )
+        cursor = cursor_row["last_event_id"] if cursor_row else None
+        rows = self._database.query(
+            """
+            SELECT e.* FROM event e
+            LEFT JOIN processed_event p
+                   ON p.event_id = e.id AND p.subscription = ?
+            WHERE e.occurred_at >= ?
+              AND (? IS NULL OR e.id > ?)
+              AND (p.status IS NULL OR p.status = 'failed')
+            ORDER BY e.id
+            LIMIT 1000
+            """,
+            (subscription.name, since, cursor, cursor),
+        )
+        events = [_row_to_event(row) for row in rows]
+        return [event for event in events if self._matches(subscription, event.type)]
 
     async def replay(self, *, since: datetime, pattern: str = "*") -> AsyncIterator[Event]:
         segments = tuple(pattern.split("."))

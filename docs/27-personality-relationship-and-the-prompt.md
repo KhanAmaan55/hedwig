@@ -240,10 +240,10 @@ copying their `processed_event` rows. Without that, startup recovery would re-de
 in the replay window to a subscription that had never seen it, and tally each one twice. The
 migration adds rows and changes none. The old names' rows remain, inert.
 
-Writing its test found that recovery does not reach this subscription at all yet. It runs once,
+Writing its test found that recovery did not reach this subscription at all: it ran once,
 inside `bus.start()`, before relationship, emotion and personality subscribe in their own
-`start()` (docs/29 G14). So 0010 is inert today. It becomes essential the day G14 is fixed,
-which is why it shipped first.
+`start()` (docs/29 G14). FND-07 fixed that (docs/04 §3.3). From then on, 0010 is what stops the
+first start after the upgrade from tallying recent turns twice; its test fails without it.
 
 ### 5.2 Two trusts
 
