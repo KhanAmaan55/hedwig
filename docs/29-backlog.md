@@ -77,8 +77,8 @@ the repository, ahead of any new cognitive capability.
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
 | 5 | Emotion: never manipulative / dependent | **PARTIAL** | Prohibition tests exist for bindings; no honesty eval yet |
 | 6 | Curiosity engine | **MISSING** | docs/11 designed; no code |
-| 7 | Knowledge: local docs, web search, provenance, citations | **MISSING** | docs/13 designed; tool layer stubbed |
-| 7 | Knowledge: "remember vs. researched vs. uncertain" | **PARTIAL** | `TrustTier` and provenance on memory rows; no knowledge tiers |
+| 7 | Knowledge: local docs, web search, provenance, citations | **PARTIAL** | Opt-in DuckDuckGo research with fetch controls, injection quarantine, citations and egress audit (KNW-02/03); local documents not built (KNW-01) |
+| 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
 | 8 | Avatar: VRM renderer, expression from emotion, blink, saccade, breath, head drift | **COMPLETE** | `frontend/src/panes/avatar/`; `idle.test.ts`, `compose.test.ts`, `test_expression.py` |
 | 8 | Avatar: speaking / thinking / attention states | **MISSING** | `action` is always idle — the backend never tells the avatar a turn is running |
 | 8 | Avatar: lip sync | **MISSING** | Needs voice |
@@ -221,7 +221,7 @@ validation and a `tool_call` audit row, so that the planner's decisions have eff
 As the user, I want to approve side-effectful tool calls before they run, surviving a restart.
 
 #### COG-04 — Knowledge-need routing
-**Status:** Todo · **P1** · **M** · **Depends on:** COG-02, KNW-02 · **Modules:** `brain/planner.py`
+**Status:** Done (2026-11-20) · **P1** · **M** · **Depends on:** COG-02, KNW-02 · **Modules:** `brain/planner.py`
 
 As HEDWIG, I want to decide that a question needs current information (dates, "latest",
 version numbers, low recall scores), so that I search instead of guessing.
@@ -313,7 +313,7 @@ As the user, I want to point HEDWIG at a folder of notes and have them retrievab
 attribution, with secrets skipped.
 
 #### KNW-02 — Web search and fetch, allowlisted and audited
-**Status:** Todo · **P1** · **L** · **Depends on:** COG-01, COG-02 · **Modules:** `knowledge/fetch.py`
+**Status:** Done (2026-11-20) · **P1** · **L** · **Depends on:** COG-01, COG-02 · **Modules:** `knowledge/fetch.py`
 
 As HEDWIG, I want to search the web and read pages through an allowlist, robots, caching,
 sanitisation and an egress audit log, so that I can answer current questions without leaking
@@ -321,7 +321,7 @@ private data. **Requires the user's go-ahead on the search provider** (a free lo
 SearXNG vs. a hosted API) before implementation.
 
 #### KNW-03 — Citations and knowledge tiers in replies
-**Status:** Todo · **P1** · **M** · **Depends on:** KNW-02
+**Status:** Done (2026-11-20) · **P1** · **M** · **Depends on:** KNW-02
 
 As the user, I want replies to say whether something is remembered, read in a document, just
 researched, or uncertain, with sources.
@@ -543,3 +543,12 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   `[stub] get_datetime()` as the time. `/v1/health` no longer reports the brain degraded.
   Design in [13](13-knowledge-and-tools.md) §12.
 
+
+- **KNW-02/03, COG-04** Web research — opt-in DuckDuckGo (`knowledge.web_enabled`), one
+  `research` tool (search + top 2 pages), fetch controls (public addresses only, robots.txt,
+  1 MB/10 s, generic UA, headers on every request), injection quarantine of snippets and pages,
+  numbered citations, research notes remembered as `untrusted`, `egress_log` (migration 0013),
+  `/v1/egress` and `hedwig egress`. Rule-based routing that never sends a message about the
+  user to a search engine, and says plainly when the web is off. Live: DuckDuckGo → python.org,
+  cited answer from `gemma4:e2b`. Found live: robots.txt fetched twice under concurrent reads;
+  fixed. Design in [13](13-knowledge-and-tools.md) §13.

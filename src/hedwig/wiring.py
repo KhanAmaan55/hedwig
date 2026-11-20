@@ -55,6 +55,7 @@ from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
 from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
 from hedwig.goals import GoalsMindReader, GoalStore
+from hedwig.knowledge.web import WebClient
 from hedwig.llm import LanguageModelGateway, OllamaProvider, RecordedProvider
 from hedwig.llm.responder import GatewayResponder
 from hedwig.memory import (
@@ -70,7 +71,14 @@ from hedwig.memory import (
 from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore, PersonaMindReader
 from hedwig.reflection import SessionReflector
 from hedwig.sessions import SqliteSessionStore
-from hedwig.tools import ToolRegistry, calculate_tool, datetime_tool, search_memory_tool
+from hedwig.tools import (
+    ToolRegistry,
+    calculate_tool,
+    datetime_tool,
+    research_memory,
+    research_tool,
+    search_memory_tool,
+)
 
 logger = get_logger(__name__)
 
@@ -155,6 +163,7 @@ def build_container(
     database: Database | None = None,
     migrate: bool = True,
     llm_provider: LLMProvider | None = None,
+    web: WebClient | None = None,
 ) -> Container:
     """Construct the application graph.
 
@@ -348,6 +357,15 @@ def build_container(
     tools.register(datetime_tool(clock, timezone=config.runtime.timezone))
     tools.register(calculate_tool())
     tools.register(search_memory_tool(retrieval))
+    # Web research, opt-in (docs/13 §13). Absent, the planner says so instead of guessing.
+    if config.knowledge.web_enabled:
+        web = web or WebClient(
+            database,
+            clock,
+            search_endpoint=config.knowledge.search_endpoint,
+            timeout=config.knowledge.timeout_seconds,
+        )
+        tools.register(research_tool(web, remember=research_memory(capture)))
 
     brain = Brain(
         Collaborators(

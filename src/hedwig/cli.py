@@ -440,6 +440,20 @@ def goals_drop(goal_id: str) -> None:
     _set_goal(goal_id, status="abandoned")
 
 
+@app.command()
+def egress(limit: Annotated[int, typer.Option(help="How many.")] = 30) -> None:
+    """Every request HEDWIG made to the internet, newest first, with what it sent."""
+    rows = _call(lambda c: c.egress(limit=limit))
+    assert isinstance(rows, list)
+    for row in rows:
+        sent = f'  sent: "{row["query"]}"' if row["query"] else ""
+        print(
+            f"{row['created_at'][:19]}  {row['purpose']:<7} {row['outcome']:<11} {row['url'][:70]}{sent}"
+        )
+    if not rows:
+        print("Nothing has left this machine. (Web search is off unless knowledge.web_enabled.)")
+
+
 token_app = typer.Typer(
     help="The API token that guards your conversations (ADR-0022).", no_args_is_help=True
 )

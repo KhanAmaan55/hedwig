@@ -239,6 +239,9 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig serve` | Backend alone |
 | `uv run hedwig chat` | Talk to HEDWIG in the terminal (backend must be running); `--session <id>` resumes |
 | `uv run hedwig token show` / `rotate` | The API token that guards your conversations |
+| `uv run hedwig memory list` / `search` / `forget` / `restore` | What HEDWIG remembers, under your control |
+| `uv run hedwig goals list` / `add` / `done` | What HEDWIG is helping you with over time |
+| `uv run hedwig egress` | Every request HEDWIG made to the internet, and what it sent |
 | `uv run hedwig config` | The effective configuration after all layers resolve |
 
 Configuration layers, lowest precedence first: defaults in code → `config/hedwig.toml` →

@@ -37,6 +37,26 @@ RECALL_PATTERN = re.compile(
     r"previously|before)\b",
     re.I,
 )
+WEB_PATTERN = re.compile(
+    r"\b(?:latest|newest|most recent|recently released|currently|nowadays|news|"
+    r"this (?:week|month|year)|right now|price of|release date|new version|which version|"
+    r"who won|weather|look (?:it|that|this) up|search (?:the web|online|for)|google it)\b"
+    r"|\b20(?:2[5-9]|[3-9]\d)\b",
+    re.I,
+)
+"""Cues that a question needs current information (docs/13 §13). Listed, so they are tested."""
+PERSONAL_PATTERN = re.compile(r"\b(?:my|mine|our|ours|i|i'm|i've|me|we|us)\b", re.I)
+"""A message about the user never goes to a search engine, cue or not: "my current project"
+is not a web question, and sending it out would leak it (docs/13 §13)."""
+
+NO_WEB_DIRECTIVE = (
+    "This asks for current information, and web search is switched off. Say plainly that you "
+    "cannot look it up right now, answer from what you know, and say it may be out of date."
+)
+CITE_DIRECTIVE = (
+    "Part of what you know here was researched on the web just now. Use it, cite sources by "
+    "number like [1] with the link, and say plainly what the sources do not settle."
+)
 MIN_QUESTION_WORDS = 2
 
 
@@ -91,7 +111,16 @@ class RulePlanner:
                 confidence=0.9,
             )
 
-        # 5. Too little to go on. Asking beats guessing.
+        # 5. Current information, with the web switched off: be honest about it.
+        if needs_web(stripped) and "research" not in self.available_tools:
+            return Plan(
+                intent=Intent.ANSWER,
+                rationale="needs current information; web search is off",
+                confidence=0.4,
+                directives=(NO_WEB_DIRECTIVE,),
+            )
+
+        # 6. Too little to go on. Asking beats guessing.
         if len(stripped.split()) < MIN_QUESTION_WORDS and stripped.endswith("?"):
             return Plan(
                 intent=Intent.CLARIFY,
@@ -114,6 +143,13 @@ class RulePlanner:
                 name="calculate",
                 arguments={"expression": match.group(1).strip()},
                 reason="the request contains an arithmetic expression",
+            )
+
+        if needs_web(text) and "research" in self.available_tools:
+            return ToolRequest(
+                name="research",
+                arguments={"query": text[:300]},
+                reason="the question needs current information",
             )
 
         if RECALL_PATTERN.search(text) and "search_memory" in self.available_tools:
@@ -139,10 +175,12 @@ class RulePlanner:
                 rationale=f"every tool failed ({failures[0].error}); answering without them",
                 confidence=0.3,
             )
+        researched = any(o.name == "research" and o.ok for o in outcomes)
         return Plan(
             intent=Intent.ANSWER,
             rationale=f"{len(outcomes)} tool result(s) available",
             confidence=0.8,
+            directives=(CITE_DIRECTIVE,) if researched else (),
         )
 
     # -- query planning ----------------------------------------------------
@@ -165,3 +203,8 @@ class RulePlanner:
 
         logger.debug("queries planned", extra=fields(count=len(queries)))
         return tuple(dict.fromkeys(queries))  # de-duplicated, order preserved
+
+
+def needs_web(text: str) -> bool:
+    """Whether a question asks for current information, and is not about the user."""
+    return bool(WEB_PATTERN.search(text)) and not PERSONAL_PATTERN.search(text)
