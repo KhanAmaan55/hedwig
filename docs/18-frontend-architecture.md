@@ -371,7 +371,8 @@ Under the avatar, a tabbed panel: **Mind** (mood bars with the sentence "a simul
 shapes how HEDWIG speaks — not feelings", the relationship, the ten traits), **Memory** (search
 as recall ranks, pin, forget, restore, show forgotten), **Goals** (add, activate a proposal,
 close, drop), **Curiosity** (findings with source links, keep or dismiss, open questions, ask
-one). Every number is the backend's and every button is one public API call (docs/16 §2). There
+one), **Data** (download everything; erase by phrase with a preview first — SEC-02, docs/21
+§7.4). Every number is the backend's and every button is one public API call (docs/16 §2). There
 is no inspector-only endpoint, so the CLI can do everything the inspector does.
 
 * **PER-01** adds `GET /v1/mind/personality`, `/history`, `POST …/revert/{id}`, `…/reset` and

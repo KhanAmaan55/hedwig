@@ -440,7 +440,22 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 **Status:** Done (2026-11-20; `/traces` not yet) · **P2** · **M** · **Depends on:** FND-02 · Assembly of existing records (docs/16 §6).
 
 #### SEC-02 — Export and purge
-**Status:** Todo · **P2** · **L** · **Depends on:** MEM-02 · Purge-completeness test (docs/21 §7).
+**Status:** Done (2026-11-20) · **P2** · **L** · **Depends on:** MEM-02 · **Modules:** `privacy/`, `api/routes/privacy.py`, CLI, inspector *Data* tab, migration 0016
+
+As the user, I want to take everything HEDWIG holds with me, and to erase something so that it
+is really gone, so that the data is mine.
+
+- `POST /v1/export`, `hedwig export`, *Download everything*: one zip — database, conversations
+  and memories as readable files, config without the token, manifest with hashes. Streamed; no
+  copy left behind.
+- `POST /v1/purge/preview` then `POST /v1/purge` (confirm code = hash of the exact targets),
+  `hedwig purge --memory|--session|--phrase`, *Erase for good*: targets plus derived memories,
+  records that mention them, backups; then VACUUM, WAL checkpoint, and a byte scan of the file.
+  Receipts hold counts only. `hedwig purge --everything` offline.
+- Every table classified (`privacy/tables.py`); an architecture test fails on an unclassified one.
+- **Tests:** `test_privacy.py` — the completeness test seeds through turns, events, capture,
+  reflection, forgetting and a backup, purges, and reads the file. Deferred: date-range and
+  entity scopes, "similar memories" from embeddings, encrypted export, import.
 
 #### SEC-03 — Backup and `hedwig doctor`
 **Status:** Todo · **P3** · **M**
@@ -459,7 +474,8 @@ Remaining, in dependency order, highest value first:
 2. ~~SEC-01~~ — done. Next on it: `/traces/{correlation_id}`, `prompt_version` on `llm_call`.
 3. ~~REF-02~~ — done (a/b/c). Next on it: embedding candidates (after MEM-04), a held-out
    judgement scenario in the eval harness, REF-02d.
-4. **SEC-02** — export and purge, with the purge-completeness test.
+4. ~~SEC-02~~ — done. Next on it: date-range scope, import of the export format, fixing
+   `auto_vacuum` (it never took effect; see docs/21 §7.4).
 5. **MEM-05** → **MEM-04** — the recall eval corpus, then the embedding channel.
 6. **KNW-01** — local documents (CURATED tier).
 7. **MEM-03**, **MEM-06**, **PER-02**, **COG-03**, **FND-06**, **EMO-02**, **VOI-02**/**VOI-03**,
@@ -628,4 +644,14 @@ tables, or copied rows). Nothing existing was changed or deleted.
   Mind Inspector (*Needs your eye*) or with `hedwig disputes|settle`; only rules (≥0.9 overlap,
   two conversations) act alone. Paraphrases ("vegetarian" / "does not eat meat") are not found
   by word overlap — embeddings are the fix (MEM-04). Design in [12](12-reflection-engine.md) §15.
+- **SEC-02** Export and purge — `hedwig.privacy` (ADR-0024): an `Exporter` that streams one zip
+  (database, Markdown conversations and memories, config without the token, hashed manifest), and
+  a `Purger` that previews, then erases a memory, a conversation or a phrase with everything
+  derived from it, every log row and event that mentions it, and every older backup. Migration
+  0016 (`purge_receipt`, counts only). Every table is classified, enforced by an architecture
+  test. **Finding:** the completeness test failed the first version: the purged sentence
+  survived in the unused space of a page that had been rebuilt before `secure_delete` was on.
+  Purge now ends with a full VACUUM and verifies against the file's bytes. Also found:
+  `auto_vacuum = INCREMENTAL` never took effect (WAL is set first). Design in
+  [21](21-security-privacy-ethics.md) §7.4.
 

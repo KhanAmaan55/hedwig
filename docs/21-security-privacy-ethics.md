@@ -237,6 +237,99 @@ this right, and it is one of the reasons `memory_derivation` exists.
 `S8` — verification by search — runs as part of the operation, not as a test. The receipt
 records counts so the user has a record that it happened.
 
+### 7.4 Implementation record — export and purge (SEC-02)
+
+Built in `src/hedwig/privacy/` ([ADR-0024](adr/0024-purge-is-one-classified-sweep.md)).
+
+**Export.** `POST /v1/export` (and `hedwig export [--out FILE]`, *Download everything* in the
+app) streams one zip, built in a temporary file and deleted after sending, so no extra copy of
+everything is left in the data directory:
+
+```text
+hedwig-export-2026-11-20/
+  README.txt            what each file is, in plain words
+  manifest.json         format 1, HEDWIG version, schema version, row counts, file hashes
+  hedwig.db             a consistent copy (VACUUM INTO), openable with sqlite3
+  config.json           the effective configuration; the API token is never included
+  conversations/        one Markdown file per conversation, dated
+  memories.md           beliefs by status, episodes by date, forgotten ones marked
+  goals.md
+  blobs/                stored files, by digest
+```
+
+**Purge.** Two calls: preview, then purge with the preview's confirmation code.
+
+```mermaid
+sequenceDiagram
+    participant U as User (app / CLI)
+    participant A as API
+    participant P as privacy.Purger
+    participant D as SQLite file
+    U->>A: POST /v1/purge/preview {scope}
+    A->>P: resolve(scope)
+    P->>D: targets + derivation closure (read only)
+    P-->>U: counts, examples, backups affected, confirm code
+    U->>A: POST /v1/purge {scope, confirm}
+    A->>P: purge(scope, confirm)
+    P->>P: refuse if a turn is running; drain the bus
+    P->>D: resolve again; refuse if the code no longer matches
+    P->>D: one transaction, secure_delete: content rows, then records that refer to them
+    P->>D: FTS optimize, VACUUM, WAL checkpoint
+    P->>D: byte-scan the file for fragments of every purged text
+    P->>P: delete backups older than now
+    P->>D: purge_receipt (scope kind and counts only)
+    P-->>U: receipt: counts, verified, also said elsewhere
+```
+
+| Scope | Targets |
+|---|---|
+| `memory` | One episode or belief, and every memory derived from it |
+| `session` | A conversation: its session, messages, turns and their logs, every memory captured or extracted from it (`session:<id>`), and what was derived from those |
+| `phrase` | Every message, memory, goal, open question and finding whose text contains the phrase (case-insensitive), plus derived memories. Lexical: "my sister" does not match "Ana" |
+| everything | Offline: `hedwig purge --everything` with HEDWIG stopped deletes the database, blobs, backups, logs and token. Downloaded voices are kept: they are software, not data |
+
+* **What a target pulls with it.** Rows in `RECORD` tables that mention a target's id (event
+  payloads, working-set logs, memory access, tool calls, tombstones, derivation edges, belief
+  judgements, appraisals, the processing ledger) are deleted. Surviving rows that only pointed at
+  a target (`belief.superseded_by`, `finding.promoted_belief_id`, `goal.parent_id`) lose the
+  pointer, not their content. A goal or open question that came from a target memory or turn is
+  a target itself.
+* **Verification** takes fragments of every purged text, scans the database file's bytes after
+  the WAL is checkpointed, and classifies each hit: in a surviving row (reported as *also said
+  elsewhere*, which is honest: the user said it twice, and only one was in scope) or nowhere
+  (a residue failure, recorded and raised).
+* **The receipt** (`purge_receipt`, migration 0016) holds the scope kind, counts, whether
+  verification passed, and the number of backups removed. Never the phrase, never ids, never
+  text.
+* **Why a full VACUUM.** `secure_delete` zeroes the cells a purge deletes, and the first version
+  stopped there. The completeness test then found the purged sentence on page 3 of the file: the
+  `event` table's root, which had been a leaf page and still carried its old cells in unused
+  space after becoming an interior page. Zeroing deleted cells cannot reach slack; rebuilding the
+  file does. (The same investigation found that `auto_vacuum = INCREMENTAL` in `core/store`
+  never takes effect — WAL mode is set first, after which auto-vacuum needs a VACUUM to switch.
+  It does not matter for purge, which no longer relies on it.)
+* **Pinned memories can be erased.** A pin protects a memory from *forgetting*, which HEDWIG
+  might do on its own. Erasing is only ever the user's explicit request, previewed and confirmed.
+* **Logs** carry no message or memory text (checked when this was built), so they are not
+  scanned by a scoped purge; `--everything` deletes them.
+* **In the app:** the Mind Inspector's *Data* tab has *Download everything* and *Erase for good*
+  (by phrase: preview, then *Erase permanently*). Memory and conversation scopes are in the CLI
+  and API.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| One classified sweep, not per-module hooks (ADR-0024) | Exhaustive by construction, one verifier | `privacy` knows the schema | Modules move to separate stores |
+| Byte scan of the file after checkpoint | Proof against freed pages, FTS segments and WAL, not only queries | A full read of the file per purge (fine at local sizes) | Databases in the gigabytes |
+| Full VACUUM per purge | Page slack is rebuilt away | Rewrites the file each time (seconds at local sizes) | Databases in the gigabytes: then `secure_delete` always on, plus VACUUM on a schedule |
+| Backups deleted by a purge | No copy survives | The migration safety net is gone until the next backup | Encrypted, per-memory-keyed backups |
+| Lexical phrase scope | Predictable, previewable | Paraphrases are missed unless derived | Embeddings (MEM-04): offer "similar memories" in the preview, never auto-included |
+| Everything is offline | Complete, simple | One command with the server stopped | — |
+| Export streamed, not stored | No second full copy lying in the data directory | Re-export to get another | — |
+
+**Future improvements.** Date-range and entity scopes (`entity` once entity extraction exists);
+"similar memories" in the preview from embeddings; encrypted exports (§4 Backups row); an import
+command that reads this export format back; scoped purge of blobs once memories reference them.
+
 ---
 
 ## 8. Tradeoffs

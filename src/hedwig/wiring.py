@@ -71,6 +71,7 @@ from hedwig.memory import (
     TurnCaptureSubscriber,
 )
 from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore, PersonaMindReader
+from hedwig.privacy import Exporter, Purger
 from hedwig.reflection import NightlyReflection, SessionReflector
 from hedwig.sessions import SqliteSessionStore
 from hedwig.speech import PiperSpeaker
@@ -129,6 +130,9 @@ class Container:
     explorer: Explorer
     speaker: Speaker
     nightly: NightlyReflection
+    exporter: Exporter
+    purger: Purger
+    """Export and erase (SEC-02, ADR-0024): the one place that reads and deletes every table."""
     persona_control: PersonaControl | None
     """The same engine as `personality`, typed by the role the inspector needs (PER-01)."""
 
@@ -497,6 +501,17 @@ def build_container(
             critical=False,
         )
 
+    # The user's control over their data (SEC-02). Purge waits for the bus to drain and refuses
+    # while a turn runs, so nothing in flight can re-create what it erases (ADR-0024).
+    exporter = Exporter(database=database, config=config, clock=clock, version=__version__)
+    purger = Purger(
+        database=database,
+        clock=clock,
+        backups_dir=config.runtime.backups_dir,
+        is_busy=lambda: brain.busy,
+        drain=bus.drain,
+    )
+
     # 12. Plugins last: they register services of their own against the registry above.
     plugins = AllowlistPluginLoader(
         config.plugins.enabled,
@@ -535,6 +550,8 @@ def build_container(
         explorer=explorer,
         speaker=speaker,
         nightly=nightly,
+        exporter=exporter,
+        purger=purger,
         persona_control=personality,
     )
 

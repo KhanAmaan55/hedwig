@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from hedwig.core.store import Database
+
 pytestmark = pytest.mark.architecture
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -157,6 +159,7 @@ def test_every_source_file_belongs_to_a_documented_layer() -> None:
         "curiosity",
         "speech",
         "explain",
+        "privacy",
         "api",
         "cli",
         "client",
@@ -249,3 +252,22 @@ def test_the_emotion_module_contains_no_model_call() -> None:
                     assert not alias.name.startswith("hedwig.llm"), (
                         f"{path.name} imports the language model gateway; docs/09 §4.2 forbids it"
                     )
+
+
+# --- privacy: every table is classified (ADR-0024) --------------------------------------
+
+
+def test_every_table_is_classified_for_purge(database: Database) -> None:
+    """A table nobody classified is a table purge does not know to sweep."""
+    from hedwig.privacy.tables import TABLES
+
+    actual = {
+        str(row["name"])
+        for row in database.query(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+        )
+    }
+    assert actual - set(TABLES) == set(), (
+        "New tables must be classified in src/hedwig/privacy/tables.py (ADR-0024)"
+    )
+    assert set(TABLES) - actual == set(), "privacy/tables.py names a table that does not exist"

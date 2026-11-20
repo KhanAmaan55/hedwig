@@ -20,6 +20,9 @@ import type {
   MemoryItem,
   MemorySearch,
   PersonalityReading,
+  PurgePreview,
+  PurgeReceipt,
+  PurgeScope,
   RelationshipReading,
   MessagePage,
   SessionInfo,
@@ -105,8 +108,8 @@ interface RequestOptions {
   readonly signal?: AbortSignal | undefined;
   /** User-content routes need the token; health and HEDWIG's own state do not (ADR-0022). */
   readonly auth?: boolean;
-  /** The body is bytes (audio), not JSON. */
-  readonly binary?: boolean;
+  /** The body is bytes of this media type, not JSON. */
+  readonly binary?: string;
 }
 
 export class HedwigClient {
@@ -267,7 +270,31 @@ export class HedwigClient {
       body: { text },
       auth: true,
       signal,
-      binary: true,
+      binary: "audio/wav",
+    });
+  }
+
+  // -- privacy (docs/21 §7.4) -----------------------------------------------------
+
+  /** Everything HEDWIG holds, as a zip. */
+  async exportAll(): Promise<ArrayBuffer> {
+    return this.request<ArrayBuffer>("POST", "/v1/export", {
+      auth: true,
+      binary: "application/zip",
+    });
+  }
+
+  async purgePreview(scope: PurgeScope, value: string): Promise<PurgePreview> {
+    return this.request<PurgePreview>("POST", "/v1/purge/preview", {
+      body: { scope, value },
+      auth: true,
+    });
+  }
+
+  async purge(scope: PurgeScope, value: string, confirm: string): Promise<PurgeReceipt> {
+    return this.request<PurgeReceipt>("POST", "/v1/purge", {
+      body: { scope, value, confirm },
+      auth: true,
     });
   }
 
@@ -280,7 +307,7 @@ export class HedwigClient {
     refreshToken = false,
   ): Promise<T> {
     const headers: Record<string, string> = {
-      Accept: options.binary ? "audio/wav" : "application/json",
+      Accept: options.binary ?? "application/json",
     };
     if (options.body !== undefined) headers["Content-Type"] = "application/json";
     if (options.auth) {
