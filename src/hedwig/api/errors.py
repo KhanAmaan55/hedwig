@@ -78,7 +78,7 @@ def install_error_handlers(app: FastAPI) -> None:
             content=error_body(
                 "invalid_request",
                 "Request validation failed.",
-                detail={"errors": exc.errors()},
+                detail={"errors": _validation_errors(exc)},
             ),
         )
 
@@ -91,3 +91,20 @@ def install_error_handlers(app: FastAPI) -> None:
             status_code=500,
             content=error_body("internal", "An unexpected error occurred.", retryable=True),
         )
+
+
+def _validation_errors(exc: RequestValidationError) -> list[dict[str, Any]]:
+    """Where and why, without `input` or `ctx`.
+
+    `ctx` can hold the exception a validator raised, which is not JSON — returning it turned
+    every custom-validator rejection into a 500. `input` echoes the request body back, which
+    for a 32 KB message is the user's own text again, for nothing.
+    """
+    return [
+        {
+            "loc": list(error.get("loc", ())),
+            "msg": str(error.get("msg", "")),
+            "type": error.get("type"),
+        }
+        for error in exc.errors()
+    ]

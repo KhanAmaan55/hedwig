@@ -1,6 +1,6 @@
 # 16 — API Structure
 
-**Status:** Design · **Depends on:** [07](07-brain-langgraph-workflow.md), [15](15-avatar-controller.md) · **Depended on by:** [18](18-frontend-architecture.md)
+**Status:** Partially implemented (§12) · **Depends on:** [07](07-brain-langgraph-workflow.md), [15](15-avatar-controller.md) · **Depended on by:** [18](18-frontend-architecture.md)
 
 ---
 
@@ -35,14 +35,15 @@ Two surfaces, split by nature of the data:
 
 ## 3. Authentication
 
-> **Not yet implemented.** Milestone 1 ships only `/v1/health`, which is a liveness probe
-> holding no user data, on a loopback-bound socket. The token below lands with the first
-> endpoint that exposes anything personal — no data endpoint ships without it. Tracked in
-> [README.md](README.md#implementation-status).
+> **Implemented** with the conversation API ([ADR-0022](adr/0022-the-token-gates-user-content.md),
+> §12). The token guards every route that reads or writes **user content**. `/v1/health` and
+> HEDWIG's own mind state (`/v1/mind/emotion`, `/v1/mind/expression`) stay open: they carry no
+> user text, and the shell's readiness probe and the avatar's poll need them before a token
+> can be delivered.
 
 | Deployment | Mechanism |
 |---|---|
-| Local (default) | Bearer token generated at first run, stored in `~/.hedwig/token`, required on every request including WS. Loopback-bound. |
+| Local (default) | Bearer token generated at first run, stored in `<data_dir>/token` (`0600`), required on every user-content route including WS. Loopback-bound. Rotated with `hedwig token rotate`, honoured on the next request. |
 | Exposed (user opts in) | Same token plus a mandatory TLS terminator in front; a startup warning if bound to a non-loopback address without TLS |
 
 No accounts, no OAuth, no sessions-as-cookies. A single-user local application that grows a
@@ -346,3 +347,86 @@ tables to carry the right columns.
 | Batch endpoints for memory operations | The inspector needs bulk edits |
 | gRPC or msgpack for the frame channel | Frame bandwidth becomes measurable |
 | API for external avatar renderers (Unreal bridge) | Someone builds one; the protocol already supports it |
+
+---
+
+## 12. Implementation record — the conversation surface (FND-01, FND-02, UX-01)
+
+The first endpoints that carry what the user said, and the first way for a person to talk to
+HEDWIG outside the test suite. Backlog: [29](29-backlog.md).
+
+### 12.1 What exists
+
+| Method | Path | Guarded | Notes |
+|---|---|---|---|
+| `POST` | `/v1/sessions` | yes | `{channel?: "cli"\|"web"\|"api"}` → `201 {session_id, channel, started_at}` |
+| `GET` | `/v1/sessions?limit=` | yes | Most recent first, with `turn_count` and `ended_at` |
+| `GET` | `/v1/sessions/{id}` | yes | One session, or 404 |
+| `POST` | `/v1/sessions/{id}/messages` | yes | `{text}` (1–32 768 chars) → the complete reply. 404 for an unknown session |
+| `GET` | `/v1/sessions/{id}/messages?limit=&before=` | yes | Oldest first; `before` is a message id; `next_before` is the cursor for the older page |
+
+Everything else in §4.1 — `end`, feedback, the WebSocket — is a backlog story (FND-03, FND-05).
+
+### 12.2 One request, end to end
+
+```mermaid
+sequenceDiagram
+    participant C as Client (CLI / UI)
+    participant A as api/routes/conversation
+    participant T as api/auth (TokenFile)
+    participant H as ConversationHistory
+    participant B as Brain
+    C->>A: POST /v1/sessions {channel: "cli"}
+    A->>T: require_token (stat token file, compare_digest)
+    A->>B: open_session(channel)
+    B-->>A: session_id  (announces conversation.session.started)
+    A-->>C: 201 {session_id}
+    C->>A: POST /v1/sessions/{id}/messages {text}
+    A->>T: require_token
+    A->>H: get_session(id)  → 404 if unknown
+    A->>B: run_turn(text, session_id)
+    Note over B: ingest → guard → mind → recall → deliberate → compose → finalize
+    B-->>A: final TurnState
+    alt status == failed (no model)
+        A-->>C: 503 capability_unavailable {turn_id, reply}
+    else completed / refused / truncated
+        A-->>C: 200 {turn_id, message_id, reply, status, intent, cited_memory_ids, mood}
+    end
+```
+
+### 12.3 Decisions inside the story
+
+* **The brain opens sessions, not the route.** `Brain.open_session(channel)` mints the id,
+  opens the row, and announces `conversation.session.started`. Had the route called the
+  session store directly, the turn's `ingest` would find the session already open and never
+  announce it — and emotion appraises that event. One owner for the announcement.
+* **Reading history is a separate port.** `ConversationHistory` (`get_session`,
+  `list_sessions`, `history`) sits beside `Conversation` in `core/ports/sessions.py`. The
+  brain's port stays five methods wide (docs/03 §5): a node has no business paginating. The
+  same `SqliteSessionStore` satisfies both, and the container exposes it twice, typed by role.
+* **A failed turn is a 503 that still carries the reply.** `compose` already turns a model
+  outage into an honest reply and a `failed` status (docs/07 §8). The route reports it as
+  `capability_unavailable` with `turn_id` and `reply` in `detail`, so a client can branch on
+  the code and still show what HEDWIG said.
+* **Non-streaming first.** The REST path returns the whole reply. The WebSocket is the primary
+  path in §5 and the next transport story; building REST first gives the CLI a stable surface
+  and the WS a reference to be tested against.
+* **The CLI is a client, not a container.** `hedwig chat` uses `hedwig.client.HedwigClient`,
+  which speaks HTTP and imports nothing else from HEDWIG — an import-linter contract enforces
+  it. That is the CLI-parity rule (§10, docs/17 §9) made structural rather than aspirational.
+
+### 12.4 Tradeoffs
+
+| Decision | Gained | Given up | Revisit if |
+|---|---|---|---|
+| REST before WS | A small, testable surface the CLI can use today | No token streaming; a slow model shows nothing until it finishes | FND-05 |
+| `before=<message id>` resolved to `seq` | Cursor stable under concurrent writes; ids stay opaque | One extra lookup per page | Never |
+| Unknown session → 404 rather than auto-create | Typos and stale ids fail loudly | Client must `POST /sessions` first | Never |
+| No per-session turn lock yet | Story stays small | Two concurrent sends on one session can interleave | FND-04 |
+| No `client_message_id` dedupe yet | Story stays small | A retried POST runs a second turn | FND-06 |
+
+### 12.5 Future improvements
+
+* `POST /sessions/{id}/end` → relationship update and T1 reflection immediately (FND-03).
+* `/explain/{message_id}` from the records this path already writes (SEC-01).
+* Rate limit (§7: 60 messages/min) once a client exists that could exceed it.

@@ -256,6 +256,7 @@ graph LR
 |---|---|---|
 | `api` | HTTP/WS surface, envelopes, auth, streaming, backpressure | [16](16-api-structure.md) |
 | `cli` | Headless chat and admin commands; the Phase-0 interface | [17](17-backend-architecture.md) |
+| `client` | Python client for the public API; the CLI's only way to reach a running HEDWIG. Imports nothing else from HEDWIG | [16](16-api-structure.md) §12 |
 | `brain` | The turn graph: perceive → recall → deliberate → act → compose → learn | [07](07-brain-langgraph-workflow.md) |
 | `scheduler` | Idle detection, cron-like triggers, job queue, run records | [17](17-backend-architecture.md) §6 |
 | `sessions` | The conversation log: sessions, messages, turns, the working-set log, and the recent-turn window | [08](08-state-management.md) §5, [26](26-turn-memory-loop.md) §4 |
@@ -275,6 +276,7 @@ graph LR
 | `expression` | Emotion + speech → expression frames | [15](15-avatar-controller.md) |
 | `core.bus` | Publish/subscribe, durable outbox, replay | [04](04-communication-and-event-bus.md) |
 | `core.config` | Layered config load, validation, hot-reload of safe keys | §7 below |
+| `core.token` | The API bearer token file: create `0600`, rotate, constant-time match | [ADR-0022](adr/0022-the-token-gates-user-content.md) |
 | `core.store` | Connection management, migrations, transactions, repositories | [05](05-data-model-and-database.md) |
 | `core.clock` | Injectable time; the reason time-travel tests are possible | [20](20-testing-strategy.md) §3 |
 | `core.telemetry` | Structured logs, spans, correlation, metrics | [19](19-observability.md) |

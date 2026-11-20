@@ -34,6 +34,7 @@ from hedwig.core.ports import (
     Clock,
     ConfigManager,
     Conversation,
+    ConversationHistory,
     EmotionReader,
     EventBus,
     FileStorage,
@@ -95,6 +96,9 @@ class Container:
     scheduler: TaskScheduler
     llm: LanguageModelGateway
     sessions: Conversation
+    history: ConversationHistory
+    """The same store as `sessions`, typed by the other role it plays: reading the log back
+    for clients (docs/16 §12.3). The brain sees only `sessions`."""
     emotion: EmotionReader | None
     personality: PersonaReader | None
     relationship: RelationshipReader
@@ -376,6 +380,7 @@ def build_container(
         scheduler=scheduler,
         llm=llm,
         sessions=sessions,
+        history=sessions,
         emotion=emotion,
         personality=personality,
         relationship=relationship,

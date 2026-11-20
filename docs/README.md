@@ -26,7 +26,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 13 | [Knowledge and Tools](13-knowledge-and-tools.md) | The four knowledge tiers, tool layer, provenance, injection defence |
 | 14 | [Language Model Gateway](14-language-model-gateway.md) ✅ | Provider abstraction, model tiering, prompt assembly, structured output |
 | 15 | [Avatar Controller](15-avatar-controller.md) ◐ | Expression intent, frame protocol, renderer independence, lip sync |
-| 16 | [API Structure](16-api-structure.md) | REST resources, WebSocket protocol, versioning, auth |
+| 16 | [API Structure](16-api-structure.md) ◐ | REST resources, WebSocket protocol, versioning, auth |
 | 17 | [Backend Architecture](17-backend-architecture.md) | Process model, worker supervision, resource governance, startup/shutdown |
 | 18 | [Frontend Architecture](18-frontend-architecture.md) | Panes, state flow, avatar rendering, Mind Inspector |
 | 19 | [Observability](19-observability.md) | Tracing, correlation, metrics, the explainability endpoint |
@@ -34,11 +34,12 @@ depends on. After that, read whatever subsystem you are working on.
 | 21 | [Security, Privacy and Ethics](21-security-privacy-ethics.md) | Threat model, trust tiers, honesty invariants, export and deletion |
 | 22 | [Development Roadmap](22-roadmap.md) | Eight phases with exit criteria |
 | 23 | [Challenged Assumptions and Open Questions](23-challenged-assumptions.md) | Where the README's premises are wrong or underspecified, and the tradeoff register |
-| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0021, the decisions the rest of the docs assume |
+| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0022, the decisions the rest of the docs assume |
 | 25 | [Core Infrastructure](25-core-infrastructure.md) ✅ | What Milestone 2 built: the seven platform services, their ports, and how they start |
 | 26 | [The Turn/Memory Loop](26-turn-memory-loop.md) ✅ | What Milestone 6 built: observe → retrieve → inject → response context → store → persist |
 | 27 | [Personality, Relationship and the Prompt](27-personality-relationship-and-the-prompt.md) ✅ | What Milestone 9 built: traits and their brakes, the relationship, and the prompt the model receives |
 | 28 | [Avatar MVP](28-avatar-mvp.md) ✅ | What Milestone 10 built: a VRM avatar that reacts only to emotional state |
+| 29 | [Capability Assessment and Backlog](29-backlog.md) | Where HEDWIG stands against the vision, and the story backlog work is picked from |
 
 ## Document conventions
 
@@ -85,14 +86,18 @@ of what exists in code. Update it as each milestone lands.
 | Prompt assembly and the model-backed responder | **Implemented** (M9) | `src/hedwig/llm/prompts.py`, `responder.py` |
 | Brain collaborators: guard, tools | **Stubbed, and they say so** | `src/hedwig/brain/stubs.py` |
 | API: `/v1/health`, error envelope, correlation middleware | **Implemented** (M1) | `src/hedwig/api/` |
-| API: conversation endpoints, WebSocket, auth token | Not started | — |
-| CLI: `serve`, `config`, `models`, `version` | **Implemented** (M1, M3) | `src/hedwig/cli.py` |
+| API: bearer token on user-content routes | **Implemented** (FND-01, [ADR-0022](adr/0022-the-token-gates-user-content.md)) | `src/hedwig/core/token.py`, `src/hedwig/api/auth.py` |
+| API: sessions and messages (REST, non-streaming) | **Implemented** (FND-02, [16](16-api-structure.md) §12) | `src/hedwig/api/routes/conversation.py` |
+| API: WebSocket stream, session end, feedback | Not started — backlog FND-03, FND-05 | — |
+| CLI: `serve`, `chat`, `token`, `config`, `models`, `version` | **Implemented** (M1, M3, UX-01) | `src/hedwig/cli.py`, `src/hedwig/client.py` |
 | Frontend shell + transport + health view | **Implemented** (M1) | `frontend/` |
 | Electron desktop shell | **Implemented** (M1, [ADR-0015](adr/0015-electron-desktop-shell.md)) | `electron/` |
 | Architecture tests (layering, clock seam, port purity) | **Implemented** (M1) | `tests/architecture/` |
 | Avatar: VRM renderer, expression resolver, `/v1/mind/expression` | **Implemented** (M10, [ADR-0021](adr/0021-vrm-first-semantic-seam-kept.md)) | `src/hedwig/expression/`, `frontend/src/panes/avatar/` |
 | Avatar: 2D renderer, WebSocket frames, speech, lip sync, gestures | Not started | — |
-| Reflection, curiosity, goals, tools | Not started | — |
+| Memory maintenance scheduled in the running process | **Not wired** — backlog MEM-01 | `src/hedwig/memory/maintenance.py` |
+| Frontend conversation pane | Not started — backlog UX-02 | — |
+| Reflection, curiosity, goals, tools | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

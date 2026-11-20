@@ -107,6 +107,22 @@ class Brain:
     def graph(self) -> Any:
         return self._graph
 
+    async def open_session(self, *, channel: str = "api") -> str:
+        """Start a conversation and announce it. Returns the new session id.
+
+        Here rather than in the API route because the announcement belongs to the brain: had
+        a route opened the row itself, the turn's `ingest` would find the session already
+        open and never announce `conversation.session.started`, which emotion appraises
+        (docs/16 §12.3).
+        """
+        conversation = self.collaborators.conversation
+        session_id = new_id("sess")
+        if await conversation.open(session_id, channel=channel):
+            await self.collaborators.announcer.session_started(
+                session_id=session_id, channel=channel
+            )
+        return session_id
+
     async def run_turn(
         self,
         text: str,

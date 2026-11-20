@@ -95,7 +95,7 @@ internet about me?" exactly, and the only honest answer is a complete log.
 | Control | Detail |
 |---|---|
 | Bind address | `127.0.0.1` by default; a non-loopback bind logs a prominent warning and requires TLS config |
-| Token | 32 bytes of CSPRNG, generated at first run, `chmod 600` at `~/.hedwig/token`, required on every request including WS |
+| Token | 32 bytes of CSPRNG, generated at first run, `chmod 600` at `<data_dir>/token`, required on every user-content request including WS; health and HEDWIG's own mood stay open ([ADR-0022](adr/0022-the-token-gates-user-content.md)) |
 | Token rotation | `hedwig token rotate` |
 | CORS | Exactly the configured frontend origin. Never `*` |
 | CSP | Strict, served with the frontend; no inline scripts, no external origins |
