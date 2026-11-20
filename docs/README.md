@@ -97,6 +97,7 @@ of what exists in code. Update it as each milestone lands.
 | Architecture tests (layering, clock seam, port purity) | **Implemented** (M1) | `tests/architecture/` |
 | Avatar: VRM renderer, expression resolver, `/v1/mind/expression` | **Implemented** (M10, [ADR-0021](adr/0021-vrm-first-semantic-seam-kept.md)) | `src/hedwig/expression/`, `frontend/src/panes/avatar/` |
 | Avatar thinking/speaking states; voice (Piper) with amplitude mouth | **Implemented** (AVA-01, VOI-01, AVA-02, [15](15-avatar-controller.md) §13) | `src/hedwig/speech/`, `frontend/src/voice/`, `frontend/src/stores/activity.ts` |
+| Mind Inspector: mood, relationship, personality, memory, goals, curiosity | **Implemented** (UX-03, PER-01, [18](18-frontend-architecture.md) §14) | `frontend/src/panes/inspector/`, `src/hedwig/api/routes/persona.py` |
 | Avatar: 2D renderer, WebSocket frames, phoneme lip sync, gestures; speech recognition | Not started | — |
 | Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01) | `src/hedwig/wiring.py`, `src/hedwig/memory/maintenance.py` |
 | Frontend conversation pane, token delivery (Electron IPC, Vite proxy) | **Implemented** (UX-02, [18](18-frontend-architecture.md) §13) | `frontend/src/panes/conversation/`, `electron/` |

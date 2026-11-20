@@ -151,6 +151,22 @@ class PersonaReader(Protocol):
 
 
 @runtime_checkable
+class PersonaControl(Protocol):
+    """The user's hand on personality (PER-01, docs/16 §4.3): see every change, undo one.
+
+    Separate from `PersonaReader` so cognition, which only reads, never sees it.
+    """
+
+    async def history(
+        self, *, trait: Trait | None = None, limit: int = 100
+    ) -> list[dict[str, object]]: ...
+
+    async def revert(self, history_id: str) -> bool: ...
+
+    async def reset(self, trait: Trait) -> None: ...
+
+
+@runtime_checkable
 class RelationshipReader(Protocol):
     """Read-only access to the relationship with the user."""
 

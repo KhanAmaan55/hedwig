@@ -2,9 +2,11 @@ import { lazy, Suspense, type JSX } from "react";
 
 import { useHealth } from "./hooks/useHealth";
 import { StatusDot } from "./components/StatusDot";
+import { PaneBoundary } from "./components/PaneBoundary";
 import { SubsystemList } from "./components/SubsystemList";
 import { formatDuration } from "./lib/format";
 import ConversationPane from "./panes/conversation/ConversationPane";
+import InspectorPane from "./panes/inspector/InspectorPane";
 
 // Lazy: three.js and three-vrm are most of the bundle, and nothing else in the app needs them
 // (docs/28 §6).
@@ -13,8 +15,8 @@ const AvatarPane = lazy(() => import("./panes/avatar/AvatarPane"));
 /**
  * The conversation beside the avatar (docs/18 §2, §13.1).
  *
- * The Mind Inspector, the third pane, arrives with the subsystems it displays (UX-03). Until
- * then the health readout that was Milestone 1's whole UI lives in a collapsed "System" section.
+ * The Mind Inspector (UX-03) sits under the avatar; the health readout that was Milestone 1's
+ * whole UI lives in a collapsed "System" section below it.
  */
 export default function App(): JSX.Element {
   const { state, health, error, latencyMs, refresh } = useHealth();
@@ -56,7 +58,9 @@ export default function App(): JSX.Element {
         )}
 
         <div className="layout">
-          <ConversationPane />
+          <PaneBoundary name="Conversation">
+            <ConversationPane />
+          </PaneBoundary>
 
           <aside className="layout__side">
             <section className="panel">
@@ -65,6 +69,10 @@ export default function App(): JSX.Element {
                 <AvatarPane />
               </Suspense>
             </section>
+
+            <PaneBoundary name="Mind Inspector">
+              <InspectorPane />
+            </PaneBoundary>
 
             {health !== null && (
               <details className="panel system">

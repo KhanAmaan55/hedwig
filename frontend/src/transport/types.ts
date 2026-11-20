@@ -111,3 +111,83 @@ export interface MessagePage {
   messages: HistoryMessage[];
   next_before: string | null;
 }
+
+// --- the Mind Inspector (UX-03) -------------------------------------------------
+
+export interface MemoryItem {
+  id: string;
+  kind: "episode" | "belief";
+  text: string;
+  occurred_at: string;
+  salience: number;
+  confidence: number;
+  pinned: boolean;
+  forgotten: boolean;
+  /** Whose word it rests on: user, self, untrusted… (docs/13 §3). */
+  trust: string;
+  source: string | null;
+  status: string | null;
+}
+
+export interface MemorySearch {
+  query: string;
+  hits: { memory: MemoryItem; score: number; breakdown: Record<string, number> }[];
+}
+
+export interface Goal {
+  id: string;
+  description: string;
+  kind: string;
+  status: "proposed" | "active" | "blocked" | "done" | "abandoned";
+  priority: number;
+  progress: number;
+  context: string;
+  completion: string;
+  origin: string;
+  created_at: string;
+  last_touched_at: string;
+}
+
+export interface Gap {
+  id: string;
+  question: string;
+  origin: string;
+  priority: number;
+  status: string;
+  attempts: number;
+  created_at: string;
+}
+
+export interface Finding {
+  id: string;
+  question: string;
+  summary: string;
+  sources: { title?: string; url: string }[];
+  status: string;
+  trust: string;
+  created_at: string;
+}
+
+export interface EmotionReading {
+  happiness: number;
+  trust: number;
+  curiosity: number;
+  confidence: number;
+  energy: number;
+  stress: number;
+  valence: number;
+  arousal: number;
+}
+
+export interface PersonalityReading {
+  traits: { trait: string; value: number; anchor: number; lifetime_drift: number }[];
+  version: number;
+}
+
+export interface RelationshipReading {
+  familiarity: number;
+  affinity: number;
+  trust: number;
+  interaction_count: number;
+  last_interaction_at: string | null;
+}

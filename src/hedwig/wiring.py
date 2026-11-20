@@ -46,7 +46,7 @@ from hedwig.core.ports import (
     TaskScheduler,
 )
 from hedwig.core.ports.brain import MindReader
-from hedwig.core.ports.personality import PersonaReader, RelationshipReader, Trait
+from hedwig.core.ports.personality import PersonaControl, PersonaReader, RelationshipReader, Trait
 from hedwig.core.ports.scheduler import Priority, TaskSpec
 from hedwig.core.ports.speech import Speaker
 from hedwig.core.registry import InMemoryServiceRegistry
@@ -128,6 +128,8 @@ class Container:
     curiosity: CuriosityStore
     explorer: Explorer
     speaker: Speaker
+    persona_control: PersonaControl | None
+    """The same engine as `personality`, typed by the role the inspector needs (PER-01)."""
 
     def uptime_seconds(self) -> float:
         """Elapsed time since startup, measured monotonically.
@@ -520,6 +522,7 @@ def build_container(
         curiosity=curiosity,
         explorer=explorer,
         speaker=speaker,
+        persona_control=personality,
     )
 
     logger.debug(

@@ -586,3 +586,141 @@ code {
   border-color: var(--colour-accent);
   color: var(--colour-accent);
 }
+
+/* --- the Mind Inspector (UX-03) -------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--colour-border);
+  margin-bottom: var(--space-3);
+}
+
+.tabs__tab {
+  font: inherit;
+  font-size: var(--text-sm);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--colour-text-muted);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.tabs__tab[aria-selected="true"] {
+  color: var(--colour-text);
+  border-bottom-color: var(--colour-accent);
+}
+
+.tabs__tab:focus-visible {
+  outline: 2px solid var(--colour-accent);
+}
+
+.inspector__body {
+  max-height: 32rem;
+  overflow-y: auto;
+}
+
+.inspector__heading {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--colour-text-muted);
+}
+
+.inspector__form {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.inspector__input {
+  flex: 1;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--colour-text);
+  background: var(--colour-bg);
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+
+.bar {
+  display: grid;
+  grid-template-columns: 8rem 1fr 2rem;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-1);
+}
+
+.bar__label {
+  color: var(--colour-text-muted);
+}
+
+.bar__track {
+  height: 0.4rem;
+  background: var(--colour-surface-raised);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar__fill {
+  display: block;
+  height: 100%;
+  background: var(--colour-accent);
+}
+
+.bar__value {
+  text-align: right;
+  color: var(--colour-text-faint);
+  font-family: var(--font-mono);
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.item {
+  border: 1px solid var(--colour-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+
+.item--muted {
+  opacity: 0.6;
+}
+
+.item__text {
+  margin: 0;
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.item__meta {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  color: var(--colour-text-faint);
+}
+
+.item__sources {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-xs);
+}
+
+.item__sources a {
+  color: var(--colour-accent);
+}
+
+.item__actions {
+  display: flex;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
