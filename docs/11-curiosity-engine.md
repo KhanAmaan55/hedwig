@@ -1,6 +1,6 @@
 # 11 — Curiosity Engine
 
-**Status:** Design · **Depends on:** [06](06-memory-architecture.md), [13](13-knowledge-and-tools.md), [17](17-backend-architecture.md) · **Depended on by:** [12](12-reflection-engine.md)
+**Status:** Partially implemented (§13) · **Depends on:** [06](06-memory-architecture.md), [13](13-knowledge-and-tools.md), [17](17-backend-architecture.md) · **Depended on by:** [12](12-reflection-engine.md)
 
 ---
 
@@ -318,3 +318,71 @@ Publishes `curiosity.gap.registered`, `curiosity.exploration.started`,
 | Source reputation learned from corroboration outcomes | Enough findings to compute per-source reliability |
 | Scheduled digests (a weekly summary instead of interruptions) | Users want the findings but not the pings — likely, and cheap |
 | Cross-gap synthesis (findings that answer several gaps at once) | Gap register regularly contains clusters |
+
+---
+
+## 13. Implementation record (CUR-01, CUR-02, CUR-03)
+
+```mermaid
+graph TB
+    subgraph offline["Gap detection — always on, no network"]
+        T["conversation.turn.completed"] -->|HEDWIG said it could not know| GR
+        R["reflection.session.completed<br/><small>curious_about: general topics</small>"] --> GR
+        U["user: /v1/curiosity/gaps, hedwig curiosity ask"] --> GR
+        GR["curiosity.GapRegister<br/><small>dedupe · expire 30 d / 3 attempts · never personal</small>"]
+    end
+    subgraph explore["Exploration — opt-in twice, scheduled"]
+        S["curiosity.explore task<br/><small>every 30 min</small>"] --> PRE{"idle ≥10 min · not quiet hours ·<br/>energy ≥0.3 · budget left"}
+        PRE -->|yes| X["Explorer: top gap by score"]
+        X --> RT["research tool<br/><small>audited, quarantining</small>"]
+        RT --> LM["utility model: summarise FROM the sources"]
+        LM --> F["finding (untrusted)<br/><small>discard if duplicate or like a dismissed one</small>"]
+    end
+    subgraph surface["Surfacing — least intrusive first"]
+        F --> FEED["feed: /v1/curiosity/findings · confirm · dismiss"]
+        F --> MIND["FindingsMindReader<br/><small>≤2/day, ≥1 h apart: 'something I read'</small>"]
+    end
+```
+
+* **Two opt-ins, as ADR-0012 requires.** `curiosity.enabled` and `knowledge.web_enabled`, both
+  off by default. With either off, gaps are still recorded. The register is the list of things
+  HEDWIG knows it does not know, worth having offline (§3).
+* **Built origins.** `unanswered_question`: the user asked something and the turn could not
+  answer it, because the web was off or the reply said so. `user_interest`: reflection lists
+  general, non-personal topics the user cares about, published on its completion event so
+  reflection and curiosity stay independent. `user` (manual). The other origins of §3 wait for
+  their producers (T2 contradictions, goal linkage).
+* **No egress of user content (§6).** A gap whose text talks about the user ("my", "I", "we") is
+  never recorded, by the same `knowledge.cues.is_personal` rule the planner uses, and reflection
+  is told to phrase interests as general questions. Every gap is visible before it is explored.
+* **Preconditions and budget (§4)**, all required: idle ≥10 min (from the conversation log, so
+  it survives restarts), outside 22:00–08:00 local, `emotion.energy ≥ 0.3`, at most
+  `curiosity.max_explorations_daily` (5) research runs a day. One gap per run, chosen by §4's
+  score (`priority · staleness / (1 + attempts)`, modulated by mood curiosity).
+* **Assessment (§5.1), deterministic where it can be.** Research output reaches the utility
+  model framed as untrusted, with the instruction to summarise only what the sources say. The
+  finding is discarded if it is too similar to an existing finding (novelty) or to anything the
+  user dismissed (the asymmetric learning of §7). Findings are always `untrusted` and **never
+  become beliefs on their own**. *Confirm* in the feed creates a tentative, untrusted belief;
+  promotion beyond that needs corroboration (T2).
+* **Surfacing (§7), modes 1 and 2 only.** Passive: the findings feed. Deferred:
+  `FindingsMindReader` (composition, like goals) offers at most one unsurfaced finding to a
+  turn, at most 2 a day and an hour apart, under the label *"something you read while exploring;
+  mention it only if it fits the conversation"*. It is marked surfaced when offered. Active,
+  unprompted messages need the WebSocket and are not built.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Interests from reflection, as general questions | Example B of the vision works without sending anything personal | Topics as phrased by a small model | The gap register shows poor questions |
+| Deterministic novelty (word overlap) | No embeddings needed | Paraphrases slip through | MEM-04 brings embeddings |
+| No allowlist of domains | Research works on the open web | §6's "allowlist only" for curiosity | A finding from a bad source causes harm; the `source` table is designed for it |
+
+**Measured live** (`gemma4:e2b`, DuckDuckGo, scratch data). One general gap explored: three
+pages read, a cited three-sentence finding about agent memory (sliding windows, rolling
+summaries, episodic retrieval). Offered on "Hey HEDWIG!", with the first label ("mention it
+only if it fits") the reply was "Hello." 0/2. A greeting is the moment Example B describes, so
+curiosity now adds a *share* directive first among the directives when the offer comes from a
+greeting, and the label agrees ("when the moment fits, such as when they greet you"). Result:
+2/3 replies shared it ("Hello. I found an article discussing context-resident compression…").
+A 2B model's ceiling here is worth re-measuring on a larger one.
+

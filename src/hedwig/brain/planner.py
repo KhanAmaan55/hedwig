@@ -27,6 +27,7 @@ from hedwig.core.ports.brain import (
     ToolRequest,
     TurnPolicy,
 )
+from hedwig.knowledge.cues import needs_web
 
 logger = get_logger(__name__)
 
@@ -37,18 +38,6 @@ RECALL_PATTERN = re.compile(
     r"previously|before)\b",
     re.I,
 )
-WEB_PATTERN = re.compile(
-    r"\b(?:latest|newest|most recent|recently released|currently|nowadays|news|"
-    r"this (?:week|month|year)|right now|price of|release date|new version|which version|"
-    r"who won|weather|look (?:it|that|this) up|search (?:the web|online|for)|google it)\b"
-    r"|\b20(?:2[5-9]|[3-9]\d)\b",
-    re.I,
-)
-"""Cues that a question needs current information (docs/13 §13). Listed, so they are tested."""
-PERSONAL_PATTERN = re.compile(r"\b(?:my|mine|our|ours|i|i'm|i've|me|we|us)\b", re.I)
-"""A message about the user never goes to a search engine, cue or not: "my current project"
-is not a web question, and sending it out would leak it (docs/13 §13)."""
-
 NO_WEB_DIRECTIVE = (
     "This asks for current information, and web search is switched off. Say plainly that you "
     "cannot look it up right now, answer from what you know, and say it may be out of date."
@@ -203,8 +192,3 @@ class RulePlanner:
 
         logger.debug("queries planned", extra=fields(count=len(queries)))
         return tuple(dict.fromkeys(queries))  # de-duplicated, order preserved
-
-
-def needs_web(text: str) -> bool:
-    """Whether a question asks for current information, and is not about the user."""
-    return bool(WEB_PATTERN.search(text)) and not PERSONAL_PATTERN.search(text)

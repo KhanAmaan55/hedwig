@@ -166,10 +166,34 @@ class HedwigClient:
     def update_goal(self, goal_id: str, **changes: Any) -> dict[str, Any]:
         return self._request("PATCH", f"/v1/goals/{goal_id}", json=changes)
 
+    # -- curiosity (docs/11 §13) -----------------------------------------------
+
+    def gaps(self) -> list[dict[str, Any]]:
+        return self._list("/v1/curiosity/gaps")
+
+    def ask_curiosity(self, question: str) -> dict[str, Any]:
+        return self._request("POST", "/v1/curiosity/gaps", json={"question": question})
+
+    def findings(self) -> list[dict[str, Any]]:
+        return self._list("/v1/curiosity/findings")
+
+    def finding_action(self, finding_id: str, action: str) -> dict[str, Any]:
+        if action not in {"confirm", "dismiss"}:
+            raise ValueError(f"unknown finding action {action!r}")
+        return self._request("POST", f"/v1/curiosity/findings/{finding_id}/{action}")
+
+    def explore(self) -> dict[str, Any]:
+        return self._request("POST", "/v1/curiosity/explore")
+
     def egress(self, *, limit: int = 50) -> list[dict[str, Any]]:
         return list(self._request("GET", "/v1/egress", params={"limit": limit})["requests"])
 
     # -- transport ---------------------------------------------------------
+
+    def _list(self, path: str) -> list[dict[str, Any]]:
+        """For the endpoints whose body is a JSON array rather than an object."""
+        body: Any = self._request("GET", path)
+        return list(body)
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         try:

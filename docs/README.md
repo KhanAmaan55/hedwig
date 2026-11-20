@@ -21,7 +21,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 08 | [State Management](08-state-management.md) | The four state tiers, ownership rules, consistency, recovery |
 | 09 | [Emotion Engine](09-emotion-engine.md) ✅ | Appraisal, state integration, decay, behaviour bindings |
 | 10 | [Personality Engine](10-personality-engine.md) ✅ | Trait vector, evidence-based drift, guardrails, identity core |
-| 11 | [Curiosity Engine](11-curiosity-engine.md) | Knowledge-gap detection, budgeted exploration, interruption policy |
+| 11 | [Curiosity Engine](11-curiosity-engine.md) ◐ | Knowledge-gap detection, budgeted exploration, interruption policy |
 | 12 | [Reflection Engine](12-reflection-engine.md) ◐ | Five reflection tiers, consolidation, idempotency |
 | 13 | [Knowledge and Tools](13-knowledge-and-tools.md) ◐ | The four knowledge tiers, tool layer, provenance, injection defence |
 | 14 | [Language Model Gateway](14-language-model-gateway.md) ✅ | Provider abstraction, model tiering, prompt assembly, structured output |
@@ -102,7 +102,8 @@ of what exists in code. Update it as each milestone lands.
 | Reflection T1: session summary and belief extraction | **Implemented** (REF-01, [12](12-reflection-engine.md) §14) | `src/hedwig/reflection/` |
 | Goals: store, lifecycle, API/CLI, in the prompt, from reflection | **Implemented** (GOA-01/02, [08](08-state-management.md) §6.1) | `src/hedwig/goals/` |
 | Web research: opt-in search, fetch controls, citations, egress audit | **Implemented** (KNW-02/03, [13](13-knowledge-and-tools.md) §13) | `src/hedwig/knowledge/`, `src/hedwig/tools/research.py` |
-| Reflection T2–T4, curiosity | Not started — [29](29-backlog.md) | — |
+| Curiosity: gap register, gated exploration, findings feed, deferred surfacing | **Implemented** (CUR-01/02/03, [11](11-curiosity-engine.md) §13) | `src/hedwig/curiosity/` |
+| Reflection T2–T4 | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.
