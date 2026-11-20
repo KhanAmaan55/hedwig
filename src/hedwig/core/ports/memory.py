@@ -282,6 +282,13 @@ class MemoryStore(Protocol):
 
     async def restore(self, memory_id: MemoryId) -> bool: ...
 
+    async def correct(
+        self, memory_id: MemoryId, *, text: str | None = None, confidence: float | None = None
+    ) -> MemoryId:
+        """The user's correction replaces the memory; the old one is kept as history and the
+        replacement carries `TrustTier.USER` (docs/06 §18). Returns the replacement's id."""
+        ...
+
     async def iter_for_consolidation(
         self, *, since: datetime, kinds: frozenset[MemoryKind] | None = None
     ) -> AsyncIterator[Episode | Belief]: ...

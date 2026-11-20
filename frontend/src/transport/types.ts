@@ -127,6 +127,8 @@ export interface MemoryItem {
   trust: string;
   source: string | null;
   status: string | null;
+  /** Beliefs only: what replaced this one, when it was corrected or superseded. */
+  replaced_by?: string | null;
 }
 
 export interface MemorySearch {

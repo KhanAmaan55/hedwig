@@ -247,7 +247,7 @@ memory is under my control and explainable.
 - **Tests:** forget hides from recall in the next turn; restore brings it back.
 
 #### MEM-03 — Memory correction (`PATCH /memory/{id}`)
-**Status:** Todo · **P2** · **M** · **Depends on:** MEM-02, REF-01
+**Status:** Done (2026-11-21) · **P2** · **M** · **Depends on:** MEM-02, REF-01 · **Modules:** `memory/store.py`, `core/ports/memory.py`, `api/routes/memory.py`, CLI, inspector
 
 As the user, I want to correct a wrong memory so that the correction supersedes it with USER trust.
 
@@ -479,7 +479,7 @@ Remaining, in dependency order, highest value first:
 5. ~~MEM-05 → MEM-04~~ — done: recall@5 0.306 → 0.972. Next on it: HyDE, embeddings for REF-02
    candidates and capture novelty, a held-out half of the corpus.
 6. **KNW-01** — local documents (CURATED tier).
-7. **MEM-03**, **MEM-06**, **PER-02**, **COG-03**, **FND-06**, **EMO-02**, **VOI-02**/**VOI-03**,
+7. ~~MEM-03~~ (done), **MEM-06**, **PER-02**, **COG-03**, **FND-06**, **EMO-02**, **VOI-02**/**VOI-03**,
    **AVA-03**, **SEC-03** — as listed above.
 
 ## 6. Development log
@@ -673,4 +673,11 @@ tables, or copied rows). Nothing existing was changed or deleted.
   (paraphrase 0.167 → 1.000). Also found live and fixed: a shutdown race that dead-lettered the
   last memory's embedding. The suite replays the model's recorded vectors. Design and numbers in
   [06](06-memory-architecture.md) §17.
+- **MEM-03** Corrections — `PATCH /v1/memory/{id}`, `hedwig memory correct`, *Correct* in the
+  inspector. A corrected belief is superseded by one in the user's words (`trust = user`, active,
+  0.9 unless given); a corrected episode is replaced at the same moment and the old one
+  tombstoned as `contradicted` (restorable). Pins follow the memory; a `contradicted_by` edge and
+  `source_ref = correction:<id>` record it; no migration. Open REF-02 proposals about the old
+  belief disappear, and erasing the wrong version keeps the correction. Design in
+  [06](06-memory-architecture.md) §18.
 

@@ -70,6 +70,7 @@ function fakeApi(overrides: Partial<InspectorApi> = {}): InspectorApi {
       .fn()
       .mockResolvedValue({ query: "tea", hits: [{ memory: MEMORY, score: 1, breakdown: {} }] }),
     memoryAction: vi.fn().mockResolvedValue({ ...MEMORY, forgotten: true }),
+    correctMemory: vi.fn().mockResolvedValue({ ...MEMORY, id: "ep_2", trust: "user" }),
     disputes: vi.fn().mockResolvedValue([]),
     resolveDispute: vi.fn().mockResolvedValue(undefined),
     exportAll: vi.fn().mockResolvedValue(new ArrayBuffer(4)),
@@ -184,6 +185,37 @@ describe("InspectorPane", () => {
     tab("Memory");
     fireEvent.click(await screen.findByRole("button", { name: "Same thing" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("pinned");
+  });
+
+  it("corrects a memory in place, in the user's words", async () => {
+    const api = fakeApi();
+    render(<InspectorPane api={api} />);
+    tab("Memory");
+    fireEvent.click(await screen.findByRole("button", { name: "Correct" }));
+    const editor = screen.getByLabelText("Corrected memory");
+    expect(editor).toHaveValue(MEMORY.text);
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    fireEvent.change(editor, { target: { value: "User: my favourite tea is sencha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(api.correctMemory).toHaveBeenCalledWith("ep_1", {
+        text: "User: my favourite tea is sencha",
+      });
+    });
+    await waitFor(() => {
+      expect(api.memories).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByLabelText("Corrected memory")).not.toBeInTheDocument();
+  });
+
+  it("offers no correction for a belief that was already replaced", async () => {
+    const replaced: MemoryItem = { ...MEMORY, kind: "belief", status: "superseded" };
+    render(<InspectorPane api={fakeApi({ memories: vi.fn().mockResolvedValue([replaced]) })} />);
+    tab("Memory");
+    expect(await screen.findByText(/no longer true/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Correct" })).not.toBeInTheDocument();
   });
 
   it("searches as HEDWIG recalls", async () => {

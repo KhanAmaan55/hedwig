@@ -204,6 +204,17 @@ export class HedwigClient {
     return this.request<MemoryItem>(action === "unpin" ? "DELETE" : "POST", path, { auth: true });
   }
 
+  /** Replace a memory with the user's correction; returns the replacement (docs/06 §18). */
+  async correctMemory(
+    id: string,
+    correction: { text?: string; confidence?: number },
+  ): Promise<MemoryItem> {
+    return this.request<MemoryItem>("PATCH", `/v1/memory/${encodeURIComponent(id)}`, {
+      body: correction,
+      auth: true,
+    });
+  }
+
   async disputes(): Promise<BeliefDispute[]> {
     const body = await this.request<{ disputes: BeliefDispute[] }>(
       "GET",

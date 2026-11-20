@@ -200,7 +200,8 @@ export only the software can read is not really portability.
 ### 7.2 Correction
 
 Users may edit memory content, adjust confidence, retract beliefs, and revert personality
-drift. Corrections carry `TrustTier.USER` and supersede rather than overwrite, so the correction
+drift. Corrections carry `TrustTier.USER` and supersede rather than overwrite (built: MEM-03,
+docs/06 §18 — `PATCH /v1/memory/{id}`, `hedwig memory correct`, *Correct* in the inspector), so the correction
 itself is part of the history.
 
 ### 7.3 Deletion

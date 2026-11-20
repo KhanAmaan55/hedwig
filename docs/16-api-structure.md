@@ -79,7 +79,7 @@ Base: `http://127.0.0.1:8730/v1`
 | `POST` | `/memory/{id}/pin` · `DELETE` | Protect from forgetting |
 | `POST` | `/memory/{id}/forget` | Tombstone (reversible) |
 | `POST` | `/memory/{id}/restore` | Undo a tombstone |
-| `PATCH` | `/memory/{id}` | Correct content or confidence — user corrections are `USER` trust and supersede |
+| `PATCH` | `/memory/{id}` | Correct content or confidence — user corrections are `USER` trust and supersede (built: MEM-03, returns the replacement; docs/06 §18) |
 | `GET` | `/memory/timeline?from=&to=` | Episodes over a period, for the timeline view |
 | `GET` | `/entities?q=` · `GET /entities/{id}` | Entities, their memories, relationship state |
 | `GET` | `/beliefs?subject=&status=` | Beliefs, including superseded history |
