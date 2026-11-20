@@ -23,18 +23,18 @@ Each stage exists because of a specific failure:
   context reads to a model as a coherent history while a score-ordered one reads as a pile
   of fragments (docs/06 §5.5).
 
-The semantic (embedding) channel is specified in docs/06 §5 and is **not implemented here**
-— see docs/06 §13.2. Its weight is carried in the policy and the fusion is written to accept
-it, so switching it on is a channel registration rather than a rewrite.
+The fourth channel, semantic, is optional and injected (`SemanticChannel`, docs/06 §17.2): it
+finds memories by meaning through embeddings. Without it, retrieval is the three channels above.
 """
 
 from __future__ import annotations
 
 import math
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock
@@ -62,6 +62,89 @@ KIND_QUOTAS: dict[MemoryKind, float] = {
 
 _WORD = re.compile(r"[0-9A-Za-z_]+")
 
+STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "been",
+        "but",
+        "by",
+        "can",
+        "could",
+        "did",
+        "do",
+        "does",
+        "doing",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "how",
+        "i",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "me",
+        "my",
+        "myself",
+        "of",
+        "on",
+        "or",
+        "our",
+        "so",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "to",
+        "was",
+        "we",
+        "were",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "whom",
+        "why",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+        "yours",
+        "any",
+        "am",
+        "about",
+        "just",
+    ]
+)
+"""Words that match nearly every memory. Fusion uses ranks only (docs/06 §5.3), so a match on
+"is" ranked nearly as well as a match on "birthday", and recency then decided. The recall eval
+found it (MEM-05)."""
+
+
+class SemanticChannel(Protocol):
+    """Nearest memories by meaning, nearest first (docs/06 §17.2). Empty when unavailable."""
+
+    async def nearest(
+        self, queries: Sequence[str], *, kinds: Collection[MemoryKind], limit: int
+    ) -> list[MemoryId]: ...
+
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
@@ -81,9 +164,12 @@ class Candidate:
 class HybridRetrieval:
     """The `RetrievalEngine` implementation."""
 
-    def __init__(self, database: Database, *, clock: Clock) -> None:
+    def __init__(
+        self, database: Database, *, clock: Clock, semantic: SemanticChannel | None = None
+    ) -> None:
         self._db = database
         self._clock = clock
+        self._semantic = semantic
 
     async def search(
         self, queries: Sequence[str], *, policy: RetrievalPolicy | None = None
@@ -103,7 +189,14 @@ class HybridRetrieval:
             "lexical": resolved.lexical_weight,
             "structural": resolved.structural_weight,
             "temporal": resolved.temporal_weight,
+            "semantic": resolved.semantic_weight,
         }
+        if self._semantic is not None and resolved.semantic_weight > 0:
+            channels["semantic"] = await self._semantic.nearest(
+                cleaned,
+                kinds=resolved.include_kinds,
+                limit=resolved.candidates_per_channel,
+            )
 
         universe = {memory_id for ranked in channels.values() for memory_id in ranked}
         if not universe:
@@ -145,35 +238,46 @@ class HybridRetrieval:
     # -- channels ----------------------------------------------------------
 
     def _lexical(self, queries: Sequence[str], policy: RetrievalPolicy) -> list[MemoryId]:
-        """FTS5 over episode titles/content and belief statements."""
-        found: list[MemoryId] = []
-        seen: set[MemoryId] = set()
+        """FTS5 over episode titles/content and belief statements, ranked together by BM25.
+
+        Episodes and beliefs used to be concatenated, so a belief ranked after up to thirty
+        episodes however well it matched (MEM-05).
+        """
+        scored: dict[MemoryId, float] = {}
 
         for query in queries:
             match = _to_match(query)
             if not match:
                 continue
-
+            hits: list[tuple[str, float]] = []
             if MemoryKind.EPISODE in policy.include_kinds:
-                for row in self._db.query(
-                    "SELECT e.id FROM episode_fts f JOIN episode e ON e.rowid = f.rowid "
-                    "WHERE episode_fts MATCH ? AND e.tombstoned_at IS NULL "
-                    "ORDER BY bm25(episode_fts) LIMIT ?",
-                    (match, policy.candidates_per_channel),
-                ):
-                    _push(found, seen, MemoryId(str(row["id"])))
-
+                hits += [
+                    (str(row["id"]), float(row["rank"]))
+                    for row in self._db.query(
+                        "SELECT e.id, bm25(episode_fts) AS rank FROM episode_fts f "
+                        "JOIN episode e ON e.rowid = f.rowid "
+                        "WHERE episode_fts MATCH ? AND e.tombstoned_at IS NULL "
+                        "ORDER BY rank LIMIT ?",
+                        (match, policy.candidates_per_channel),
+                    )
+                ]
             if MemoryKind.BELIEF in policy.include_kinds:
-                for row in self._db.query(
-                    "SELECT b.id FROM belief_fts f JOIN belief b ON b.rowid = f.rowid "
-                    "WHERE belief_fts MATCH ? AND b.tombstoned_at IS NULL "
-                    "AND b.status IN ('tentative','active') "
-                    "ORDER BY bm25(belief_fts) LIMIT ?",
-                    (match, policy.candidates_per_channel),
-                ):
-                    _push(found, seen, MemoryId(str(row["id"])))
+                hits += [
+                    (str(row["id"]), float(row["rank"]))
+                    for row in self._db.query(
+                        "SELECT b.id, bm25(belief_fts) AS rank FROM belief_fts f "
+                        "JOIN belief b ON b.rowid = f.rowid "
+                        "WHERE belief_fts MATCH ? AND b.tombstoned_at IS NULL "
+                        "AND b.status IN ('tentative','active') "
+                        "ORDER BY rank LIMIT ?",
+                        (match, policy.candidates_per_channel),
+                    )
+                ]
+            for memory_id, rank in hits:  # bm25(): lower is better
+                key = MemoryId(memory_id)
+                scored[key] = min(scored.get(key, 0.0), rank)
 
-        return found
+        return sorted(scored, key=lambda key: scored[key])
 
     def _structural(self, policy: RetrievalPolicy) -> list[MemoryId]:
         """Memories linked to the entities this turn is about."""
@@ -222,7 +326,7 @@ class HybridRetrieval:
             candidates[memory_id] = Candidate(
                 memory_id=memory_id,
                 kind=MemoryKind.EPISODE,
-                text=_episode_text(str(row["title"]), str(row["content"])),
+                text=episode_text(str(row["title"]), str(row["content"])),
                 occurred_at=datetime.fromisoformat(row["occurred_at"]),
                 salience=float(row["salience"]),
                 confidence=float(row["confidence"]),
@@ -338,6 +442,11 @@ def _mmr(
     if diversity == 0.0:
         return list(items[:limit])
 
+    # Relevance and similarity must be on one scale. Fused scores are ~0.01 and similarity is
+    # 0-1, so unnormalised the penalty swamped relevance and MMR picked whatever shared no
+    # words with the first item — unrelated memories. The recall eval found it (MEM-05).
+    top = max(item.score for item in items) or 1.0
+
     selected: list[RetrievedItem] = [items[0]]
     remaining = list(items[1:])
 
@@ -345,7 +454,7 @@ def _mmr(
         best_index, best_value = 0, -math.inf
         for index, candidate in enumerate(remaining):
             penalty = max(_similarity(candidate, chosen) for chosen in selected)
-            value = (1 - diversity) * candidate.score - diversity * penalty
+            value = (1 - diversity) * candidate.score / top - diversity * penalty
             if value > best_value:
                 best_index, best_value = index, value
         selected.append(remaining.pop(best_index))
@@ -392,7 +501,7 @@ def _to_match(query: str) -> str:
     """
     # Extract words rather than blocklisting punctuation: FTS5 treats a surprising amount
     # of punctuation as syntax, and an allowlist cannot be incomplete.
-    words = [word for word in _WORD.findall(query) if len(word) > 1]
+    words = [w for w in _WORD.findall(query) if len(w) > 1 and w.lower() not in STOPWORDS]
     if not words:
         return ""
     # OR rather than AND: recall matters more than precision at the candidate stage, and
@@ -400,7 +509,7 @@ def _to_match(query: str) -> str:
     return " OR ".join(f'"{word}"' for word in words[:12])
 
 
-def _episode_text(title: str, content: str) -> str:
+def episode_text(title: str, content: str) -> str:
     """`title: content`, unless the title is only the start of the content.
 
     An interaction episode's title is its first line, truncated. Prefixing it repeated the

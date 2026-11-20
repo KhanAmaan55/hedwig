@@ -65,13 +65,13 @@ the repository, ahead of any new cognitive capability.
 | 13 | LLM gateway: tiering, streaming, structured output, metrics, replaceable provider | **COMPLETE** | `llm/`; `test_llm_gateway.py`, `test_ollama_provider.py`, `RecordedProvider` |
 | 3 | Episodic memory: capture, novelty gate, decay maths, tombstones | **COMPLETE** | `memory/capture.py`, `store.py`; `test_memory_*` |
 | 3 | Memory decay and forgetting **in the running system** | **COMPLETE** (was BROKEN) | Scheduled nightly (MEM-01), now the last stage of `reflection.nightly` (REF-02); `test_memory_maintenance_scheduled.py` |
-| 3 | Semantic memory (beliefs) | **PARTIAL** | T1 writes tentative beliefs (REF-01); T2 merges duplicates, promotes on two conversations, and puts judged conflicts to the user (REF-02). Paraphrases are not found without embeddings (MEM-04) |
+| 3 | Semantic memory (beliefs) | **PARTIAL** | T1 writes tentative beliefs (REF-01); T2 merges duplicates, promotes on two conversations, and puts judged conflicts to the user (REF-02). Recalled by meaning since MEM-04 |
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
 | 3 | Project memory | **MISSING** | No schema or module |
 | 3 | Consolidation / duplicates / conflicts | **PARTIAL** | Novelty gate reinforces lexical near-duplicates; `supersede_belief` exists but nothing detects conflicts |
 | 3 | User-controlled deletion, searchable, explainable | **PARTIAL** | `/v1/memory` and `hedwig memory`: list, search with score breakdown, pin, forget, restore (MEM-02); no `/explain` yet |
-| 3 | Embedding retrieval channel | **MISSING** | Deferred, docs/06 §13.2 |
+| 3 | Embedding retrieval channel | **COMPLETE** (MEM-04) | nomic-embed-text via the gateway, `sqlite-vec` in hedwig.db; recall@5 0.514 → 0.972 on the eval corpus (docs/06 §17) |
 | 4 | Personality: traits, identity core, guarded drift, reversal | **COMPLETE** | `personality/`; `test_personality_*`, `test_personality_in_the_turn.py` |
 | 4 | Personality: evidence-based drift *proposals* | **MISSING** | The proposer is reflection's job |
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
@@ -252,13 +252,13 @@ memory is under my control and explainable.
 As the user, I want to correct a wrong memory so that the correction supersedes it with USER trust.
 
 #### MEM-04 — Embedding retrieval channel
-**Status:** Todo · **P2** · **L** · **Depends on:** — · **Modules:** `memory/retrieval.py`, migration
+**Status:** Done (2026-11-21) · **P2** · **L** · **Depends on:** MEM-05 · **Modules:** `memory/embeddings.py`, `memory/retrieval.py`, `core/store/database.py`, migration 0017
 
 As HEDWIG, I want semantic recall over embeddings (sqlite-vec) fused by RRF, so that paraphrases
 are recalled. Requires the recall eval corpus first (MEM-05).
 
 #### MEM-05 — Recall eval corpus and baseline
-**Status:** Todo · **P1** · **M** · **Depends on:** — · **Modules:** `tests/evals/`
+**Status:** Done (2026-11-21) · **P1** · **M** · **Depends on:** — · **Modules:** `tests/evals/`, `scripts/eval_recall.py`
 
 As a developer, I want recall@5 measured on a fixed corpus, so that retrieval changes are judged
 by numbers.
@@ -476,7 +476,8 @@ Remaining, in dependency order, highest value first:
    judgement scenario in the eval harness, REF-02d.
 4. ~~SEC-02~~ — done. Next on it: date-range scope, import of the export format, fixing
    `auto_vacuum` (it never took effect; see docs/21 §7.4).
-5. **MEM-05** → **MEM-04** — the recall eval corpus, then the embedding channel.
+5. ~~MEM-05 → MEM-04~~ — done: recall@5 0.306 → 0.972. Next on it: HyDE, embeddings for REF-02
+   candidates and capture novelty, a held-out half of the corpus.
 6. **KNW-01** — local documents (CURATED tier).
 7. **MEM-03**, **MEM-06**, **PER-02**, **COG-03**, **FND-06**, **EMO-02**, **VOI-02**/**VOI-03**,
    **AVA-03**, **SEC-03** — as listed above.
@@ -654,4 +655,22 @@ tables, or copied rows). Nothing existing was changed or deleted.
   Purge now ends with a full VACUUM and verifies against the file's bytes. Also found:
   `auto_vacuum = INCREMENTAL` never took effect (WAL is set first). Design in
   [21](21-security-privacy-ethics.md) §7.4.
+
+### 2026-11-21 — Session 1, continued: recall
+
+- **MEM-05** Recall eval — `tests/evals/` (49 memories, 36 queries: lexical, paraphrase,
+  question), run in the normal suite with measured floors; `scripts/eval_recall.py` for live
+  numbers. It found three retrieval bugs no unit test had: MMR compared scores near 0.01 with
+  similarities in 0–1, so it picked unrelated memories; every word of a question (including
+  "is", "my") was an FTS match, and rank-only fusion let recency decide; beliefs always ranked
+  after up to thirty episodes. Recall@5 0.306 → 0.514.
+- **MEM-04** Semantic channel — `memory/embeddings.py`: vectors from nomic-embed-text (pulled
+  with the user's approval, 274 MB, local) in `memory_embedding` (migration 0017), searched with
+  `sqlite-vec` (added with approval; ADR-0005's choice), written by events and repaired by the
+  `memory.embed` task, guarded by model identity, off with a reason in health when either piece
+  is missing. **Finding:** as designed (top thirty per query) it did not help — fusion rewarded
+  being nominated over being close; nominating only near neighbours took recall@5 to 0.972
+  (paraphrase 0.167 → 1.000). Also found live and fixed: a shutdown race that dead-lettered the
+  last memory's embedding. The suite replays the model's recorded vectors. Design and numbers in
+  [06](06-memory-architecture.md) §17.
 

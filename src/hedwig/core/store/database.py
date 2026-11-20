@@ -66,6 +66,9 @@ class Database:
         self._local = threading.local()
         self._shared_memory: sqlite3.Connection | None = None
         self._closed = False
+        self.vector_search: bool | None = None
+        """Whether `sqlite-vec` loaded (docs/06 §17.2). None until the first connection."""
+        self.vector_problem = ""
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -115,9 +118,28 @@ class Database:
             if self._read_only and pragma in {"journal_mode", "auto_vacuum"}:
                 continue
             connection.execute(f"PRAGMA {pragma} = {value}")
+        self._load_vector_search(connection)
 
         logger.debug("database connection opened", extra=fields(path=str(self.path)))
         return connection
+
+    def _load_vector_search(self, connection: sqlite3.Connection) -> None:
+        """Load `sqlite-vec` if this Python can (ADR-0005). Optional: without it, semantic
+        recall is off and memory's health says why, rather than failing (docs/06 §17.2)."""
+        try:
+            import sqlite_vec
+
+            connection.enable_load_extension(True)
+            try:
+                sqlite_vec.load(connection)
+            finally:
+                connection.enable_load_extension(False)
+        except (ImportError, AttributeError, sqlite3.Error) as exc:
+            if self.vector_search is None:
+                logger.warning("vector search unavailable", extra=fields(error=str(exc)))
+            self.vector_search, self.vector_problem = False, f"sqlite-vec did not load: {exc}"
+            return
+        self.vector_search = True
 
     def close(self) -> None:
         for connection in (getattr(self._local, "connection", None), self._shared_memory):

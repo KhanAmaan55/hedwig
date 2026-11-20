@@ -17,6 +17,7 @@ dependencies = [
     "jsonschema>=4.26.0",
     "langgraph>=1.2.10",
     "langgraph-checkpoint-sqlite>=3.1.1",
+    "sqlite-vec>=0.1.9",
 ]
 
 [project.optional-dependencies]
@@ -97,6 +98,11 @@ pretty = true
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+# sqlite-vec ships no type stubs; it is one call, `sqlite_vec.load(connection)`.
+module = "sqlite_vec"
+ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
 # pytest

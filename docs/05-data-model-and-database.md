@@ -366,7 +366,9 @@ CREATE VIRTUAL TABLE document_chunk_fts USING fts5(
 );
 -- Triggers keep FTS in sync inside the same transaction as the write.
 
--- Vectors (sqlite-vec)
+-- Vectors (sqlite-vec). As built (MEM-04, migration 0017): a plain `memory_embedding` table
+-- (memory_id, memory_kind, model, dims, float32 vector, text_hash) searched with
+-- vec_distance_cosine, and the per-row `model` column as the identity guard — docs/06 §17.2.
 CREATE VIRTUAL TABLE vec_memory USING vec0(
     memory_id      TEXT PRIMARY KEY,
     embedding      FLOAT[768],

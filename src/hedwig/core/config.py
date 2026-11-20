@@ -164,6 +164,10 @@ class LlmConfig(BaseModel):
     utility: str = "qwen2.5:3b"
     """Planning, appraisal, extraction, summarisation — high volume, structured."""
     embedding: str = "nomic-embed-text"
+    embedding_query_prefix: str = "search_query: "
+    embedding_document_prefix: str = "search_document: "
+    """nomic-embed-text is trained with these task prefixes (docs/06 §17.2). Another model may
+    want none: set both to ""."""
 
     request_timeout_seconds: Annotated[float, Field(gt=0)] = 120.0
     connect_timeout_seconds: Annotated[float, Field(gt=0)] = 5.0
@@ -203,6 +207,9 @@ class MemoryConfig(BaseModel):
     means while the user sleeps. A machine that was asleep catches up once, on waking; the
     2 %/night forgetting cap holds however late the run is."""
     max_captures_per_turn: Annotated[int, Field(ge=1, le=50)] = 5
+    semantic_recall: bool = True
+    """Recall by meaning as well as by words (docs/06 §17.2). Needs `sqlite-vec` and the
+    embedding model; without either it stays off and memory's health says why."""
 
 
 class EmotionConfig(BaseModel):

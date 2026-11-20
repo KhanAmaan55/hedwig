@@ -39,6 +39,7 @@ TABLES: dict[str, Kind] = {
     "memory_access": Kind.RECORD,
     "memory_derivation": Kind.RECORD,
     "memory_entity_link": Kind.RECORD,
+    "memory_embedding": Kind.RECORD,
     "tombstone": Kind.RECORD,
     "tool_call": Kind.RECORD,
     "llm_call": Kind.RECORD,

@@ -64,6 +64,9 @@ class RecordedProvider:
     installed: tuple[str, ...] = ("llama3.1:8b", "qwen2.5:3b", "nomic-embed-text")
     available: bool = True
     embedding_dimensions: int = 8
+    vectors: dict[str, Sequence[float]] = field(default_factory=dict)
+    """Recorded embeddings by exact input text (with any prefix). A text found here gets its
+    real vector, so an eval can measure semantic recall without a model (docs/06 §17.2)."""
     calls: list[GenerationRequest] = field(default_factory=list)
     """Every request received, in order. Tests assert against this."""
 
@@ -179,7 +182,10 @@ class RecordedProvider:
             raise ModelUnavailableError("recorded provider is marked unavailable")
         # Deterministic from the text, so the same input always yields the same vector and
         # a similarity assertion is stable.
-        return [_pseudo_vector(text, self.embedding_dimensions) for text in texts]
+        return [
+            self.vectors.get(text) or _pseudo_vector(text, self.embedding_dimensions)
+            for text in texts
+        ]
 
     async def count_tokens(self, text: str, *, model: str) -> int:
         return max(1, len(text) // CHARS_PER_TOKEN)
