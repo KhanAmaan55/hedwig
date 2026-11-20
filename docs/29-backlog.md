@@ -273,7 +273,7 @@ beliefs, or its own table (ADR).
 ### 4.4 Personality
 
 #### PER-01 — Personality API
-**Status:** Todo · **P2** · **S** · **Depends on:** FND-01 · **Modules:** `api/routes/mind.py`
+**Status:** Done (2026-11-20) · **P2** · **S** · **Depends on:** FND-01 · **Modules:** `api/routes/mind.py`
 
 As the user, I want to see traits, drift history and revert a drift, so that HEDWIG's identity is
 inspectable and reversible (docs/16 §4.3).
@@ -413,7 +413,7 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 (ADR-0022).
 
 #### UX-03 — Mind Inspector
-**Status:** Todo · **P2** · **L** · **Depends on:** MEM-02, PER-01
+**Status:** Done (2026-11-20; traces view waits for SEC-01) · **P2** · **L** · **Depends on:** MEM-02, PER-01
 
 ### 4.13 Security and reliability
 
@@ -570,4 +570,9 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   (off by default, disabled with the reason when no voice is installed), *Stop*, and sending a
   message stops speech. Piper 1.8.0 and `en_US-lessac-medium` installed with the user's approval.
   Verified live in the browser. Design in [15](15-avatar-controller.md) §13.
+- **PER-01, UX-03** Personality API and the Mind Inspector — `/v1/mind/personality` (+ history,
+  revert, reset) and `/v1/mind/relationship` behind the token via a `PersonaControl` port; a
+  four-tab inspector (Mind, Memory, Goals, Curiosity) where every button is a public API call;
+  `PaneBoundary` so one pane's failure never blanks the app (found while testing). Verified live.
+  Design in [18](18-frontend-architecture.md) §14.
 

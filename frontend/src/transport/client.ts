@@ -8,8 +8,16 @@
 
 import type {
   ApiErrorBody,
+  EmotionReading,
   ExpressionIntent,
+  Finding,
+  Gap,
+  Goal,
   Health,
+  MemoryItem,
+  MemorySearch,
+  PersonalityReading,
+  RelationshipReading,
   MessagePage,
   SessionInfo,
   SpeechStatus,
@@ -146,6 +154,80 @@ export class HedwigClient {
     );
   }
 
+  // -- the Mind Inspector (UX-03) -----------------------------------------------
+
+  async emotion(): Promise<EmotionReading> {
+    return this.request<EmotionReading>("GET", "/v1/mind/emotion");
+  }
+
+  async personality(): Promise<PersonalityReading> {
+    return this.request<PersonalityReading>("GET", "/v1/mind/personality", { auth: true });
+  }
+
+  async relationship(): Promise<RelationshipReading> {
+    return this.request<RelationshipReading>("GET", "/v1/mind/relationship", { auth: true });
+  }
+
+  async memories(includeForgotten = false): Promise<MemoryItem[]> {
+    const query = includeForgotten ? "?limit=100&include_forgotten=true" : "?limit=100";
+    const body = await this.request<{ memories: MemoryItem[] }>("GET", `/v1/memory${query}`, {
+      auth: true,
+    });
+    return body.memories;
+  }
+
+  async searchMemory(q: string): Promise<MemorySearch> {
+    const query = new URLSearchParams({ q, limit: "10" });
+    return this.request<MemorySearch>("GET", `/v1/memory/search?${query.toString()}`, {
+      auth: true,
+    });
+  }
+
+  async memoryAction(
+    id: string,
+    action: "pin" | "unpin" | "forget" | "restore",
+  ): Promise<MemoryItem> {
+    const path = `/v1/memory/${encodeURIComponent(id)}/${action === "unpin" ? "pin" : action}`;
+    return this.request<MemoryItem>(action === "unpin" ? "DELETE" : "POST", path, { auth: true });
+  }
+
+  async goals(): Promise<Goal[]> {
+    const query = "?status=proposed&status=active&status=blocked";
+    const body = await this.request<{ goals: Goal[] }>("GET", `/v1/goals${query}`, { auth: true });
+    return body.goals;
+  }
+
+  async createGoal(description: string): Promise<Goal> {
+    return this.request<Goal>("POST", "/v1/goals", { body: { description }, auth: true });
+  }
+
+  async updateGoal(id: string, changes: Partial<Pick<Goal, "status" | "progress">>): Promise<Goal> {
+    return this.request<Goal>("PATCH", `/v1/goals/${encodeURIComponent(id)}`, {
+      body: changes,
+      auth: true,
+    });
+  }
+
+  async gaps(): Promise<Gap[]> {
+    return this.request<Gap[]>("GET", "/v1/curiosity/gaps", { auth: true });
+  }
+
+  async askCuriosity(question: string): Promise<Gap> {
+    return this.request<Gap>("POST", "/v1/curiosity/gaps", { body: { question }, auth: true });
+  }
+
+  async findings(): Promise<Finding[]> {
+    return this.request<Finding[]>("GET", "/v1/curiosity/findings", { auth: true });
+  }
+
+  async findingAction(id: string, action: "confirm" | "dismiss"): Promise<Finding> {
+    return this.request<Finding>(
+      "POST",
+      `/v1/curiosity/findings/${encodeURIComponent(id)}/${action}`,
+      { auth: true },
+    );
+  }
+
   // -- speech (docs/15 §13) -----------------------------------------------------
 
   async speechStatus(): Promise<SpeechStatus> {
@@ -165,7 +247,7 @@ export class HedwigClient {
   // -- transport ---------------------------------------------------------------
 
   private async request<T>(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PATCH" | "DELETE",
     path: string,
     options: RequestOptions = {},
     refreshToken = false,

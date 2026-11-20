@@ -362,3 +362,29 @@ error. REST only. §3's Zustand stores and TanStack Query arrive with the WebSoc
 Streaming and stage indicators (FND-05), feedback controls (`POST /messages/{id}/feedback`),
 citation chips into the Mind Inspector (UX-03), session list and switching, and the avatar's
 thinking/speaking states driven by the same turn state (AVA-01).
+
+---
+
+## 14. Implementation record — the Mind Inspector (UX-03, PER-01)
+
+Under the avatar, a tabbed panel: **Mind** (mood bars with the sentence "a simulation that
+shapes how HEDWIG speaks — not feelings", the relationship, the ten traits), **Memory** (search
+as recall ranks, pin, forget, restore, show forgotten), **Goals** (add, activate a proposal,
+close, drop), **Curiosity** (findings with source links, keep or dismiss, open questions, ask
+one). Every number is the backend's and every button is one public API call (docs/16 §2). There
+is no inspector-only endpoint, so the CLI can do everything the inspector does.
+
+* **PER-01** adds `GET /v1/mind/personality`, `/history`, `POST …/revert/{id}`, `…/reset` and
+  `GET /v1/mind/relationship`, behind the token (ADR-0022 §2). They go through a `PersonaControl`
+  port beside the read-only `PersonaReader`, so cognition never sees the controls.
+* **Error boundaries.** Each pane is wrapped in `PaneBoundary`. Writing the inspector's tests
+  showed that one malformed response could blank the whole app; now it replaces only that pane
+  with a notice and a retry.
+* **Accessibility.** Tabs are a `tablist` with arrow-key movement and roving `tabIndex`; bars are
+  `role="meter"` with values; links open outside the app (the shell's `setWindowOpenHandler`).
+* **Verified live** with real data in the browser pane: every tab populated through the Vite
+  proxy and the token.
+
+Not built: the traces view (§7.1, needs `/explain`, SEC-01), revert buttons in the UI (the API
+exists), and the timeline view.
+
