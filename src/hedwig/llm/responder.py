@@ -11,11 +11,12 @@ and their directives arrive already rendered. Each concern has one owner.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from hedwig.core.errors import CapabilityUnavailableError
+from hedwig.core.live import emit_live, is_live
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports.brain import (
     Intent,
@@ -26,7 +27,14 @@ from hedwig.core.ports.brain import (
     TrustTier,
     TurnPolicy,
 )
-from hedwig.core.ports.llm import GenerationRequest, GenerationResult, Role
+from hedwig.core.ports.llm import (
+    GenerationRequest,
+    GenerationResult,
+    ModelTier,
+    Role,
+    StreamChunk,
+    TokenUsage,
+)
 from hedwig.core.ports.sessions import WindowMessage
 from hedwig.llm.errors import LLMError
 from hedwig.llm.prompts import PROMPT_VERSION, SAFETY_MARGIN, Entry, PromptAssembler
@@ -51,6 +59,8 @@ class Generator(Protocol):
     """The slice of the gateway a responder needs."""
 
     async def generate(self, request: GenerationRequest) -> GenerationResult: ...
+
+    def stream(self, request: GenerationRequest) -> AsyncIterator[StreamChunk]: ...
 
 
 @dataclass(slots=True)
@@ -119,7 +129,8 @@ class GatewayResponder:
         )
 
         try:
-            result = await self.gateway.generate(request)
+            # Someone is watching this turn live (ADR-0023): stream, and pass each piece on.
+            result = await (self._stream(request) if is_live() else self.gateway.generate(request))
         except LLMError as error:
             logger.warning("language model unavailable", extra=fields(error=str(error)))
             raise CapabilityUnavailableError(
@@ -137,6 +148,24 @@ class GatewayResponder:
         if prompt.trimmed:
             logger.info("prompt trimmed to fit", extra=fields(**prompt.trimmed))
         return reply
+
+    async def _stream(self, request: GenerationRequest) -> GenerationResult:
+        pieces: list[str] = []
+        async for chunk in self.gateway.stream(request):
+            if chunk.text:
+                pieces.append(chunk.text)
+                await emit_live("token", {"text": chunk.text})
+            if chunk.done and chunk.result is not None:
+                return chunk.result
+        # A provider that ended without a final chunk: keep what arrived.
+        return GenerationResult(
+            text="".join(pieces),
+            model="unknown",
+            tier=request.tier or ModelTier.CONVERSATIONAL,
+            purpose=request.purpose,
+            usage=TokenUsage(prompt=0, completion=0),
+            duration_ms=0.0,
+        )
 
     async def refuse(self, *, verdict: SafetyVerdict) -> str:
         return REFUSAL

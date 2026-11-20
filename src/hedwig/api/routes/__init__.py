@@ -14,6 +14,7 @@ from hedwig.api.routes import (
     mind,
     persona,
     speech,
+    stream,
 )
 
 v1 = APIRouter(prefix="/v1")
@@ -26,5 +27,6 @@ v1.include_router(goals.router)
 v1.include_router(egress.router)
 v1.include_router(curiosity.router)
 v1.include_router(speech.router)
+v1.include_router(stream.router)
 
 __all__ = ["v1"]

@@ -107,7 +107,7 @@ the repository, ahead of any new cognitive capability.
 | G9 | Any custom-validator rejection made the 422 handler crash into a 500 (`ctx` held a `ValueError`) | Bug | Fixed with FND-02 (`api/errors.py`) |
 | G10 | With `gemma4:e2b`, replies open with a meta-commentary ("That lands as…") and end with a clarifying question every time | Quality | Fixed by PER-03 |
 | G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | Fixed by PER-03 |
-| G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | FND-05; investigate warm-up |
+| G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | Mitigated by FND-05 (stages, then words as they arrive); a cold model's first token is still slow, so a warm-up at start is future work |
 | G14 | Event recovery runs once, inside `bus.start()`, before emotion, personality and relationship subscribe in their own `start()`. After a crash their missed events are never re-delivered: at-least-once silently does not cover them | Reliability bug (pre-existing) | Fixed by FND-07 |
 | G15 | The restatement rule dropped a recalled memory when *any* window message appeared in it, HEDWIG's own repeated replies included | Bug | Fixed with MEM-02 (`brain/context.py`) |
 | G13 | `VITE_HEDWIG_API` both moved the Vite proxy and was exposed to the page, so setting it bypassed the proxy (and the token it adds) | Config trap | Fixed with UX-02: the proxy also reads `HEDWIG_API_BASE_URL` |
@@ -170,7 +170,7 @@ two turns never interleave their windows.
   sessions run in parallel.
 
 #### FND-05 — WebSocket stream
-**Status:** Todo · **P1** · **L** · **Depends on:** FND-02 · **Modules:** `api/stream.py`, `brain/`, `frontend/src/transport/`
+**Status:** Done (2026-11-20; replay-on-reconnect, interrupt and approvals not yet) · **P1** · **L** · **Depends on:** FND-02 · **Modules:** `api/stream.py`, `brain/`, `frontend/src/transport/`
 
 As the desktop UI, I want one authenticated WebSocket carrying token streaming, turn stages,
 mind updates and notices, so that replies appear as they are written and the avatar can react.
@@ -435,8 +435,8 @@ GOA-01/02, COG-01/02/04, KNW-02/03, CUR-01/02/03, AVA-01/02, VOI-01 (and part of
 
 Remaining, in dependency order, highest value first:
 
-1. **FND-05** — WebSocket stream: token streaming (ends the "thinking…" wait and G12), stage
-   indicators, active surfacing of findings, and the base for COG-03 approvals.
+1. ~~FND-05~~ — done. Next on it: replay on reconnect, `interrupt`, and pushing `mind.update`
+   instead of polling (EMO-02).
 2. **SEC-01** — `/explain/{message_id}`, then the inspector's traces view. The records exist.
 3. **REF-02** — T2 nightly consolidation: belief corroboration and promotion, contradictions as
    gaps, summary of the day. Split before starting (XL).
@@ -582,4 +582,15 @@ compiles. Live scorecard on `gemma4:e2b` (`scripts/eval_models.py`, 2 runs each,
 **25/26**. Every scenario passed every run except *keeps goals in their place* (1/2;
 stochastic on a 2B model, 3/3 when measured earlier). Migrations 0010–0014 are additive (new
 tables, or copied rows). Nothing existing was changed or deleted.
+
+### 2026-11-20 — Session 1, continued: streaming
+
+- **FND-05** The live channel — `/v1/stream` WebSocket (docs/16 §13): token as a subprotocol or a
+  proxy header, never a query string; `turn.started`, `turn.stage`, `token`, `message.complete`
+  (the REST body, built by the same `turn_reply`), `turn.completed`, `error`, `ping`/`hello`.
+  Tokens and stages reach it through a context-scoped live sink, not the event bus
+  ([ADR-0023](adr/0023-live-turn-output-through-a-scoped-sink.md)); a watcher that leaves never
+  fails a turn. In the app: `transport/socket.ts`, stage labels, words as they arrive, REST
+  fallback, token refresh on 4401, keepalive. Vite proxies and authenticates upgrades.
+  Verified live with `gemma4:e2b`. Python 1094 tests, frontend 101.
 

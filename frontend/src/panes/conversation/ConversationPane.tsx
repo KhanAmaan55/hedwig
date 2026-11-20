@@ -8,13 +8,23 @@ import {
   type SessionStorage,
 } from "./useConversation";
 import { client } from "../../transport/client";
+import type { StreamApi } from "../../transport/socket";
 import { useVoice, type VoiceApi } from "../../voice/useVoice";
 
 export interface ConversationPaneProps {
   readonly api?: ConversationApi;
   readonly storage?: SessionStorage;
   readonly voiceApi?: VoiceApi;
+  /** The live channel (docs/16 §13). Without it, replies arrive whole over REST. */
+  readonly live?: StreamApi | null;
 }
+
+const STAGES: Record<string, string> = {
+  recalling: "remembering…",
+  deliberating: "thinking…",
+  acting: "checking…",
+  composing: "putting it into words…",
+};
 
 /**
  * Talk to HEDWIG (docs/18 §5, §13).
@@ -26,12 +36,16 @@ export default function ConversationPane({
   api = client,
   storage = browserStorage,
   voiceApi = client,
+  live = null,
 }: ConversationPaneProps): JSX.Element {
   const voice = useVoice(voiceApi);
-  const { messages, busy, loading, error, send, startOver } = useConversation(
+  const { messages, busy, loading, error, stage, send, startOver } = useConversation(
     api,
     storage,
-    voice.say,
+    (text, streamed) => {
+      voice.say(text, { fallback: !streamed });
+    },
+    live,
   );
   // Speaking over the user is the one interruption that must never happen (VOI-03).
   const sendAndHush = async (text: string) => {
@@ -95,10 +109,10 @@ export default function ConversationPane({
             )}
           </li>
         ))}
-        {busy && (
+        {busy && !messages.some((m) => m.streaming) && (
           <li className="message message--hedwig message--thinking" role="status">
             <span className="message__speaker">HEDWIG</span>
-            <p className="message__text">thinking…</p>
+            <p className="message__text">{(stage && STAGES[stage]) ?? "thinking…"}</p>
           </li>
         )}
       </ol>

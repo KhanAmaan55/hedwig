@@ -34,6 +34,7 @@ from hedwig.brain.routing import (
 )
 from hedwig.brain.state import TurnState, new_turn, summarise
 from hedwig.core.ids import new_id
+from hedwig.core.live import emit_live
 from hedwig.core.logging import fields, get_logger
 
 logger = get_logger(__name__)
@@ -47,7 +48,7 @@ def build_turn_graph(deps: Collaborators, *, checkpointer: Any | None = None) ->
     that calls no model and touches no memory is cheaper to re-run than to restore, and
     the swap is one argument.
     """
-    nodes = make_nodes(deps)
+    nodes = {name: _staged(name, node) for name, node in make_nodes(deps).items()}
     # Typed loosely on purpose: LangGraph's generics describe its own machinery, and
     # pinning them here would couple us to a signature that changes between releases.
     builder: Any = StateGraph(TurnState)
@@ -89,6 +90,32 @@ def build_turn_graph(deps: Collaborators, *, checkpointer: Any | None = None) ->
     builder.add_edge("finalize", END)
 
     return builder.compile(checkpointer=checkpointer or InMemorySaver())
+
+
+STAGES = {
+    "recall": "recalling",
+    "deliberate": "deliberating",
+    "act": "acting",
+    "compose": "composing",
+}
+"""The stages a watcher is told about (docs/16 §5.3). Only the ones worth a word on screen."""
+
+
+def _staged(name: str, node: Any) -> Any:
+    """Announce the stage to a live watcher, if any (ADR-0023), then run the node unchanged."""
+    stage = STAGES.get(name)
+    if stage is None:
+        return node
+
+    async def run(state: TurnState) -> TurnState:
+        detail = None
+        if name == "act" and (request := state.get("tool_request")) is not None:
+            detail = request.name
+        await emit_live("stage", {"stage": stage, "detail": detail})
+        result: TurnState = await node(state)
+        return result
+
+    return run
 
 
 @dataclass(slots=True)

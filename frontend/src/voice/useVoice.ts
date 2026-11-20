@@ -21,7 +21,8 @@ export interface Voice {
   readonly reason: string;
   readonly speaking: boolean;
   readonly toggle: () => void;
-  readonly say: (text: string) => void;
+  /** `fallback: false` when the words already moved the mouth as they streamed. */
+  readonly say: (text: string, options?: { fallback?: boolean }) => void;
   readonly stop: () => void;
 }
 
@@ -66,7 +67,8 @@ export function useVoice(api: VoiceApi = defaultClient): Voice {
   }, []);
 
   const say = useCallback(
-    (text: string) => {
+    (text: string, options: { fallback?: boolean } = {}) => {
+      const fallback = options.fallback ?? true;
       stop();
       const begin = (utterance: Utterance) => {
         current.current = utterance;
@@ -85,9 +87,9 @@ export function useVoice(api: VoiceApi = defaultClient): Voice {
             begin(speakAudio(audio));
           })
           .catch(() => {
-            begin(speakSilently(text));
+            if (fallback) begin(speakSilently(text));
           });
-      } else {
+      } else if (fallback) {
         begin(speakSilently(text));
       }
     },

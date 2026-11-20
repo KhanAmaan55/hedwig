@@ -10,14 +10,14 @@ reads the log back. This module validates, translates and maps outcomes to statu
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from collections.abc import Mapping
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field, field_validator
 
 from hedwig.api.auth import require_token
 from hedwig.api.deps import ContainerDep
-from hedwig.brain.state import intent_of
 from hedwig.core.context import current_correlation_id
 from hedwig.core.errors import CapabilityUnavailableError, NotFoundError
 from hedwig.core.ports import SessionInfo
@@ -138,12 +138,19 @@ async def send_message(session_id: str, body: MessageCreate, container: Containe
     final = await container.brain.run_turn(
         body.text, session_id=session_id, correlation_id=current_correlation_id()
     )
+    return turn_reply(final, session_id=session_id)
+
+
+def turn_reply(final: Mapping[str, Any], *, session_id: str) -> TurnReply:
+    """The reply a client receives, from a finished turn. Shared by REST and the stream.
+
+    Raises the typed outage error for a failed turn, carrying HEDWIG's own honest sentence
+    (docs/16 §12.3).
+    """
     turn_status = final.get("status", "failed")
     reply = final.get("reply", "")
 
     if turn_status not in ("completed", "refused", "truncated"):
-        # The turn already told the user the truth in `reply` (docs/07 §8). Keep the code
-        # machine-readable and the honest sentence available (docs/16 §12.3).
         raise CapabilityUnavailableError(
             "HEDWIG could not compose a reply: the language model is unavailable.",
             turn_id=final.get("turn_id"),
@@ -154,7 +161,8 @@ async def send_message(session_id: str, body: MessageCreate, container: Containe
 
     context = final.get("response_context")
     mind = final.get("mind")
-    intent = intent_of(final)
+    plan = final.get("plan")
+    intent = plan.intent if plan is not None else None
     return TurnReply(
         turn_id=str(final.get("turn_id")),
         session_id=session_id,
