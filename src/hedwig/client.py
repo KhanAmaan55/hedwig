@@ -166,6 +166,9 @@ class HedwigClient:
     def update_goal(self, goal_id: str, **changes: Any) -> dict[str, Any]:
         return self._request("PATCH", f"/v1/goals/{goal_id}", json=changes)
 
+    def egress(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        return list(self._request("GET", "/v1/egress", params={"limit": limit})["requests"])
+
     # -- transport ---------------------------------------------------------
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:

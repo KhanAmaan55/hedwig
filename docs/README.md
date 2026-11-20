@@ -101,7 +101,8 @@ of what exists in code. Update it as each milestone lands.
 | Frontend conversation pane, token delivery (Electron IPC, Vite proxy) | **Implemented** (UX-02, [18](18-frontend-architecture.md) §13) | `frontend/src/panes/conversation/`, `electron/` |
 | Reflection T1: session summary and belief extraction | **Implemented** (REF-01, [12](12-reflection-engine.md) §14) | `src/hedwig/reflection/` |
 | Goals: store, lifecycle, API/CLI, in the prompt, from reflection | **Implemented** (GOA-01/02, [08](08-state-management.md) §6.1) | `src/hedwig/goals/` |
-| Reflection T2–T4, curiosity, tools | Not started — [29](29-backlog.md) | — |
+| Web research: opt-in search, fetch controls, citations, egress audit | **Implemented** (KNW-02/03, [13](13-knowledge-and-tools.md) §13) | `src/hedwig/knowledge/`, `src/hedwig/tools/research.py` |
+| Reflection T2–T4, curiosity | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

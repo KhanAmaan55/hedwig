@@ -234,6 +234,9 @@ class Plan:
     rationale: str = ""
     tool: ToolRequest | None = None
     confidence: float = 0.5
+    directives: tuple[str, ...] = ()
+    """How this plan wants the reply composed, e.g. "say you cannot look this up" or "cite the
+    sources" (docs/13 §13). Rendered before cognition's directives by the responder."""
 
     @property
     def needs_tool(self) -> bool:

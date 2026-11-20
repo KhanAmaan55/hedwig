@@ -233,6 +233,18 @@ class SessionsConfig(BaseModel):
     reap_interval_seconds: Annotated[float, Field(gt=0)] = 300.0
 
 
+class KnowledgeConfig(BaseModel):
+    """Knowledge beyond memory (docs/13 §13)."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    web_enabled: bool = False
+    """Off by default. When on, the questions HEDWIG researches are sent to the search engine
+    — only those, never the conversation — and every request is in `egress_log`."""
+    search_endpoint: str = "https://html.duckduckgo.com/html/"
+    timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 10.0
+
+
 class ReflectionConfig(BaseModel):
     """Reflection (docs/12). Only T1 exists so far (docs/12 §14)."""
 
@@ -305,6 +317,7 @@ class Config(BaseSettings):
     personality: PersonalityConfig = PersonalityConfig()
     sessions: SessionsConfig = SessionsConfig()
     reflection: ReflectionConfig = ReflectionConfig()
+    knowledge: KnowledgeConfig = KnowledgeConfig()
     plugins: PluginsConfig = PluginsConfig()
 
     @property

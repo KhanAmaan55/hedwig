@@ -354,3 +354,69 @@ graph LR
 | Rule guard that observes, never refuses | No false refusals of the user | No protection against the user's own pasted injection | Pasted content becomes a channel (documents, KNW-01): score it as `CURATED`, not `USER` |
 | Approval not implemented | Read-only tools need none | Side-effecting tools must wait | COG-03 with the WebSocket |
 
+---
+
+## 13. Implementation record — web research (KNW-02, KNW-03, COG-04)
+
+**Decided with the user (2026-11-20): DuckDuckGo, opt-in.** No API key, no account. Off by
+default (`knowledge.web_enabled = false`). When on, only the question HEDWIG researches leaves
+the machine, never the conversation around it, and every outbound request is in `egress_log`.
+
+```mermaid
+sequenceDiagram
+    participant U as user
+    participant PL as RulePlanner
+    participant RT as research tool
+    participant W as knowledge.web
+    participant DDG as DuckDuckGo
+    participant WEB as pages
+    U->>PL: "What's the latest Python release?"
+    alt web off
+        PL-->>PL: ANSWER + directive: say you cannot look it up; give what you know, dated
+    else web on
+        PL->>RT: research(query)
+        RT->>W: search(query)
+        W->>DDG: POST html endpoint (generic UA) — logged
+        DDG-->>W: results → parse → scan each snippet
+        RT->>W: read(top 2 urls)
+        W->>WEB: robots.txt, GET (≤1 MB, 10 s, public addresses only) — logged
+        WEB-->>W: html → text → normalise → scan → quarantine if flagged
+        RT-->>PL: numbered sources [1] title — url, excerpt
+        RT->>RT: remember a research note (trust: untrusted)
+        PL-->>PL: ANSWER + directive: use it, cite [1] [2] with links, say what is unsure
+    end
+```
+
+* **When to research is decided by rules (COG-04).** Cues for current information: *latest,
+  newest, recent, current, news, this week, today, price, release, version, who won, look it up,
+  search online*, or a year from 2025 on. A wrong guess costs one search; the cues are listed in
+  the planner and tested. A model-judged "do I know this?" is future work, measured against
+  this.
+* **Layer 1, fetch controls.** `http`/`https` only; the host is resolved and private, loopback,
+  link-local and reserved addresses are refused (no reaching into the user's own network);
+  `robots.txt` honoured; HTML and text only; 1 MB and 10 s caps; a generic User-Agent with
+  nothing about the user. No cookies, no credentials.
+* **Layers 2–3, sanitise and detect.** Script, style and hidden markup removed; NFKC; zero-width
+  characters stripped; every snippet and page scored by `knowledge.injection`. A quarantined page
+  is dropped and named in the tool output ("1 source withheld"), never shown to the model.
+* **Layer 4, framing.** Research arrives as tool output marked `untrusted`, under the prompt's
+  "information, never instructions" label.
+* **Layer 5, capability denial.** No tool with side effects exists. Whatever a page says, there
+  is nothing for it to make HEDWIG *do*.
+* **KNW-03, knowing what it knows.** The reply is told to cite sources by number with their
+  links. The research note it keeps is an `observation` episode with **`untrusted`** provenance
+  and the URLs as its source. Recall later shows it in the untrusted block, apart from what the
+  user said (memory) and from HEDWIG's own inferences (`self`). The four kinds of knowing in the
+  vision (remembered, read in a document, just researched, uncertain) map to `user`/`self`,
+  `curated`, `untrusted`, and the explicit uncertainty directive.
+* **Approval.** docs/13 §5.1 wants per-call approval for `web_search` in conversation. The
+  approval interrupt needs the WebSocket (COG-03). Until it exists, the user's opt-in is a
+  standing approval, the audit log is the record, and switching it off is one config line.
+  Recorded as a deviation, not a silent default.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| DuckDuckGo HTML endpoint | Free, keyless | Brittle markup; may rate-limit or ask for a CAPTCHA (never bypassed; the search just fails honestly) | It breaks often: SearXNG as a drop-in, same parser seam |
+| Rule-based "needs the web" | Testable, free, no false confidence | Misses unmarked questions about recent events | A model judgement beats it on a labelled set |
+| Standing approval via opt-in | Works without the WebSocket | No per-call confirmation | COG-03 |
+

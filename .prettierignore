@@ -14,3 +14,6 @@ coverage/
 
 # Python is formatted by ruff
 *.py
+
+# Recorded fixtures are kept byte-for-byte as their sources produced them
+tests/fixtures/

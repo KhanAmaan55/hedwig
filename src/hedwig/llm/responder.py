@@ -74,7 +74,7 @@ class GatewayResponder:
         Raises `CapabilityUnavailableError` when there is no model to ask; `compose` turns
         that into an honest reply and a failed turn, rather than an exception the user sees.
         """
-        directives = list(context.directives)
+        directives = [*plan.directives, *context.directives]
         if plan.intent is Intent.CLARIFY:
             directives.insert(0, CLARIFY_DIRECTIVE)
 
