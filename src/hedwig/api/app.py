@@ -19,6 +19,7 @@ from hedwig.api.errors import install_error_handlers
 from hedwig.api.middleware import CorrelationMiddleware
 from hedwig.api.routes import v1
 from hedwig.core.logging import fields, get_logger, setup_logging
+from hedwig.core.token import TokenFile
 from hedwig.wiring import Container, build_container
 
 logger = get_logger(__name__)
@@ -26,8 +27,9 @@ logger = get_logger(__name__)
 DESCRIPTION = """
 HEDWIG's local API. Loopback only.
 
-Milestone 1 exposes system endpoints. Conversation, memory, mind state and the WebSocket
-stream arrive in later milestones; see `docs/16-api-structure.md` for the full surface.
+Conversation routes need `Authorization: Bearer <token>`; the token is in the data
+directory (`hedwig token show`). Health and HEDWIG's own mind state are open (ADR-0022).
+See `docs/16-api-structure.md` for the full surface and what is still to come.
 """.strip()
 
 
@@ -64,6 +66,11 @@ def create_app(container: Container) -> FastAPI:
         openapi_url="/openapi.json" if container.config.is_development else None,
     )
     app.state.container = container
+    # Created on first run, before anything could ask for it (ADR-0022). The edge owns it
+    # because the edge is what checks it; the container never needs to know.
+    token_file = TokenFile(container.config.runtime.token_path)
+    token_file.ensure()
+    app.state.token_file = token_file
 
     # Outermost first: correlation must wrap everything, including CORS failures.
     app.add_middleware(CorrelationMiddleware)
@@ -72,7 +79,7 @@ def create_app(container: Container) -> FastAPI:
         allow_origins=list(container.config.api.cors_origins),
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Correlation-ID"],
+        allow_headers=["Authorization", "Content-Type", "X-Correlation-ID"],
         expose_headers=["X-Correlation-ID"],
     )
 

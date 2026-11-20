@@ -27,7 +27,9 @@ from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock, EventBus, Health, HealthStatus
 from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.core.ports.sessions import (
+    HistoryMessage,
     MessageRole,
+    SessionInfo,
     TurnRecord,
     WindowMessage,
     WorkingSetRecord,
@@ -288,6 +290,51 @@ class SqliteSessionStore:
             ),
         )
 
+    # -- history, for clients (ConversationHistory, docs/16 §12) -------------
+
+    async def get_session(self, session_id: str) -> SessionInfo | None:
+        row = self._db.query_one(f"{_SESSION_SELECT} WHERE id = ?", (session_id,))
+        return _session(row) if row else None
+
+    async def list_sessions(self, *, limit: int = 20) -> Sequence[SessionInfo]:
+        rows = self._db.query(
+            f"{_SESSION_SELECT} ORDER BY updated_at DESC, id DESC LIMIT ?", (max(1, limit),)
+        )
+        return tuple(_session(row) for row in rows)
+
+    async def history(
+        self, session_id: str, *, limit: int = 50, before: str | None = None
+    ) -> Sequence[HistoryMessage]:
+        """Pages by `seq`, addressed by message id (docs/16 §12.4).
+
+        The cursor is resolved to its `seq` within *this* session, so a message id from
+        another session cannot be used to read across sessions.
+        """
+        upper = _NO_UPPER_BOUND
+        if before is not None:
+            row = self._db.query_one(
+                "SELECT seq FROM message WHERE id = ? AND session_id = ?", (before, session_id)
+            )
+            if row is None:
+                return ()
+            upper = int(row["seq"])
+
+        rows = self._db.query(
+            "SELECT id, seq, role, text, created_at FROM message "
+            "WHERE session_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?",
+            (session_id, upper, max(1, limit)),
+        )
+        return tuple(
+            HistoryMessage(
+                id=str(row["id"]),
+                seq=int(row["seq"]),
+                role=str(row["role"]),
+                text=str(row["text"]),
+                created_at=str(row["created_at"]),
+            )
+            for row in reversed(rows)
+        )
+
     # -- reads for diagnostics --------------------------------------------
 
     def counts(self) -> dict[str, int]:
@@ -318,6 +365,26 @@ class SqliteSessionStore:
 
     def _now(self) -> str:
         return self._clock.now().isoformat(timespec="milliseconds")
+
+
+_NO_UPPER_BOUND = 2**62
+"""`seq < this` admits every message; one query shape for the first page and the rest."""
+
+_SESSION_SELECT = (
+    "SELECT id, channel, started_at, ended_at, end_reason, turn_count, updated_at FROM session"
+)
+
+
+def _session(row: Any) -> SessionInfo:
+    return SessionInfo(
+        id=str(row["id"]),
+        channel=str(row["channel"]),
+        started_at=str(row["started_at"]),
+        ended_at=str(row["ended_at"]) if row["ended_at"] is not None else None,
+        end_reason=str(row["end_reason"]) if row["end_reason"] is not None else None,
+        turn_count=int(row["turn_count"]),
+        last_active_at=str(row["updated_at"]),
+    )
 
 
 def _iso(value: datetime | None) -> str | None:

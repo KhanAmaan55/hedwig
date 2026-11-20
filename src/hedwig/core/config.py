@@ -76,6 +76,12 @@ class RuntimeConfig(BaseModel):
     def backups_dir(self) -> Path:
         return self.data_dir / "backups"
 
+    @property
+    def token_path(self) -> Path:
+        """The API bearer token (ADR-0022). Never in config: it lives beside the data it
+        protects, readable by the user's account alone."""
+        return self.data_dir / "token"
+
 
 class ApiConfig(BaseModel):
     """The HTTP/WebSocket edge.

@@ -3,22 +3,27 @@
 A first-class client, not a debugging afterthought (docs/17 §9). Building it first is what
 forces the API to be complete before any UI exists.
 
-Milestone 1 provides the commands that exist without a database: `serve`, `config`,
-`version`. `chat`, `memory`, `mind`, `reflect` and `db` arrive with the subsystems they
-drive.
+Commands: `serve`, `chat`, `token`, `config`, `models`, `version`. `memory`, `mind`,
+`reflect` and `db` arrive with the subsystems they drive (docs/29).
+
+`chat` is a client of the running backend, not a second backend: it reaches HEDWIG only
+through `hedwig.client`, which only speaks the public API (docs/16 §12.3).
 """
 
 from __future__ import annotations
 
 import json
 import sys
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, Literal
 
 import typer
 
 from hedwig import __version__
+from hedwig.client import ClientError, HedwigClient
 from hedwig.core.config import load_config
 from hedwig.core.logging import setup_logging
+from hedwig.core.token import TokenFile
 
 app = typer.Typer(
     name="hedwig",
@@ -136,6 +141,152 @@ def models(
         asyncio.run(report())
     finally:
         container.database.close()
+
+
+Kind = Literal["hedwig", "info", "error"]
+Writer = Callable[[str, Kind], None]
+
+CHAT_HELP = "/new starts a new conversation · /quit leaves (or Ctrl-D)"
+RESUME_PREVIEW = 6
+
+
+def run_chat(
+    client: HedwigClient,
+    *,
+    session_id: str | None,
+    read: Callable[[str], str],
+    write: Writer,
+) -> int:
+    """The chat loop, separated from the terminal so it can be tested without one.
+
+    Returns the process exit code. Errors that a retry could fix (the model is still
+    loading, the backend restarted) leave the loop running; errors that cannot be fixed from
+    inside it (the token was rotated, the session does not exist) end it.
+    """
+    try:
+        if session_id is None:
+            session_id = client.open_session(channel="cli")
+        elif not client.session_exists(session_id):
+            write(f"No conversation called {session_id}.", "error")
+            return 1
+        else:
+            for message in client.history(session_id, limit=RESUME_PREVIEW):
+                write(f"{_speaker(message.role)}: {message.text}", "info")
+    except ClientError as error:
+        write(_explain(error), "error")
+        return 1
+
+    write(f"Talking to HEDWIG ({session_id}). {CHAT_HELP}", "info")
+    while True:
+        try:
+            line = read("you> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            write("", "info")
+            break
+        if not line:
+            continue
+        if line in {"/quit", "/exit"}:
+            break
+        if line == "/help":
+            write(CHAT_HELP, "info")
+            continue
+        if line == "/new":
+            try:
+                session_id = client.open_session(channel="cli")
+            except ClientError as error:
+                write(_explain(error), "error")
+                continue
+            write(f"New conversation ({session_id}).", "info")
+            continue
+
+        try:
+            reply = client.send(session_id, line)
+        except ClientError as error:
+            # A failed turn still carries HEDWIG's own honest sentence (docs/16 §12.3).
+            if error.detail.get("reply"):
+                write(str(error.detail["reply"]), "hedwig")
+            write(_explain(error), "error")
+            if error.code == "unauthorized":
+                return 1
+            continue
+        write(reply.text, "hedwig")
+
+    write(f"Resume with: hedwig chat --session {session_id}", "info")
+    return 0
+
+
+def _speaker(role: str) -> str:
+    return "HEDWIG" if role == "hedwig" else "you" if role == "user" else role
+
+
+def _explain(error: ClientError) -> str:
+    if error.code == "unreachable":
+        return "HEDWIG is not running. Start it with `uv run hedwig serve` (or `npm run dev`)."
+    if error.code == "unauthorized":
+        return "The API token was refused. If it was rotated, start `hedwig chat` again."
+    if error.code == "capability_unavailable":
+        return "The language model is unavailable. `hedwig models` shows what is missing."
+    return f"{error.code}: {error.message}"
+
+
+@app.command()
+def chat(
+    session: Annotated[
+        str | None, typer.Option(help="Resume a conversation by id instead of starting one.")
+    ] = None,
+    url: Annotated[str | None, typer.Option(help="The backend. Defaults to the config.")] = None,
+) -> None:
+    """Talk to HEDWIG in the terminal. Needs the backend running (`hedwig serve`)."""
+    config = load_config()
+    token = TokenFile(config.runtime.token_path).read()
+    if token is None:
+        typer.secho(
+            f"No API token at {config.runtime.token_path}. Start the backend once "
+            "(`uv run hedwig serve`) and it will create one.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    colours: dict[Kind, str | None] = {
+        "hedwig": typer.colors.CYAN,
+        "info": typer.colors.BRIGHT_BLACK,
+        "error": typer.colors.YELLOW,
+    }
+
+    def write(text: str, kind: Kind) -> None:
+        prefix = "HEDWIG> " if kind == "hedwig" else ""
+        typer.secho(f"{prefix}{text}", fg=colours[kind], err=kind == "error")
+
+    with HedwigClient(url or config.api.base_url, token) as client:
+        code = run_chat(client, session_id=session, read=input, write=write)
+    raise typer.Exit(code)
+
+
+token_app = typer.Typer(
+    help="The API token that guards your conversations (ADR-0022).", no_args_is_help=True
+)
+app.add_typer(token_app, name="token")
+
+
+@token_app.command("show")
+def token_show() -> None:
+    """Print the token, creating it if this is the first run."""
+    config = load_config()
+    print(TokenFile(config.runtime.token_path).ensure())
+
+
+@token_app.command("rotate")
+def token_rotate() -> None:
+    """Replace the token. A running backend honours the new one on its next request."""
+    config = load_config()
+    token = TokenFile(config.runtime.token_path).rotate()
+    print(token)
+    typer.secho(
+        "Clients holding the old token will be refused until they reconnect.",
+        fg=typer.colors.YELLOW,
+        err=True,
+    )
 
 
 @app.command()

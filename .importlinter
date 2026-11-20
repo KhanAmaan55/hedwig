@@ -13,6 +13,7 @@ name = Dependencies point downward only
 type = layers
 layers =
     hedwig.cli
+    hedwig.client
     hedwig.api
     hedwig.wiring
     hedwig.brain
@@ -21,6 +22,8 @@ layers =
     hedwig.memory
     hedwig.llm
     hedwig.core
+; `client` sits under `cli` and above `api` so the CLI may use it; the separate contract below
+; forbids it from importing anything of HEDWIG's, so it can only ever speak HTTP.
 ; `sessions` is a Layer 2 module (docs/02 §5.1), above `memory`: it owns the conversation
 ; log, and memory depends on nothing in it — the recent-turn window is a query that lives
 ; with the table it reads (docs/26 §4).
@@ -55,3 +58,20 @@ forbidden_modules =
     pydantic_settings
     uvicorn
     typer
+
+[importlinter:contract:client-speaks-only-http]
+name = The API client reaches HEDWIG only through the public API (docs/16 §12.3)
+type = forbidden
+source_modules =
+    hedwig.client
+forbidden_modules =
+    hedwig.api
+    hedwig.wiring
+    hedwig.brain
+    hedwig.emotion
+    hedwig.personality
+    hedwig.expression
+    hedwig.sessions
+    hedwig.memory
+    hedwig.llm
+    hedwig.core

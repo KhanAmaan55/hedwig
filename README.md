@@ -208,9 +208,12 @@ personality, curiosity and reflection engines, the avatar controller, knowledge 
 the API, backend and frontend, observability, testing, and security and ethics. The index
 is in [`docs/README.md`](docs/README.md).
 
-**Status:** Milestone 1 (Phase 0 — Project Foundation) is complete. Structure, seams and the
-desktop shell exist; no memory, cognition or model yet. What is and is not implemented is
-tracked in [`docs/README.md`](docs/README.md#implementation-status).
+**Status:** HEDWIG converses. A turn runs through the LangGraph brain with persistent
+episodic memory, a six-drive emotion engine, a ten-trait personality and a local Ollama model,
+and you can talk to it with `hedwig chat` or the conversation API. The desktop app shows the
+avatar but has no chat pane yet. Reflection, curiosity, goals, web knowledge and voice are not
+built. Module status is in [`docs/README.md`](docs/README.md#implementation-status); the
+capability assessment and story backlog are in [`docs/29-backlog.md`](docs/29-backlog.md).
 
 ---
 
@@ -234,6 +237,8 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `npm run check` | Format, lint, typecheck and test — everything CI runs |
 | `npm test` | Python and frontend suites |
 | `uv run hedwig serve` | Backend alone |
+| `uv run hedwig chat` | Talk to HEDWIG in the terminal (backend must be running); `--session <id>` resumes |
+| `uv run hedwig token show` / `rotate` | The API token that guards your conversations |
 | `uv run hedwig config` | The effective configuration after all layers resolve |
 
 Configuration layers, lowest precedence first: defaults in code → `config/hedwig.toml` →

@@ -39,6 +39,13 @@ class InvalidRequestError(HedwigError):
     http_status = 400
 
 
+class UnauthorizedError(HedwigError):
+    """The request did not carry a valid API token (ADR-0022)."""
+
+    code = "unauthorized"
+    http_status = 401
+
+
 class NotFoundError(HedwigError):
     """The requested resource does not exist."""
 

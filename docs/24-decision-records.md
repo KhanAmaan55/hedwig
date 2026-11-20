@@ -38,6 +38,7 @@ expensive to reverse, or (c) is one a future reader would otherwise assume was a
 | [0019](adr/0019-the-emotion-vector-is-six-named-drives.md) | The emotion vector is six named drives, and trust is one of them | Accepted |
 | [0020](adr/0020-two-trusts-kept-apart.md) | Two trusts, kept apart | Accepted |
 | [0021](adr/0021-vrm-first-semantic-seam-kept.md) | VRM first, with the semantic seam kept | Accepted |
+| [0022](adr/0022-the-token-gates-user-content.md) | The API token gates user content, read from a file on every request | Accepted |
 
 ---
 
