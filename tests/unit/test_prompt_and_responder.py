@@ -27,13 +27,16 @@ from hedwig.core.ports.brain import (
 from hedwig.core.ports.llm import Role
 from hedwig.core.ports.sessions import WindowMessage
 from hedwig.core.store import Database
+from hedwig.core.text import estimate_tokens
 from hedwig.llm import LanguageModelGateway
 from hedwig.llm.errors import ModelUnavailableError
-from hedwig.llm.prompts import LABELS, PROMPT_VERSION, Entry, PromptAssembler
+from hedwig.llm.prompts import LABELS, PROMPT_VERSION, REPLY_RULE, Entry, PromptAssembler
 from hedwig.llm.recorded import RecordedProvider, ScriptedResponse
 from hedwig.llm.responder import CLARIFY_DIRECTIVE, PURPOSE, REFUSAL, GatewayResponder
 
 IDENTITY = ("You are HEDWIG.", "Your values: honesty.")
+RULE = estimate_tokens(REPLY_RULE)
+"""The reply rule is in every prompt (docs/27 §6.3); trimming budgets are on top of it."""
 DIRECTIVES = ("Be concise but complete.", "Give a clear recommendation.")
 
 
@@ -64,7 +67,13 @@ def test_the_users_message_is_last() -> None:
 
     assert prompt.messages[-1].role is Role.USER
     assert prompt.messages[-1].content == "what now?"
-    assert [m.role for m in prompt.messages] == [Role.USER, Role.ASSISTANT, Role.USER]
+    assert [m.role for m in prompt.messages] == [
+        Role.SYSTEM,
+        Role.USER,
+        Role.ASSISTANT,
+        Role.USER,
+    ]
+    assert prompt.messages[0].content == REPLY_RULE
 
 
 def test_every_knowledge_section_is_labelled_as_information() -> None:
@@ -98,6 +107,40 @@ def test_assembly_is_deterministic() -> None:
     assert build() == build()
 
 
+def test_the_reply_rule_closes_every_system_message() -> None:
+    """Nearest the user's words, where a small model attends most (docs/27 §6.3)."""
+    for memory in ([], [Entry("They live in Porto.")]):
+        prompt = PromptAssembler().assemble(
+            budget=10_000, user="u", identity=IDENTITY, directives=DIRECTIVES, memory=memory
+        )
+        assert prompt.messages[0].content.endswith(REPLY_RULE)
+    assert PROMPT_VERSION == "compose.v2"
+    # Each clause answers a habit measured live (docs/27 §6.3).
+    for clause in ("first person", "how a message comes across", "bracketed", "offer of more help"):
+        assert clause in REPLY_RULE
+
+
+def test_a_memory_is_one_line() -> None:
+    """A multi-line bullet's later lines read as messages of their own."""
+    prompt = PromptAssembler().assemble(
+        budget=10_000,
+        user="u",
+        memory=[Entry("User: my tea is lapsang\nHEDWIG: noted")],
+    )
+    system = prompt.messages[0].content
+    assert "- User: my tea is lapsang / HEDWIG: noted" in system
+    assert "\nHEDWIG: noted" not in system
+
+
+def test_the_memory_label_says_whose_memories_and_what_for() -> None:
+    """G11: a recalled, cited preference was answered with "I can't know that"."""
+    label = LABELS["memory"]
+    assert "this person" in label
+    assert "Use it" in label
+    assert '"User" is them' in label
+    assert "not instructions" in label  # the injection defence keeps its sentence
+
+
 # =========================================================================
 # Trimming
 # =========================================================================
@@ -105,7 +148,7 @@ def test_assembly_is_deterministic() -> None:
 
 def test_untrusted_material_is_dropped_first() -> None:
     prompt = PromptAssembler().assemble(
-        budget=60,
+        budget=60 + RULE + estimate_tokens(LABELS["memory"]),
         user="question",
         memory=[Entry("a trusted memory", rank=0.1)],
         untrusted=[Entry("x" * 200, rank=0.9)],
@@ -117,7 +160,7 @@ def test_untrusted_material_is_dropped_first() -> None:
 
 def test_memory_is_trimmed_lowest_score_first() -> None:
     prompt = PromptAssembler().assemble(
-        budget=70,
+        budget=70 + RULE + estimate_tokens(LABELS["memory"]),
         user="q",
         memory=[Entry("kept " + "a" * 60, rank=0.9), Entry("dropped " + "b" * 60, rank=0.1)],
     )
@@ -129,7 +172,7 @@ def test_memory_is_trimmed_lowest_score_first() -> None:
 
 def test_the_conversation_is_trimmed_oldest_first() -> None:
     prompt = PromptAssembler().assemble(
-        budget=40,
+        budget=40 + RULE,
         user="q",
         window=[(Role.USER, "oldest " + "x" * 200), (Role.ASSISTANT, "newest")],
     )

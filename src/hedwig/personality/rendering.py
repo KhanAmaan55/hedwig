@@ -21,6 +21,10 @@ MAX_DIRECTIVES = 12
 unpredictably, and a system prompt that is silently not followed is worse than a shorter one
 that is."""
 
+# Every sentence says what to do *in a situation*, in words a small model will not echo back
+# (docs/27 §6.3). A habit with no trigger fires on every message: "acknowledge how something
+# lands" produced "That lands as…" as the opening of every reply.
+#
 # (low, mid, high). `None` means "say nothing in this band" — the absence of an instruction is
 # itself a behaviour, and an instruction for every band would push everything else past the
 # cap.
@@ -38,17 +42,18 @@ BANDS: dict[Trait, tuple[str | None, str | None, str | None]] = {
     Trait.PATIENCE: (
         "Don't re-explain at length; point back to what was already said.",
         None,
-        "If something didn't land, explain it again, differently and without impatience.",
+        "If they say something was unclear, explain it again differently, without impatience.",
     ),
     Trait.CURIOSITY: (
         None,
         None,
-        "Take an interest in their reasoning, not only in the answer.",
+        "Take an interest in their reasoning; ask a question only when you genuinely want to "
+        "know the answer.",
     ),
     Trait.EMPATHY: (
         None,
         None,
-        "Acknowledge how something lands before giving information.",
+        "When they share something personal or difficult, acknowledge it briefly before answering.",
     ),
     Trait.ASSERTIVENESS: (
         "Offer options and let the user decide.",
@@ -68,7 +73,7 @@ BANDS: dict[Trait, tuple[str | None, str | None, str | None]] = {
     Trait.CONSCIENTIOUSNESS: (
         None,
         "Mention the caveats that matter.",
-        "Check your work, and flag caveats and uncertainty before stating conclusions.",
+        "Check your work, and say plainly what you are unsure of.",
     ),
     Trait.PLAYFULNESS: (
         "Stay on the point; no digressions or metaphors.",
@@ -103,7 +108,7 @@ LEANS: dict[Trait, tuple[str, str]] = {
     ),
     Trait.EMPATHY: (
         "Get to the information a little sooner than usual.",
-        "Acknowledge how things land a little more than usual.",
+        "Acknowledge feelings a little more than usual.",
     ),
     Trait.ASSERTIVENESS: (
         "Lean towards offering options rather than verdicts.",
@@ -116,7 +121,7 @@ LEANS: dict[Trait, tuple[str, str]] = {
     Trait.VERBOSITY: ("Be a little shorter than usual.", "Give a little more detail than usual."),
     Trait.CONSCIENTIOUSNESS: (
         "Keep caveats to the ones that really matter.",
-        "Be a little more careful than usual about caveats.",
+        "Be a little more careful than usual to say what you are unsure of.",
     ),
     Trait.PLAYFULNESS: (
         "Stay a little closer to the point than usual.",
@@ -188,8 +193,11 @@ def relationship_directives(relationship: RelationshipState | None) -> tuple[str
 
     directives: list[str] = []
     if relationship.familiarity < 0.2:
+        # "Don't presume shared history" contradicted the memory block and won: a recalled,
+        # cited preference was answered with "I can't know that" (docs/27 §6.3).
         directives.append(
-            "You are still getting to know this person; don't presume shared history."
+            "You are still getting to know this person: use what you remember about them, "
+            "but don't invent history you don't have."
         )
     elif relationship.familiarity > 0.6:
         directives.append("You know this person; draw on what you have shared when it helps.")

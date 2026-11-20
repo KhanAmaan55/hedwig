@@ -105,8 +105,8 @@ the repository, ahead of any new cognitive capability.
 | G7 | No session end from a client — only the idle reaper ends sessions | Incomplete workflow | FND-03 |
 | G8 | Concurrent turns on one session are not serialised | Latent bug | FND-04 |
 | G9 | Any custom-validator rejection made the 422 handler crash into a 500 (`ctx` held a `ValueError`) | Bug | Fixed with FND-02 (`api/errors.py`) |
-| G10 | With `gemma4:e2b`, replies open with a meta-commentary ("That lands as…") and end with a clarifying question every time | Quality | PER-03 |
-| G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | PER-03 |
+| G10 | With `gemma4:e2b`, replies open with a meta-commentary ("That lands as…") and end with a clarifying question every time | Quality | Fixed by PER-03 |
+| G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | Fixed by PER-03 |
 | G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | FND-05; investigate warm-up |
 | G13 | `VITE_HEDWIG_API` both moved the Vite proxy and was exposed to the page, so setting it bypassed the proxy (and the token it adds) | Config trap | Fixed with UX-02: the proxy also reads `HEDWIG_API_BASE_URL` |
 
@@ -264,7 +264,7 @@ As the user, I want to see traits, drift history and revert a drift, so that HED
 inspectable and reversible (docs/16 §4.3).
 
 #### PER-03 — Reply quality on small models: voice and use of memory
-**Status:** Todo · **P1** · **M** · **Depends on:** UX-01 · **Modules:** `llm/prompts.py`, `personality/rendering.py`
+**Status:** Done (2026-11-20) · **P1** · **M** · **Depends on:** UX-01 · **Modules:** `llm/prompts.py`, `personality/rendering.py`
 
 As the user, I want HEDWIG to answer naturally and to *use* what it recalled — no narration of what
 my message "lands as", no reflexive "does that clarify…?", no "I don't know what tea you like" with
@@ -417,9 +417,9 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 
 Dependency order, highest value first:
 
-1. ~~UX-02~~, ~~MEM-01~~ — done
-2. **PER-03** — reply quality on small models (the most visible problem now that it is usable)
-3. **FND-05** — streaming, which also answers G12
+1. ~~UX-02~~, ~~MEM-01~~, ~~PER-03~~ — done
+2. **FND-05** — streaming, which also answers G12
+3. **FND-03**, **FND-04** — session end and per-session turn lock (small, unblock REF-01)
 4. **FND-03**, **FND-04** — session end, per-session turn lock (small, unblock REF-01)
 5. **AVA-01** — the avatar reacts to turns
 6. **MEM-02** — memory control for the user
@@ -456,7 +456,7 @@ token, token file `0600`, a two-turn `hedwig chat`, and a *new* session recallin
 session's fact through memory (2 memories cited).
 
 **Known issues:** G8 (concurrent turns on one session — the UI sends one at a time), no retry
-dedupe (FND-06), G10/G11 (reply quality), G12 (cold first reply). The uncommitted `reasoning`/`think` change to the LLM gateway that was in the working
+dedupe (FND-06), G12 (cold first reply). The uncommitted `reasoning`/`think` change to the LLM gateway that was in the working
 tree at the start belongs to the user and was left uncommitted.
 
 - **UX-02** Conversation pane — `frontend/src/panes/conversation/`; the API token reaches the
@@ -471,4 +471,15 @@ pane connects through the proxy with the token, shows the message optimistically
 conversation*, and shows "drew on 1 memory" for a cross-session question. That run surfaced G11
 and G12.
 
-**Next:** PER-03 — make the small model use what memory hands it.
+- **PER-03** Reply quality on small models — prompt `compose.v2`. Every bad habit traced to one
+  line of the prompt: directives rewritten to name a situation rather than a standing habit,
+  the relationship directive no longer forbids using memory, the memory label says whose
+  memories they are and that they are for use, one memory per line with no duplicated title,
+  and a closing reply rule. Design and before/after table in [27](27-personality-relationship-and-the-prompt.md) §6.3.
+  On `gemma4:e2b`: narration gone, *uses what it remembers* 5/5 direct, 40/40 across eight
+  live scenarios, personality adherence unchanged (9/9), median turn 1.3 s → 0.4 s.
+  The eval harness also stopped passing runs whose turns all failed.
+
+**Python tests:** 935 passed.
+
+**Next:** FND-05 (streaming), or FND-03/FND-04 as the small unblockers for reflection.
