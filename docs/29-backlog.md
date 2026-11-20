@@ -70,7 +70,7 @@ the repository, ahead of any new cognitive capability.
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
 | 3 | Project memory | **MISSING** | No schema or module |
 | 3 | Consolidation / duplicates / conflicts | **PARTIAL** | Novelty gate reinforces lexical near-duplicates; `supersede_belief` exists but nothing detects conflicts |
-| 3 | User-controlled deletion, searchable, explainable | **PARTIAL** | `tombstone`/`restore`/`pin` in the store; no API or CLI; no `/explain` |
+| 3 | User-controlled deletion, searchable, explainable | **PARTIAL** | `/v1/memory` and `hedwig memory`: list, search with score breakdown, pin, forget, restore (MEM-02); no `/explain` yet |
 | 3 | Embedding retrieval channel | **MISSING** | Deferred, docs/06 §13.2 |
 | 4 | Personality: traits, identity core, guarded drift, reversal | **COMPLETE** | `personality/`; `test_personality_*`, `test_personality_in_the_turn.py` |
 | 4 | Personality: evidence-based drift *proposals* | **MISSING** | The proposer is reflection's job |
@@ -109,6 +109,7 @@ the repository, ahead of any new cognitive capability.
 | G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | Fixed by PER-03 |
 | G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | FND-05; investigate warm-up |
 | G14 | Event recovery runs once, inside `bus.start()`, before emotion, personality and relationship subscribe in their own `start()`. After a crash their missed events are never re-delivered: at-least-once silently does not cover them | Reliability bug (pre-existing) | Fixed by FND-07 |
+| G15 | The restatement rule dropped a recalled memory when *any* window message appeared in it, HEDWIG's own repeated replies included | Bug | Fixed with MEM-02 (`brain/context.py`) |
 | G13 | `VITE_HEDWIG_API` both moved the Vite proxy and was exposed to the page, so setting it bypassed the proxy (and the token it adds) | Config trap | Fixed with UX-02: the proxy also reads `HEDWIG_API_BASE_URL` |
 
 ---
@@ -237,7 +238,7 @@ and the store stays bounded — today it only runs in tests (G2).
 - **Tests:** the task is registered when the scheduler is enabled; a run decays and reports.
 
 #### MEM-02 — Memory API and CLI: search, show, pin, forget, restore
-**Status:** Todo · **P1** · **M** · **Depends on:** FND-01 · **Modules:** `api/routes/memory.py`, `cli`
+**Status:** Done (2026-11-20) · **P1** · **M** · **Depends on:** FND-01 · **Modules:** `api/routes/memory.py`, `cli`
 
 As the user, I want to see what HEDWIG remembers, and pin, forget or restore any of it, so that
 memory is under my control and explainable.
@@ -521,4 +522,8 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
 
 - **FND-07** Recovery reaches every durable subscriber — `subscribe()` on a running bus recovers
   synchronously (docs/04 §3.3). Fixes G14. `test_migration_0010.py` now fails without 0010.
+- **MEM-02** Memory control — `/v1/memory` (list, search with score breakdown, show incl.
+  forgotten, pin/unpin, forget → 409 when pinned, restore) and `hedwig memory …`. Searching never
+  reinforces. Design in [06](06-memory-architecture.md) §16. Fixed G15 in passing: the
+  restatement rule could hide an older memory behind a repeated reply.
 

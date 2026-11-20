@@ -274,6 +274,103 @@ def chat(
     raise typer.Exit(code)
 
 
+memory_app = typer.Typer(
+    help="What HEDWIG remembers: list, search, show, pin, forget, restore (docs/06 §16).",
+    no_args_is_help=True,
+)
+app.add_typer(memory_app, name="memory")
+
+
+def _api(url: str | None = None) -> HedwigClient:
+    """A client for the running backend, or a clear exit when there is no token yet."""
+    config = load_config()
+    token = TokenFile(config.runtime.token_path).read()
+    if token is None:
+        typer.secho(
+            "No API token yet. Start the backend once (`uv run hedwig serve`).",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(1)
+    return HedwigClient(url or config.api.base_url, token)
+
+
+def _call(action: Callable[[HedwigClient], object]) -> object:
+    with _api() as client:
+        try:
+            return action(client)
+        except ClientError as error:
+            typer.secho(_explain(error), fg=typer.colors.RED, err=True)
+            raise typer.Exit(1) from None
+
+
+def _line(memory: dict[str, object]) -> str:
+    flags = "".join(
+        mark for mark, on in (("📌", memory["pinned"]), ("✗", memory["forgotten"])) if on
+    )
+    text = str(memory["text"]).replace("\n", " / ")
+    return f"{memory['id']}  {memory['kind']:<7} {flags:<2} {text[:90]}"
+
+
+@memory_app.command("list")
+def memory_list(
+    limit: Annotated[int, typer.Option(help="How many.")] = 20,
+    forgotten: Annotated[bool, typer.Option(help="Include forgotten memories.")] = False,
+) -> None:
+    """Recent memories, newest first."""
+    memories = _call(lambda c: c.memories(limit=limit, include_forgotten=forgotten))
+    assert isinstance(memories, list)
+    for memory in memories:
+        print(_line(memory))
+    if not memories:
+        print("Nothing remembered yet.")
+
+
+@memory_app.command("search")
+def memory_search(query: str, limit: int = 10) -> None:
+    """Search the way HEDWIG recalls, with scores. Searching never reinforces a memory."""
+    hits = _call(lambda c: c.search_memory(query, limit=limit))
+    assert isinstance(hits, list)
+    for hit in hits:
+        print(f"{hit['score']:.3f}  {_line(hit['memory'])}")
+    if not hits:
+        print("No memory matches.")
+
+
+@memory_app.command("show")
+def memory_show(memory_id: str) -> None:
+    """One memory in full, including a forgotten one."""
+    print(json.dumps(_call(lambda c: c.memory(memory_id)), indent=2))
+
+
+def _act(memory_id: str, action: str) -> None:
+    print(_line(_call(lambda c: c.memory_action(memory_id, action))))  # type: ignore[arg-type]
+
+
+@memory_app.command("pin")
+def memory_pin(memory_id: str) -> None:
+    """Never forget this one."""
+    _act(memory_id, "pin")
+
+
+@memory_app.command("unpin")
+def memory_unpin(memory_id: str) -> None:
+    """Let it fade like any other memory."""
+    _act(memory_id, "unpin")
+
+
+@memory_app.command("forget")
+def memory_forget(memory_id: str) -> None:
+    """Forget it. Reversible with `restore`."""
+    _act(memory_id, "forget")
+
+
+@memory_app.command("restore")
+def memory_restore(memory_id: str) -> None:
+    """Bring a forgotten memory back."""
+    _act(memory_id, "restore")
+
+
 token_app = typer.Typer(
     help="The API token that guards your conversations (ADR-0022).", no_args_is_help=True
 )

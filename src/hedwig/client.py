@@ -123,6 +123,31 @@ class HedwigClient:
             for m in body["messages"]
         ]
 
+    # -- memory (docs/06 §16) ------------------------------------------------
+
+    def memories(self, *, limit: int = 50, include_forgotten: bool = False) -> list[dict[str, Any]]:
+        body = self._request(
+            "GET",
+            "/v1/memory",
+            params={"limit": limit, "include_forgotten": str(include_forgotten).lower()},
+        )
+        return list(body["memories"])
+
+    def search_memory(self, query: str, *, limit: int = 10) -> list[dict[str, Any]]:
+        body = self._request("GET", "/v1/memory/search", params={"q": query, "limit": limit})
+        return list(body["hits"])
+
+    def memory(self, memory_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v1/memory/{memory_id}")
+
+    def memory_action(self, memory_id: str, action: str) -> dict[str, Any]:
+        """`pin`, `unpin`, `forget` or `restore`."""
+        if action == "unpin":
+            return self._request("DELETE", f"/v1/memory/{memory_id}/pin")
+        if action not in {"pin", "forget", "restore"}:
+            raise ValueError(f"unknown memory action {action!r}")
+        return self._request("POST", f"/v1/memory/{memory_id}/{action}")
+
     # -- transport ---------------------------------------------------------
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:

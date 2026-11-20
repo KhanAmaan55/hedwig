@@ -126,6 +126,35 @@ class SqliteMemoryStore:
         )
         return _to_episode(row, self._entities_for(memory_id)) if row else None
 
+    async def inspect(self, memory_id: MemoryId) -> Episode | Belief | None:
+        """One memory of either kind, **including a forgotten one** (docs/06 §16).
+
+        Recall never sees tombstoned rows; the user must, or there is nothing to restore.
+        """
+        row = self._db.query_one("SELECT * FROM episode WHERE id = ?", (memory_id,))
+        if row is not None:
+            return _to_episode(row, self._entities_for(memory_id))
+        row = self._db.query_one("SELECT * FROM belief WHERE id = ?", (memory_id,))
+        return _to_belief(row) if row is not None else None
+
+    async def browse(
+        self, *, limit: int = 50, include_forgotten: bool = False
+    ) -> Sequence[Episode | Belief]:
+        """Episodes and beliefs together, most recent first. For people, not for recall."""
+        live = "" if include_forgotten else "WHERE tombstoned_at IS NULL "
+        episodes = self._db.query(
+            f"SELECT * FROM episode {live}ORDER BY occurred_at DESC LIMIT ?", (limit,)
+        )
+        beliefs = self._db.query(
+            f"SELECT * FROM belief {live}ORDER BY valid_from DESC LIMIT ?", (limit,)
+        )
+        merged: list[Episode | Belief] = [_to_episode(row, ()) for row in episodes]
+        merged += [_to_belief(row) for row in beliefs]
+        merged.sort(
+            key=lambda m: m.occurred_at if isinstance(m, Episode) else m.valid_from, reverse=True
+        )
+        return tuple(merged[:limit])
+
     async def recent_episodes(
         self, *, limit: int = 20, before: datetime | None = None
     ) -> Sequence[Episode]:

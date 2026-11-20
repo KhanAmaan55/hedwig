@@ -96,9 +96,17 @@ def restates(item: ContextItem, window: Sequence[WindowMessage]) -> bool:
     turn — while the window still holds it word for word. Sending both spends tokens twice and
     shows the model the same exchange as two different kinds of thing. The window wins: it is
     verbatim, ordered and never budgeted (docs/06 §5.1). Found in the first live run.
+
+    Only the *user's* messages identify an exchange. An episode always holds the user's words
+    verbatim; HEDWIG's replies are generated, and small models repeat themselves — "You like
+    smoky lapsang souchong tea." in the window used to knock out an older, different memory that
+    happened to contain the same sentence (docs/06 §16).
     """
     return any(
-        len(message.text) >= RESTATE_MIN_CHARS and message.text in item.text for message in window
+        message.role == "user"
+        and len(message.text) >= RESTATE_MIN_CHARS
+        and message.text in item.text
+        for message in window
     )
 
 
