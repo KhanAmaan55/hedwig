@@ -358,6 +358,31 @@ tiers, none of which exist yet, and building it now would mean guessing at their
 The gateway takes the messages it is given. §8's daily and per-job budgets belong with the
 resource governor, which needs scheduler context; only the per-request cap is enforced here.
 
+### 13.3 Reasoning is requested, never assumed
+
+`GenerationRequest.reasoning` (default `False`) says whether the model may think before it
+answers; the Ollama adapter sends it as `think` on every call, true or false.
+
+```
+caller ──reasoning=False──▶ gateway ──▶ OllamaProvider ──{"think": false}──▶ Ollama
+                                                     ◀── content only, no scratchpad
+```
+
+* **Why explicit.** Gemma 4 thinks by default on Ollama 0.40.3. With nothing sent, an 80-token
+  probe of `gemma4:e2b` came back as 80 tokens of `thinking` and an empty reply — the
+  `no_answer` failure, on every turn. With `think: false` it answers directly, in 0.2–0.3 s.
+* **Why per request, not per model.** Whether to think is a property of the job (a reply wants
+  latency; a nightly reflection could afford a scratchpad), not of the weights. A per-model
+  setting would also have to be kept in step with whichever model is configured.
+* **Why off by default.** No caller uses a scratchpad today, and on a 4B-class model it spends
+  the reply budget. Opting in is one field on one call.
+* **Tradeoff.** Models without the capability (gemma3) accept `think: false` silently, so
+  the default is safe everywhere; `think: true` on such a model is a 400, which the gateway
+  already reports as a permanent failure. `qwen3` remains a poor fit for conversation: with
+  `think: false` it reasons inside the reply instead (§14).
+* **Future.** A provider that cannot switch reasoning off should say so through `health()` so
+  routing can avoid it for interactive purposes; reflection is the first candidate to opt in.
+
 ---
 
 ## 14. Implementation record (Milestone 9) — prompt assembly
@@ -381,4 +406,6 @@ the end of the Milestone-4 `StubResponder`. Full design:
 
 **Reasoning models and the conversational tier.** `qwen3:4b` on Ollama 0.40.3 sometimes answers
 nothing within the reply budget; `think: false` makes it reason inside the reply instead, and
-`/no_think` is ignored. Neither is used. The default conversational model is non-reasoning.
+`/no_think` is ignored. The default conversational model is non-reasoning. Every request now
+sends `think` explicitly (§13.3), which is what makes Gemma 4 — reasoning-capable but obedient
+to the switch — usable here.

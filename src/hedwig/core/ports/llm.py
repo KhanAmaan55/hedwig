@@ -99,6 +99,11 @@ class GenerationRequest:
     json_schema: Mapping[str, Any] | None = None
     """When present, the result must validate against it (docs/14 §6)."""
 
+    reasoning: bool = False
+    """Let a reasoning-capable model think before answering. Off by default: no caller needs
+    a scratchpad yet, and on a small model it spends the reply budget (docs/14 §13.3). Models
+    that cannot reason ignore it."""
+
     priority: RequestPriority = RequestPriority.INTERACTIVE
     timeout_seconds: float | None = None
     """Overrides the configured request timeout for this call alone."""

@@ -105,6 +105,23 @@ async def test_the_request_carries_the_documented_options() -> None:
     await provider.close()
 
 
+@pytest.mark.parametrize("reasoning", [False, True])
+async def test_reasoning_is_requested_explicitly_and_off_by_default(reasoning: bool) -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return _chat_response("ok")
+
+    provider = _provider(handler)
+    await provider.generate(_request(), model="gemma4:e2b")
+    assert seen["think"] is False
+
+    await provider.generate(_request(reasoning=reasoning), model="gemma4:e2b")
+    assert seen["think"] is reasoning
+    await provider.close()
+
+
 async def test_a_json_schema_is_passed_to_the_backend() -> None:
     """Ollama constrains decoding with `format`, which beats asking politely."""
     seen: dict[str, object] = {}

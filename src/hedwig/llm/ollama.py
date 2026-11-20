@@ -281,6 +281,9 @@ class OllamaProvider:
             "model": model,
             "messages": [_message(message) for message in request.messages],
             "stream": stream,
+            # Sent explicitly either way: models such as gemma4 think by default, which the
+            # caller did not ask for (docs/14 §13.3).
+            "think": request.reasoning,
             "options": options,
         }
         if request.json_schema is not None:
