@@ -211,8 +211,8 @@ is in [`docs/README.md`](docs/README.md).
 **Status:** HEDWIG converses. A turn runs through the LangGraph brain with persistent
 episodic memory, a six-drive emotion engine, a ten-trait personality and a local Ollama model,
 and you can talk to it in the desktop app (`npm run dev`), with `hedwig chat`, or through the
-conversation API. Replies are not streamed yet. Reflection, curiosity, goals, web knowledge and voice are not
-built. Module status is in [`docs/README.md`](docs/README.md#implementation-status); the
+conversation API. Replies are not streamed yet. Reflection (per conversation), goals, opt-in web research and
+opt-in curiosity are built; voice is next. Module status is in [`docs/README.md`](docs/README.md#implementation-status); the
 capability assessment and story backlog are in [`docs/29-backlog.md`](docs/29-backlog.md).
 
 ---
@@ -242,6 +242,7 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig memory list` / `search` / `forget` / `restore` | What HEDWIG remembers, under your control |
 | `uv run hedwig goals list` / `add` / `done` | What HEDWIG is helping you with over time |
 | `uv run hedwig egress` | Every request HEDWIG made to the internet, and what it sent |
+| `uv run hedwig curiosity gaps` / `ask` / `findings` / `explore` | What HEDWIG wants to find out, and what it found |
 | `uv run hedwig config` | The effective configuration after all layers resolve |
 
 Configuration layers, lowest precedence first: defaults in code → `config/hedwig.toml` →

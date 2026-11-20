@@ -111,6 +111,8 @@ class MindSnapshot:
     goals: tuple[str, ...] = ()
     """Active goals, rendered one per line (docs/08 §6.1). Context for the reply, never the
     agenda: the user's current message comes first."""
+    findings: tuple[str, ...] = ()
+    """Something read while exploring, offered to this turn (docs/11 §13). Untrusted."""
 
     @property
     def is_flat(self) -> bool:
@@ -175,6 +177,8 @@ class ResponseContext:
     inspector, not for the responder to narrate (docs/07 §14.4)."""
     goals: tuple[str, ...] = ()
     """What HEDWIG is helping with over time (docs/08 §6.1)."""
+    findings: tuple[str, ...] = ()
+    """Offered by curiosity, untrusted (docs/11 §13)."""
 
     @property
     def token_count(self) -> int:

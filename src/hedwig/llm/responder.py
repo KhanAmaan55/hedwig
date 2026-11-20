@@ -94,6 +94,7 @@ class GatewayResponder:
                 Entry(text=goal, rank=float(len(context.goals) - index))
                 for index, goal in enumerate(context.goals)
             ],
+            findings=[Entry(text=finding) for finding in context.findings],
             untrusted=[
                 Entry(text=item.text, rank=item.score)
                 for item in context.recalled

@@ -49,7 +49,7 @@ MAX_PROPOSALS = 2
 GOAL_SIMILARITY = 0.6
 """Word overlap above which a proposal is the same goal as an open one, worded differently."""
 PURPOSE = "reflect.session"
-PROMPT_VERSION = "reflect.session.v3"
+PROMPT_VERSION = "reflect.session.v4"
 
 SCHEMA: Mapping[str, Any] = {
     "type": "object",
@@ -81,6 +81,11 @@ SCHEMA: Mapping[str, Any] = {
                 "required": ["goal", "progress"],
             },
         },
+        "curious_about": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {"type": "string", "maxLength": 160},
+        },
         "facts": {
             "type": "array",
             "maxItems": 10,
@@ -111,6 +116,8 @@ the user stated it, 0 to 1. Leave the list empty if there are none.
 
 - projects: ongoing projects or plans the user is working on and may want help with over time, each as a goal for HEDWIG ("Help the user finish their Rust compiler") and, if clear, done_when. Empty if none. Do not repeat a goal already listed under [goals].
 - progress: for goals listed under [goals], how far along each now is, 0 to 1, by its label ("G1"). Only goals this conversation actually moved.
+
+- curious_about: up to three general questions about subjects the user is interested in that are worth learning more about, phrased with no personal details at all ("What are current approaches to long-term memory for LLM agents?"). Empty if none.
 
 Example. If the user said "My dog is called Biscuit and I'm learning Portuguese", facts are:
 [{"statement": "The user's dog is called Biscuit.", "confidence": 0.9},
@@ -159,6 +166,7 @@ class Reflection:
     beliefs: tuple[str, ...] = ()
     proposed_goals: tuple[str, ...] = ()
     progressed_goals: tuple[str, ...] = ()
+    curious_about: tuple[str, ...] = ()
 
 
 class SessionReflector:
@@ -244,6 +252,11 @@ class SessionReflector:
                 beliefs=kept.beliefs,
                 proposed_goals=proposed,
                 progressed_goals=progressed,
+                curious_about=tuple(
+                    str(topic)
+                    for topic in (parsed.get("curious_about") or [])[:3]
+                    if str(topic).strip()
+                ),
             )
         )
 
@@ -400,6 +413,8 @@ class SessionReflector:
                     "beliefs": list(reflection.beliefs),
                     "proposed_goals": list(reflection.proposed_goals),
                     "progressed_goals": list(reflection.progressed_goals),
+                    # For curiosity, which listens (docs/11 §13); it filters anything personal.
+                    "curious_about": list(reflection.curious_about),
                 },
                 source="reflection",
                 correlation_id=reflection.session_id,

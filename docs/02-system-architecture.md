@@ -262,12 +262,12 @@ graph LR
 | `sessions` | The conversation log: sessions, messages, turns, the working-set log, and the recent-turn window | [08](08-state-management.md) §5, [26](26-turn-memory-loop.md) §4 |
 | `emotion` | Emotional state vector, appraisal, decay, behaviour bindings | [09](09-emotion-engine.md) |
 | `personality` | Trait vector, drift proposals and application, identity core | [10](10-personality-engine.md) |
-| `curiosity` | Gap register, exploration scheduling, findings, interruption policy | [11](11-curiosity-engine.md) |
+| `curiosity` | Gap register, exploration scheduling, findings, interruption policy. Built (passive + deferred surfacing) | [11](11-curiosity-engine.md) §13 |
 | `reflection` | Five-tier reflection, consolidation, decay/forgetting passes. T1 built: `SessionReflector` | [12](12-reflection-engine.md) §14 |
 | `goals` | Goal lifecycle, priority, progress, influence on retrieval and initiative | [08](08-state-management.md) §6 |
 | `memory` | The four durable memory stores and their write paths | [06](06-memory-architecture.md) |
 | `retrieval` | Query planning, hybrid search, fusion, diversification, context packing | [06](06-memory-architecture.md) §6 |
-| `knowledge` | Local document ingestion, web reading, provenance and trust tiers | [13](13-knowledge-and-tools.md) |
+| `knowledge` | Local document ingestion, web reading, provenance and trust tiers. Built: injection detector, cues, web client | [13](13-knowledge-and-tools.md) §12–13 |
 | `tools` | Tool registry, argument validation, execution, approval gates, audit. Built: registry + read-only tools | [13](13-knowledge-and-tools.md) §5, §12 |
 | `llm` | Provider abstraction, model tiering, prompt assembly, structured decoding | [14](14-language-model-gateway.md) |
 | `embeddings` | Embedding generation, model identity tracking, re-embed jobs | [14](14-language-model-gateway.md) §7 |

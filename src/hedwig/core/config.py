@@ -245,6 +245,19 @@ class KnowledgeConfig(BaseModel):
     timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 10.0
 
 
+class CuriosityConfig(BaseModel):
+    """Curiosity (docs/11 §13). Off by default (ADR-0012); exploring also needs the web on."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    enabled: bool = False
+    interval_minutes: Annotated[float, Field(gt=0)] = 30.0
+    idle_minutes: Annotated[float, Field(ge=0)] = 10.0
+    max_explorations_daily: Annotated[int, Field(ge=0, le=50)] = 5
+    quiet_start_hour: Annotated[int, Field(ge=0, le=23)] = 22
+    quiet_end_hour: Annotated[int, Field(ge=0, le=23)] = 8
+
+
 class ReflectionConfig(BaseModel):
     """Reflection (docs/12). Only T1 exists so far (docs/12 §14)."""
 
@@ -318,6 +331,7 @@ class Config(BaseSettings):
     sessions: SessionsConfig = SessionsConfig()
     reflection: ReflectionConfig = ReflectionConfig()
     knowledge: KnowledgeConfig = KnowledgeConfig()
+    curiosity: CuriosityConfig = CuriosityConfig()
     plugins: PluginsConfig = PluginsConfig()
 
     @property

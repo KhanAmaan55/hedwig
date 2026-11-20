@@ -9,10 +9,11 @@ from typing import Any
 import httpx
 import pytest
 
-from hedwig.brain.planner import CITE_DIRECTIVE, NO_WEB_DIRECTIVE, RulePlanner, needs_web
+from hedwig.brain.planner import CITE_DIRECTIVE, NO_WEB_DIRECTIVE, RulePlanner
 from hedwig.core.clock import FakeClock
 from hedwig.core.ports.brain import Intent, RecalledContext, ToolOutcome, ToolRequest, TurnPolicy
 from hedwig.core.store import Database
+from hedwig.knowledge.cues import needs_web
 from hedwig.knowledge.web import WebClient, WebRefusedError, extract_text, parse_results
 from hedwig.tools import ToolRegistry, research_tool
 

@@ -440,6 +440,67 @@ def goals_drop(goal_id: str) -> None:
     _set_goal(goal_id, status="abandoned")
 
 
+curiosity_app = typer.Typer(
+    help="What HEDWIG wants to find out, and what it found (docs/11 §13).", no_args_is_help=True
+)
+app.add_typer(curiosity_app, name="curiosity")
+
+
+@curiosity_app.command("gaps")
+def curiosity_gaps() -> None:
+    """Questions HEDWIG knows it cannot answer yet."""
+    gaps = _call(lambda c: c.gaps())
+    assert isinstance(gaps, list)
+    for gap in gaps:
+        print(f"{gap['id']}  {gap['origin']:<20} {gap['priority']:.2f}  {gap['question']}")
+    if not gaps:
+        print("No open questions.")
+
+
+@curiosity_app.command("ask")
+def curiosity_ask(question: str) -> None:
+    """Give HEDWIG something to find out about, in general terms."""
+    gap = _call(lambda c: c.ask_curiosity(question))
+    assert isinstance(gap, dict)
+    print(f"{gap['id']}  {gap['question']}")
+
+
+@curiosity_app.command("findings")
+def curiosity_findings() -> None:
+    """What HEDWIG found while exploring. Always read on the web, so untrusted."""
+    found = _call(lambda c: c.findings())
+    assert isinstance(found, list)
+    for finding in found:
+        print(f"{finding['id']}  [{finding['status']}]  {finding['question']}")
+        print(f"    {finding['summary']}")
+        for source in finding["sources"][:3]:
+            print(f"    - {source['url']}")
+    if not found:
+        print("Nothing found yet. (Exploring needs curiosity.enabled and knowledge.web_enabled.)")
+
+
+@curiosity_app.command("explore")
+def curiosity_explore() -> None:
+    """Explore one open question now (still within the daily budget)."""
+    result = _call(lambda c: c.explore())
+    assert isinstance(result, dict)
+    print(result["status"])
+
+
+@curiosity_app.command("confirm")
+def curiosity_confirm(finding_id: str) -> None:
+    """Keep a finding as a tentative belief."""
+    _call(lambda c: c.finding_action(finding_id, "confirm"))
+    print("kept")
+
+
+@curiosity_app.command("dismiss")
+def curiosity_dismiss(finding_id: str) -> None:
+    """Not interested; similar findings will be dropped."""
+    _call(lambda c: c.finding_action(finding_id, "dismiss"))
+    print("dismissed")
+
+
 @app.command()
 def egress(limit: Annotated[int, typer.Option(help="How many.")] = 30) -> None:
     """Every request HEDWIG made to the internet, newest first, with what it sent."""

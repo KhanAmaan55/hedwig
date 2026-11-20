@@ -76,7 +76,7 @@ the repository, ahead of any new cognitive capability.
 | 4 | Personality: evidence-based drift *proposals* | **MISSING** | The proposer is reflection's job |
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
 | 5 | Emotion: never manipulative / dependent | **PARTIAL** | Prohibition tests exist for bindings; no honesty eval yet |
-| 6 | Curiosity engine | **MISSING** | docs/11 designed; no code |
+| 6 | Curiosity engine | **PARTIAL** | Gap register (offline), gated budgeted exploration, findings feed, deferred surfacing (CUR-01/02/03); active unprompted messages need the WebSocket |
 | 7 | Knowledge: local docs, web search, provenance, citations | **PARTIAL** | Opt-in DuckDuckGo research with fetch controls, injection quarantine, citations and egress audit (KNW-02/03); local documents not built (KNW-01) |
 | 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
 | 8 | Avatar: VRM renderer, expression from emotion, blink, saccade, breath, head drift | **COMPLETE** | `frontend/src/panes/avatar/`; `idle.test.ts`, `compose.test.ts`, `test_expression.py` |
@@ -329,16 +329,16 @@ researched, or uncertain, with sources.
 ### 4.7 Curiosity
 
 #### CUR-01 — Gap register (offline)
-**Status:** Todo · **P2** · **M** · **Depends on:** REF-01 · **Modules:** `curiosity/`
+**Status:** Done (2026-11-20) · **P2** · **M** · **Depends on:** REF-01 · **Modules:** `curiosity/`
 
 As HEDWIG, I want to record knowledge gaps from conversations (unanswered questions, low-recall
 topics), so that curiosity has something to pursue — works with the network off.
 
 #### CUR-02 — Budgeted exploration
-**Status:** Todo · **P2** · **L** · **Depends on:** CUR-01, KNW-02 · Off by default (ADR-0012).
+**Status:** Done (2026-11-20) · **P2** · **L** · **Depends on:** CUR-01, KNW-02 · Off by default (ADR-0012).
 
 #### CUR-03 — Findings feed and interruption policy
-**Status:** Todo · **P2** · **M** · **Depends on:** CUR-02, FND-05
+**Status:** Done (2026-11-20, passive and deferred modes) · **P2** · **M** · **Depends on:** CUR-02, FND-05
 
 ### 4.8 Reflection
 
@@ -552,3 +552,13 @@ outbound query audited); voice through **Piper** (local neural TTS; download app
   user to a search engine, and says plainly when the web is off. Live: DuckDuckGo → python.org,
   cited answer from `gemma4:e2b`. Found live: robots.txt fetched twice under concurrent reads;
   fixed. Design in [13](13-knowledge-and-tools.md) §13.
+- **CUR-01/02/03** Curiosity — `hedwig.curiosity`: gap register (unanswered questions from
+  turns, general interests from reflection via its event, user questions; never personal, never
+  flagged text; dedupe, 30-day/3-attempt expiry), `Explorer` (two opt-ins, idle ≥10 min, quiet
+  hours, energy, daily budget; research → utility-model summary from quarantined sources →
+  untrusted finding; novelty and dismissal discards), findings feed with confirm/dismiss,
+  `FindingsMindReader` (≤2/day, ≥1 h apart, on greeting or topic). Migration 0014, `/v1/curiosity`,
+  `hedwig curiosity …`. `needs_web`/`is_personal` moved to `knowledge.cues`. Live: a cited
+  finding from DuckDuckGo; shared on a greeting 2/3 after a directive fix. Design in
+  [11](11-curiosity-engine.md) §13.
+

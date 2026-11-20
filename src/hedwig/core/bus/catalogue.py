@@ -203,6 +203,17 @@ def platform_catalogue() -> EventCatalogue:
         "A session was folded into the relationship with an entity (docs/06 §3.3).",
         payload_keys={"entity_id", "familiarity", "affinity", "trust"},
     )
+    # Curiosity (docs/11 §13)
+    catalogue.register(
+        "curiosity.gap.recorded",
+        "HEDWIG noticed a question it cannot answer yet.",
+        payload_keys={"gap_id", "origin"},
+    )
+    catalogue.register(
+        "curiosity.finding.produced",
+        "Exploration answered a gap; the finding is untrusted and waits in the feed.",
+        payload_keys={"finding_id", "gap_id"},
+    )
     # Goals (docs/08 §6.1)
     for event_type, description in (
         ("goals.goal.created", "A goal was created, by the user or proposed by reflection."),

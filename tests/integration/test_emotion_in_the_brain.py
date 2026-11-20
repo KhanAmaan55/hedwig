@@ -67,13 +67,16 @@ async def test_the_brain_reads_real_emotional_state_without_node_changes(
 ) -> None:
     """With personality enabled the mind reader is the composed one; it reads emotion through
     the port, so the brain still reads real emotional state without importing the module."""
+    from hedwig.curiosity import FindingsMindReader
     from hedwig.goals import GoalsMindReader
     from hedwig.personality import PersonaMindReader
 
     wrapper = hedwig.brain.collaborators.mind
-    # Goals wrap the reader by composition (docs/08 §6.1); emotion is still read through it.
+    # Goals and findings wrap the reader by composition (docs/08 §6.1, docs/11 §13); emotion
+    # is still read through them.
     assert isinstance(wrapper, GoalsMindReader)
-    mind = wrapper.inner
+    assert isinstance(wrapper.inner, FindingsMindReader)
+    mind = wrapper.inner.inner
     assert isinstance(mind, PersonaMindReader)
     assert mind.emotion is hedwig.emotion
 

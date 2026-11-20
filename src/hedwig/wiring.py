@@ -53,6 +53,7 @@ from hedwig.core.scheduler import AsyncTaskScheduler, DailyTrigger, IntervalTrig
 from hedwig.core.state import SqliteStateManager
 from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
+from hedwig.curiosity import CuriosityStore, Explorer, FindingsMindReader, GapDetector
 from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
 from hedwig.goals import GoalsMindReader, GoalStore
 from hedwig.knowledge.web import WebClient
@@ -122,6 +123,8 @@ class Container:
     brain: Brain
     plugins: PluginLoader
     goals: GoalStore
+    curiosity: CuriosityStore
+    explorer: Explorer
 
     def uptime_seconds(self) -> float:
         """Elapsed time since startup, measured monotonically.
@@ -347,7 +350,9 @@ def build_container(
         if emotion
         else DefaultMindReader()
     )
-    mind = GoalsMindReader(base_mind, goals)
+    # Curiosity (docs/11 §13): the register always, exploring only when opted in twice.
+    curiosity = CuriosityStore(database, clock=clock, bus=bus)
+    mind = GoalsMindReader(FindingsMindReader(base_mind, curiosity, clock), goals)
 
     # 10. The turn graph, now a closed loop: it observes into the conversation log, recalls
     #    from real memory, and announces what happened so memory can learn from it
@@ -385,6 +390,33 @@ def build_container(
         "conversation.turn.completed",
         TurnCaptureSubscriber(capture, memory).handle,
         name=SUBSCRIPTION,
+    )
+
+    gap_detector = GapDetector(curiosity, bus=bus)
+    explorer = Explorer(
+        store=curiosity,
+        tools=tools,
+        gateway=llm,
+        history=sessions,
+        clock=clock,
+        emotion=emotion,
+        bus=bus,
+        enabled=config.curiosity.enabled and config.knowledge.web_enabled,
+        idle_minutes=config.curiosity.idle_minutes,
+        max_daily=config.curiosity.max_explorations_daily,
+        quiet_start=config.curiosity.quiet_start_hour,
+        quiet_end=config.curiosity.quiet_end_hour,
+        timezone=config.runtime.timezone,
+    )
+    scheduler.register(
+        TaskSpec(
+            name="curiosity.explore",
+            handler=explorer.task,
+            trigger=IntervalTrigger(seconds=config.curiosity.interval_minutes * 60),
+            priority=Priority.BACKGROUND,
+            description="Research one open gap, when idle and opted in (docs/11 §13).",
+            max_runtime_seconds=120.0,
+        )
     )
 
     # 10b. Reflection, T1 (docs/12 §14): when a conversation ends, keep a summary and the
@@ -430,6 +462,7 @@ def build_container(
             critical=False,
         )
     registry.register("goals", goals, depends_on=("bus",), critical=False)
+    registry.register("curiosity", gap_detector, depends_on=("bus",), critical=False)
     registry.register("brain", brain, depends_on=("bus", "memory", "sessions"), critical=False)
     if reflector is not None:
         registry.register(
@@ -473,6 +506,8 @@ def build_container(
         brain=brain,
         plugins=plugins,
         goals=goals,
+        curiosity=curiosity,
+        explorer=explorer,
     )
 
     logger.debug(
