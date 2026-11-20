@@ -88,6 +88,12 @@ class GatewayResponder:
                 for item in context.recalled
                 if item.trust is not TrustTier.UNTRUSTED
             ],
+            # Ranked by position: the first goal is the highest priority, so it survives
+            # trimming longest (docs/08 §6.1).
+            goals=[
+                Entry(text=goal, rank=float(len(context.goals) - index))
+                for index, goal in enumerate(context.goals)
+            ],
             untrusted=[
                 Entry(text=item.text, rank=item.score)
                 for item in context.recalled

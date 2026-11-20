@@ -100,7 +100,8 @@ of what exists in code. Update it as each milestone lands.
 | Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01) | `src/hedwig/wiring.py`, `src/hedwig/memory/maintenance.py` |
 | Frontend conversation pane, token delivery (Electron IPC, Vite proxy) | **Implemented** (UX-02, [18](18-frontend-architecture.md) §13) | `frontend/src/panes/conversation/`, `electron/` |
 | Reflection T1: session summary and belief extraction | **Implemented** (REF-01, [12](12-reflection-engine.md) §14) | `src/hedwig/reflection/` |
-| Reflection T2–T4, curiosity, goals, tools | Not started — [29](29-backlog.md) | — |
+| Goals: store, lifecycle, API/CLI, in the prompt, from reflection | **Implemented** (GOA-01/02, [08](08-state-management.md) §6.1) | `src/hedwig/goals/` |
+| Reflection T2–T4, curiosity, tools | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

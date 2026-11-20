@@ -16,7 +16,7 @@ import contextlib
 import json
 import sys
 from collections.abc import Callable
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import typer
 
@@ -369,6 +369,75 @@ def memory_forget(memory_id: str) -> None:
 def memory_restore(memory_id: str) -> None:
     """Bring a forgotten memory back."""
     _act(memory_id, "restore")
+
+
+goals_app = typer.Typer(
+    help="What HEDWIG is helping you with over time (docs/08 §6.1).", no_args_is_help=True
+)
+app.add_typer(goals_app, name="goals")
+
+OPEN_GOALS = ("proposed", "active", "blocked")
+
+
+def _goal_line(goal: dict[str, Any]) -> str:
+    progress = f"{round(goal['progress'] * 100):>3}%"
+    origin = " (proposed by HEDWIG)" if goal["origin"] == "reflection" else ""
+    return f"{goal['id']}  {goal['status']:<9} {progress}  {goal['description']}{origin}"
+
+
+@goals_app.command("list")
+def goals_list(
+    everything: Annotated[bool, typer.Option("--all", help="Include done and abandoned.")] = False,
+) -> None:
+    """Open goals, highest priority first."""
+    goals = _call(lambda c: c.goals(statuses=() if everything else OPEN_GOALS))
+    assert isinstance(goals, list)
+    for goal in goals:
+        print(_goal_line(goal))
+    if not goals:
+        print('No goals yet. Add one with `hedwig goals add "…"`.')
+
+
+@goals_app.command("add")
+def goals_add(
+    description: str,
+    done_when: Annotated[str, typer.Option(help="How you'll both know it is done.")] = "",
+    priority: Annotated[float, typer.Option(min=0, max=1)] = 0.5,
+) -> None:
+    """Add an active goal."""
+    goal = _call(lambda c: c.create_goal(description, completion=done_when, priority=priority))
+    assert isinstance(goal, dict)
+    print(_goal_line(goal))
+
+
+def _set_goal(goal_id: str, **changes: Any) -> None:
+    goal = _call(lambda c: c.update_goal(goal_id, **changes))
+    assert isinstance(goal, dict)
+    print(_goal_line(goal))
+
+
+@goals_app.command("activate")
+def goals_activate(goal_id: str) -> None:
+    """Accept a goal HEDWIG proposed, or reopen one."""
+    _set_goal(goal_id, status="active")
+
+
+@goals_app.command("progress")
+def goals_progress(goal_id: str, amount: Annotated[float, typer.Argument(min=0, max=1)]) -> None:
+    """Record how far along a goal is, 0 to 1."""
+    _set_goal(goal_id, progress=amount)
+
+
+@goals_app.command("done")
+def goals_done(goal_id: str) -> None:
+    """Close a goal as achieved."""
+    _set_goal(goal_id, status="done", progress=1.0)
+
+
+@goals_app.command("drop")
+def goals_drop(goal_id: str) -> None:
+    """Abandon a goal."""
+    _set_goal(goal_id, status="abandoned")
 
 
 token_app = typer.Typer(

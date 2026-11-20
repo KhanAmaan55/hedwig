@@ -17,7 +17,7 @@ layers =
     hedwig.api
     hedwig.wiring
     hedwig.brain | hedwig.reflection
-    hedwig.emotion | hedwig.personality | hedwig.expression
+    hedwig.emotion | hedwig.personality | hedwig.expression | hedwig.goals
     hedwig.sessions
     hedwig.memory
     hedwig.llm

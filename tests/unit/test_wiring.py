@@ -86,6 +86,7 @@ def test_construction_does_no_work(container: Container) -> None:
         "relationship",
         "emotion",
         "personality",
+        "goals",
         "brain",
         "reflection",
     ]

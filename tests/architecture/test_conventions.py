@@ -151,6 +151,7 @@ def test_every_source_file_belongs_to_a_documented_layer() -> None:
         "memory",
         "brain",
         "reflection",
+        "goals",
         "api",
         "cli",
         "client",

@@ -203,6 +203,14 @@ def platform_catalogue() -> EventCatalogue:
         "A session was folded into the relationship with an entity (docs/06 §3.3).",
         payload_keys={"entity_id", "familiarity", "affinity", "trust"},
     )
+    # Goals (docs/08 §6.1)
+    for event_type, description in (
+        ("goals.goal.created", "A goal was created, by the user or proposed by reflection."),
+        ("goals.goal.updated", "A goal changed status, progress or wording."),
+    ):
+        catalogue.register(
+            event_type, description, payload_keys={"goal_id", "status", "progress", "origin"}
+        )
     # Reflection (docs/12 §14)
     catalogue.register(
         "reflection.session.completed",

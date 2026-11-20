@@ -21,6 +21,7 @@ from typing import Any, Protocol
 from hedwig.core.errors import HedwigError
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import ConversationHistory, Event, EventBus, HistoryMessage
+from hedwig.core.ports.goals import Goal, GoalKind, GoalStatus
 from hedwig.core.ports.llm import (
     GenerationRequest,
     GenerationResult,
@@ -30,14 +31,25 @@ from hedwig.core.ports.llm import (
 )
 from hedwig.core.ports.memory import DerivationRelation, EpisodeKind
 from hedwig.core.types import MemoryId, SalienceInputs, SessionId, TrustTier
-from hedwig.memory.capture import BeliefCandidate, CaptureService, EpisodeCandidate, Verdict
+from hedwig.goals import GoalStore
+from hedwig.memory.capture import (
+    BeliefCandidate,
+    CaptureService,
+    EpisodeCandidate,
+    Verdict,
+    similarity,
+)
 from hedwig.memory.store import SqliteMemoryStore
 
 logger = get_logger(__name__)
 
 SUBSCRIPTION = "reflection-session"
+MAX_PROPOSALS = 2
+"""Per conversation. More than two new projects in one chat is usually a bad extraction."""
+GOAL_SIMILARITY = 0.6
+"""Word overlap above which a proposal is the same goal as an open one, worded differently."""
 PURPOSE = "reflect.session"
-PROMPT_VERSION = "reflect.session.v2"
+PROMPT_VERSION = "reflect.session.v3"
 
 SCHEMA: Mapping[str, Any] = {
     "type": "object",
@@ -45,6 +57,30 @@ SCHEMA: Mapping[str, Any] = {
         "worth_remembering": {"type": "boolean"},
         "title": {"type": "string", "maxLength": 80},
         "summary": {"type": "string", "maxLength": 800},
+        "projects": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "maxLength": 160},
+                    "done_when": {"type": "string", "maxLength": 200},
+                },
+                "required": ["goal"],
+            },
+        },
+        "progress": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "maxLength": 8},
+                    "progress": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": ["goal", "progress"],
+            },
+        },
         "facts": {
             "type": "array",
             "maxItems": 10,
@@ -72,6 +108,9 @@ Return JSON with:
 life, their projects, plans and circumstances. Each as one short sentence starting with \
 "The user". Only what the user said, never what HEDWIG said or guessed. confidence: how clearly \
 the user stated it, 0 to 1. Leave the list empty if there are none.
+
+- projects: ongoing projects or plans the user is working on and may want help with over time, each as a goal for HEDWIG ("Help the user finish their Rust compiler") and, if clear, done_when. Empty if none. Do not repeat a goal already listed under [goals].
+- progress: for goals listed under [goals], how far along each now is, 0 to 1, by its label ("G1"). Only goals this conversation actually moved.
 
 Example. If the user said "My dog is called Biscuit and I'm learning Portuguese", facts are:
 [{"statement": "The user's dog is called Biscuit.", "confidence": 0.9},
@@ -118,6 +157,8 @@ class Reflection:
     `model_unavailable`, `unknown_session`."""
     summary_id: str | None = None
     beliefs: tuple[str, ...] = ()
+    proposed_goals: tuple[str, ...] = ()
+    progressed_goals: tuple[str, ...] = ()
 
 
 class SessionReflector:
@@ -131,6 +172,7 @@ class SessionReflector:
         capture: CaptureService,
         store: SqliteMemoryStore,
         bus: EventBus | None = None,
+        goals: GoalStore | None = None,
         min_user_messages: int = 2,
         max_messages: int = 80,
         max_facts: int = 5,
@@ -140,6 +182,7 @@ class SessionReflector:
         self._capture = capture
         self._store = store
         self._bus = bus
+        self._goals = goals
         self._min_user = min_user_messages
         self._max_messages = max_messages
         self._max_facts = max_facts
@@ -183,25 +226,40 @@ class SessionReflector:
         if sum(message.role == "user" for message in messages) < self._min_user:
             return await self._done(Reflection(session_id, "too_short"))
 
-        result = await self._ask(messages)
+        active = list(await self._goals.active()) if self._goals is not None else []
+        result = await self._ask(messages, active)
         if result is None:
             return await self._done(Reflection(session_id, "model_unavailable"))
         parsed, model_id = result
         if not parsed.get("worth_remembering"):
             return await self._done(Reflection(session_id, "nothing_to_keep"))
 
+        kept = await self._keep(session_id, since=since, parsed=parsed, model_id=model_id)
+        proposed, progressed = await self._goals_from(parsed, active)
         return await self._done(
-            await self._keep(session_id, since=since, parsed=parsed, model_id=model_id)
+            Reflection(
+                session_id,
+                kept.status,
+                summary_id=kept.summary_id,
+                beliefs=kept.beliefs,
+                proposed_goals=proposed,
+                progressed_goals=progressed,
+            )
         )
 
-    async def _ask(self, messages: Sequence[HistoryMessage]) -> tuple[dict[str, Any], str] | None:
+    async def _ask(
+        self, messages: Sequence[HistoryMessage], active: Sequence[Goal]
+    ) -> tuple[dict[str, Any], str] | None:
         transcript = "\n".join(
             f"{'User' if m.role == 'user' else 'HEDWIG'}: {m.text}" for m in messages
         )
+        # Short labels, not ids: a small model copies "G1" reliably and a ULID unreliably.
+        goals = "\n".join(f"G{i + 1}: {goal.description}" for i, goal in enumerate(active))
+        content = f"[goals]\n{goals or '(none)'}\n[conversation]\n{transcript}\n[end]"
         request = GenerationRequest(
             messages=(
                 Message(role=Role.SYSTEM, content=INSTRUCTIONS),
-                Message(role=Role.USER, content=f"[conversation]\n{transcript}\n[end]"),
+                Message(role=Role.USER, content=content),
             ),
             purpose=PURPOSE,
             json_schema=SCHEMA,
@@ -276,6 +334,54 @@ class SessionReflector:
             beliefs=beliefs,
         )
 
+    async def _goals_from(
+        self, parsed: Mapping[str, Any], active: Sequence[Goal]
+    ) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Propose goals for new projects; move the progress of active ones (docs/08 §6.1).
+
+        Proposals stay out of the prompt until the user activates them. Progress only moves
+        forward from reflection, and a goal is closed only when it reaches 1.
+        """
+        if self._goals is None:
+            return (), ()
+
+        progressed: list[str] = []
+        labels = {f"G{i + 1}": goal for i, goal in enumerate(active)}
+        for item in parsed.get("progress") or []:
+            if not isinstance(item, Mapping):
+                continue
+            goal = labels.get(str(item.get("goal", "")).strip().upper())
+            value = float(item.get("progress", 0.0))
+            if goal is None or value <= goal.progress:
+                continue
+            await self._goals.update(
+                goal.id,
+                progress=value,
+                status=GoalStatus.DONE if value >= 1.0 else None,
+            )
+            progressed.append(goal.id)
+
+        proposed: list[str] = []
+        existing = [g.description for g in await self._goals.list() if g.status.is_open]
+        for item in list(parsed.get("projects") or [])[:MAX_PROPOSALS]:
+            if not isinstance(item, Mapping):
+                continue
+            description = str(item.get("goal", "")).strip()
+            if not description or any(
+                similarity(description, other) >= GOAL_SIMILARITY for other in existing
+            ):
+                continue
+            goal = await self._goals.create(
+                description,
+                kind=GoalKind.SELF_GENERATED,
+                status=GoalStatus.PROPOSED,
+                completion=str(item.get("done_when", "")),
+                origin="reflection",
+            )
+            existing.append(description)
+            proposed.append(goal.id)
+        return tuple(proposed), tuple(progressed)
+
     async def _done(self, reflection: Reflection) -> Reflection:
         logger.info(
             "session reflection",
@@ -292,6 +398,8 @@ class SessionReflector:
                     "session_id": reflection.session_id,
                     "summary_id": reflection.summary_id,
                     "beliefs": list(reflection.beliefs),
+                    "proposed_goals": list(reflection.proposed_goals),
+                    "progressed_goals": list(reflection.progressed_goals),
                 },
                 source="reflection",
                 correlation_id=reflection.session_id,

@@ -148,6 +148,24 @@ class HedwigClient:
             raise ValueError(f"unknown memory action {action!r}")
         return self._request("POST", f"/v1/memory/{memory_id}/{action}")
 
+    # -- goals (docs/08 §6.1) --------------------------------------------------
+
+    def goals(self, *, statuses: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+        params = [("status", status) for status in statuses]
+        return list(self._request("GET", "/v1/goals", params=params)["goals"])
+
+    def create_goal(
+        self, description: str, *, completion: str = "", priority: float = 0.5
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/v1/goals",
+            json={"description": description, "completion": completion, "priority": priority},
+        )
+
+    def update_goal(self, goal_id: str, **changes: Any) -> dict[str, Any]:
+        return self._request("PATCH", f"/v1/goals/{goal_id}", json=changes)
+
     # -- transport ---------------------------------------------------------
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
