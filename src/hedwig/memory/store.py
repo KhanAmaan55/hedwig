@@ -137,6 +137,17 @@ class SqliteMemoryStore:
         row = self._db.query_one("SELECT * FROM belief WHERE id = ?", (memory_id,))
         return _to_belief(row) if row is not None else None
 
+    async def episodes_in_session(
+        self, session_id: str, *, since: datetime | None = None
+    ) -> Sequence[Episode]:
+        """Live episodes from one session, oldest first; `since` limits it to a segment."""
+        rows = self._db.query(
+            "SELECT * FROM episode WHERE session_id = ? AND tombstoned_at IS NULL "
+            "AND (? IS NULL OR occurred_at >= ?) ORDER BY occurred_at",
+            (session_id, _iso(since), _iso(since)),
+        )
+        return tuple(_to_episode(row, ()) for row in rows)
+
     async def browse(
         self, *, limit: int = 50, include_forgotten: bool = False
     ) -> Sequence[Episode | Belief]:

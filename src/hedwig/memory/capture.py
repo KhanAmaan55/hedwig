@@ -102,6 +102,8 @@ class EpisodeCandidate:
     salience_inputs: SalienceInputs = field(default_factory=SalienceInputs)
     trust: TrustTier = TrustTier.SELF
     source_ref: str | None = None
+    model_id: str | None = None
+    """The model that extracted it, when one did — so a bad extraction run can be found."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,6 +119,8 @@ class BeliefCandidate:
     salience_inputs: SalienceInputs = field(default_factory=SalienceInputs)
     trust: TrustTier = TrustTier.SELF
     source_ref: str | None = None
+    model_id: str | None = None
+    """The model that extracted it, when one did — so a bad extraction run can be found."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,7 +258,10 @@ class CaptureService:
             emotional_charge=inputs.emotional_charge,
             confidence=candidate.confidence,
             provenance=Provenance(
-                tier=candidate.trust, source_ref=candidate.source_ref, captured_at=now
+                tier=candidate.trust,
+                source_ref=candidate.source_ref,
+                model_id=candidate.model_id,
+                captured_at=now,
             ),
         )
         memory_id = await self._store.add_episode(episode)
@@ -291,6 +298,7 @@ class CaptureService:
                 tier=candidate.trust,
                 source_ref=candidate.source_ref,
                 derived_from=candidate.derived_from,
+                model_id=candidate.model_id,
                 captured_at=now,
             ),
         )

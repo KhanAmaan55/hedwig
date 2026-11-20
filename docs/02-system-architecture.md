@@ -263,7 +263,7 @@ graph LR
 | `emotion` | Emotional state vector, appraisal, decay, behaviour bindings | [09](09-emotion-engine.md) |
 | `personality` | Trait vector, drift proposals and application, identity core | [10](10-personality-engine.md) |
 | `curiosity` | Gap register, exploration scheduling, findings, interruption policy | [11](11-curiosity-engine.md) |
-| `reflection` | Five-tier reflection, consolidation, decay/forgetting passes | [12](12-reflection-engine.md) |
+| `reflection` | Five-tier reflection, consolidation, decay/forgetting passes. T1 built: `SessionReflector` | [12](12-reflection-engine.md) §14 |
 | `goals` | Goal lifecycle, priority, progress, influence on retrieval and initiative | [08](08-state-management.md) §6 |
 | `memory` | The four durable memory stores and their write paths | [06](06-memory-architecture.md) |
 | `retrieval` | Query planning, hybrid search, fusion, diversification, context packing | [06](06-memory-architecture.md) §6 |

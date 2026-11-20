@@ -1,6 +1,6 @@
 # 12 — Reflection Engine
 
-**Status:** Design · **Depends on:** [06](06-memory-architecture.md), [08](08-state-management.md), [10](10-personality-engine.md) · **Depended on by:** [17](17-backend-architecture.md)
+**Status:** Partially implemented (§14: T1) · **Depends on:** [06](06-memory-architecture.md), [08](08-state-management.md), [10](10-personality-engine.md) · **Depended on by:** [17](17-backend-architecture.md)
 
 ---
 
@@ -315,3 +315,68 @@ mind state only via events and the personality module's decision path. Reads eve
 | Incremental summarisation (update a summary rather than rewriting) | Summarisation dominates the nightly token budget |
 | Cross-session narrative arcs ("the month we redesigned retrieval") | T4 output proves valuable to the user |
 | Collapse T3 into T2 with a weekly flag | If T3 proves not to earn its own code path |
+
+---
+
+## 14. Implementation record — T1 session reflection (REF-01)
+
+Before this, semantic memory (beliefs) was built, tested and never written outside the test
+suite: capture stored each exchange verbatim and nothing distilled it (docs/29 G3). T1 is the
+first thing that does.
+
+```mermaid
+sequenceDiagram
+    participant S as sessions
+    participant B as bus
+    participant R as reflection.SessionReflector
+    participant H as ConversationHistory
+    participant L as llm (utility, background)
+    participant C as memory.CaptureService
+    S->>B: conversation.session.ended
+    B->>R: (durable subscription)
+    R->>H: this segment's messages (since started_at)
+    alt fewer than 2 substantive user messages, or already reflected
+        R-->>R: skip, recorded
+    else
+        R->>L: reflect.session — JSON schema {worth_remembering, title, summary, facts[]}
+        L-->>R: parsed, validated
+        R->>C: session_summary episode + facts as tentative beliefs (SELF trust)
+        C-->>R: stored / reinforced / dropped, per the usual gates
+        R->>B: reflection.session.completed {summary_id, beliefs}
+    end
+```
+
+* **Built:** summary episode (`session_summary`, with `summarised_from` edges to the session's
+  interaction episodes) and belief extraction. **Not yet:** entity updates, goal assessment and
+  the mood arc (docs/12 §4). Each needs a consumer that does not exist yet.
+* **Facts are HEDWIG's inference, labelled as such.** A belief extracted by a model from what the
+  user said is not the user's word: `trust = self`, `status = tentative`, confidence capped at
+  0.5 (capture's own cap for every new belief), `source_ref = session:<id>`, `model_id` recorded. This is the "distinguish verified facts
+  from hypotheses" line of the vision. Only a user correction (MEM-03) or corroboration across
+  sessions (T2) should raise one.
+* **Only what the user stated.** The prompt asks for durable facts about the user that the
+  *user* said: preferences, people, projects, plans. HEDWIG's own replies are context, never a
+  source. Small talk yields `worth_remembering: false` and nothing is written.
+* **One call, background priority, typed default.** On a 1-model-at-a-time Ollama this queues
+  behind interactive work (`RequestPriority.BACKGROUND`). If the model is unavailable or the
+  output never validates, the reflection is skipped and logged. A missing summary is better than
+  an invented one (docs/14 §6).
+* **Idempotent per segment.** A session resumed after it ended is a new segment (docs/27 §5.1)
+  and gets its own reflection. A redelivered `session.ended` for a segment already summarised
+  writes nothing, because the reflector checks for a summary episode in that segment first, and
+  the bus ledger stops most redeliveries anyway.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Reflect on session end, not per turn (T0) | One model call per conversation, not per message | A fact said in a session that never ends is captured only when the idle reaper ends it (30 min) | Recall needs facts mid-session |
+| Tentative, capped, `self` trust | A model's misreading cannot masquerade as the user's word | True facts start weak until corroborated | T2 corroboration lands and promotes them |
+| Utility model | Cheap, background | A 2–4B model's extraction quality | The `reflects a session` eval shows misses |
+
+**Measured live** (`scripts/eval_models.py`, *reflects a session*, `gemma4:e2b`). Three facts
+stated, conversation ended. With `reflect.session.v1`, 0/3: every fact was extracted, but
+copied in the first person ("My favourite tea is…"), which stored reads as HEDWIG talking about
+itself. `v2` adds a worked example, and `third_person()` rewrites a first-person opening
+deterministically as a guard ("I live in Porto" becomes `The user said: "I live in Porto."`
+rather than guessing verb agreement). Result: 3/3 runs, all three facts each time, all in the
+third person; the reflection takes 1–3 s after the end.
+

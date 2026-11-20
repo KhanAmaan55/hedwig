@@ -233,6 +233,20 @@ class SessionsConfig(BaseModel):
     reap_interval_seconds: Annotated[float, Field(gt=0)] = 300.0
 
 
+class ReflectionConfig(BaseModel):
+    """Reflection (docs/12). Only T1 exists so far (docs/12 §14)."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    enabled: bool = True
+    min_user_messages: Annotated[int, Field(ge=1)] = 2
+    """Below this a session is small talk, not material. Saves a model call per "hi"."""
+    max_transcript_messages: Annotated[int, Field(ge=4, le=400)] = 80
+    """The most recent messages of a segment that reach the model. A 2-4B utility model's
+    context is the limit; map-reduce for longer sessions is future work (docs/12 §8)."""
+    max_facts: Annotated[int, Field(ge=0, le=20)] = 5
+
+
 class PersonalityConfig(BaseModel):
     """The personality engine (docs/10).
 
@@ -290,6 +304,7 @@ class Config(BaseSettings):
     emotion: EmotionConfig = EmotionConfig()
     personality: PersonalityConfig = PersonalityConfig()
     sessions: SessionsConfig = SessionsConfig()
+    reflection: ReflectionConfig = ReflectionConfig()
     plugins: PluginsConfig = PluginsConfig()
 
     @property

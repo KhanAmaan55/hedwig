@@ -22,7 +22,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 09 | [Emotion Engine](09-emotion-engine.md) ✅ | Appraisal, state integration, decay, behaviour bindings |
 | 10 | [Personality Engine](10-personality-engine.md) ✅ | Trait vector, evidence-based drift, guardrails, identity core |
 | 11 | [Curiosity Engine](11-curiosity-engine.md) | Knowledge-gap detection, budgeted exploration, interruption policy |
-| 12 | [Reflection Engine](12-reflection-engine.md) | Five reflection tiers, consolidation, idempotency |
+| 12 | [Reflection Engine](12-reflection-engine.md) ◐ | Five reflection tiers, consolidation, idempotency |
 | 13 | [Knowledge and Tools](13-knowledge-and-tools.md) | The four knowledge tiers, tool layer, provenance, injection defence |
 | 14 | [Language Model Gateway](14-language-model-gateway.md) ✅ | Provider abstraction, model tiering, prompt assembly, structured output |
 | 15 | [Avatar Controller](15-avatar-controller.md) ◐ | Expression intent, frame protocol, renderer independence, lip sync |
@@ -99,7 +99,8 @@ of what exists in code. Update it as each milestone lands.
 | Avatar: 2D renderer, WebSocket frames, speech, lip sync, gestures | Not started | — |
 | Memory maintenance scheduled nightly in the running process | **Implemented** (MEM-01) | `src/hedwig/wiring.py`, `src/hedwig/memory/maintenance.py` |
 | Frontend conversation pane, token delivery (Electron IPC, Vite proxy) | **Implemented** (UX-02, [18](18-frontend-architecture.md) §13) | `frontend/src/panes/conversation/`, `electron/` |
-| Reflection, curiosity, goals, tools | Not started — [29](29-backlog.md) | — |
+| Reflection T1: session summary and belief extraction | **Implemented** (REF-01, [12](12-reflection-engine.md) §14) | `src/hedwig/reflection/` |
+| Reflection T2–T4, curiosity, goals, tools | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

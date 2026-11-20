@@ -65,6 +65,7 @@ from hedwig.memory import (
     TurnCaptureSubscriber,
 )
 from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore, PersonaMindReader
+from hedwig.reflection import SessionReflector
 from hedwig.sessions import SqliteSessionStore
 
 logger = get_logger(__name__)
@@ -342,6 +343,21 @@ def build_container(
         name=SUBSCRIPTION,
     )
 
+    # 10b. Reflection, T1 (docs/12 §14): when a conversation ends, keep a summary and the
+    #      facts the user stated, as tentative beliefs. A subscriber, like capture.
+    reflector: SessionReflector | None = None
+    if config.reflection.enabled:
+        reflector = SessionReflector(
+            history=sessions,
+            gateway=llm,
+            capture=capture,
+            store=memory,
+            bus=bus,
+            min_user_messages=config.reflection.min_user_messages,
+            max_messages=config.reflection.max_transcript_messages,
+            max_facts=config.reflection.max_facts,
+        )
+
     # 11. Lifecycle. The registry starts these in dependency order and stops them in reverse.
     registry = InMemoryServiceRegistry()
     registry.register("config", config_manager)
@@ -369,6 +385,10 @@ def build_container(
             critical=False,
         )
     registry.register("brain", brain, depends_on=("bus", "memory", "sessions"), critical=False)
+    if reflector is not None:
+        registry.register(
+            "reflection", reflector, depends_on=("bus", "memory", "sessions", "llm"), critical=False
+        )
 
     # 12. Plugins last: they register services of their own against the registry above.
     plugins = AllowlistPluginLoader(
