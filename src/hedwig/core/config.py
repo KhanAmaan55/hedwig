@@ -198,6 +198,10 @@ class MemoryConfig(BaseModel):
     context_token_budget: Annotated[int, Field(ge=100)] = 3000
     decay_half_life_days: Annotated[float, Field(gt=0)] = 30.0
     forget_threshold: Annotated[float, Field(ge=0, le=1)] = 0.08
+    maintenance_hour: Annotated[int, Field(ge=0, le=23)] = 3
+    """Local hour of the nightly decay-and-forget pass (docs/06 §7). Local, so "nightly"
+    means while the user sleeps. A machine that was asleep catches up once, on waking; the
+    2 %/night forgetting cap holds however late the run is."""
     max_captures_per_turn: Annotated[int, Field(ge=1, le=50)] = 5
 
 

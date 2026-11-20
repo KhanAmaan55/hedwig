@@ -47,7 +47,7 @@ from hedwig.core.ports import (
 from hedwig.core.ports.personality import PersonaReader, RelationshipReader, Trait
 from hedwig.core.ports.scheduler import Priority, TaskSpec
 from hedwig.core.registry import InMemoryServiceRegistry
-from hedwig.core.scheduler import AsyncTaskScheduler, IntervalTrigger
+from hedwig.core.scheduler import AsyncTaskScheduler, DailyTrigger, IntervalTrigger
 from hedwig.core.state import SqliteStateManager
 from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
@@ -249,6 +249,19 @@ def build_container(
         bus=bus,
         half_life_days=config.memory.decay_half_life_days,
         forget_threshold=config.memory.forget_threshold,
+    )
+    # Nightly decay and forgetting (docs/06 §7). Until this was registered the pass existed,
+    # was tested, and never ran: salience never decayed in a real install (docs/29 G2).
+    # A scheduled task, so a machine asleep at 03:00 catches up once on waking.
+    scheduler.register(
+        TaskSpec(
+            name="memory.maintenance",
+            handler=maintenance.run_task,
+            trigger=DailyTrigger(hour=config.memory.maintenance_hour),
+            priority=Priority.MAINTENANCE,
+            description="Decay salience and forget what has faded (capped at 2 % a night).",
+            max_runtime_seconds=600.0,
+        )
     )
     # Social memory (docs/06 §3.3). In `memory` because docs/05 puts `relation` there;
     # personality reads it through `RelationshipReader` and never writes it.

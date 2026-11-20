@@ -356,6 +356,12 @@ frequently-recalled memory effectively never fades. Pinned memories skip decay e
 Decay is applied in a nightly batch pass, not lazily at read time. Batch keeps reads
 cheap and pure, and makes the decay curve inspectable in the Mind Inspector.
 
+> **Scheduling (MEM-01, 2026-11-20).** The pass runs as the scheduled task
+> `memory.maintenance`, daily at `memory.maintenance_hour` (default 3, local time), with its
+> `MaintenanceReport` recorded as the run's stats in `task_run`. Until then it was built and
+> tested but never registered, so a real install never decayed anything. When reflection's T2
+> lands (docs/12 §5), this pass becomes one of its stages and the standalone task is removed.
+
 ### 7.2 Reinforcement
 
 ```mermaid
