@@ -4,7 +4,8 @@
  * Four tabs, each a window onto one module through the public API, each with the user's hand on
  * it: memory can be searched, pinned, forgotten and restored, and what the nightly run could not
  * decide alone is put to the user ("Needs your eye"); goals activated and closed;
- * findings kept or dismissed; personality and mood are shown as they are. Nothing here is
+ * findings kept or dismissed; everything can be downloaded, and anything erased for good (Data);
+ * personality and mood are shown as they are. Nothing here is
  * decorative — every number is the backend's, and every button is an API call.
  */
 
@@ -18,6 +19,8 @@ import type {
   Gap,
   Goal,
   MemoryItem,
+  PurgePreview,
+  PurgeReceipt,
 } from "../../transport/types";
 
 import { useLoad } from "./useLoad";
@@ -32,6 +35,9 @@ export type InspectorApi = Pick<
   | "memoryAction"
   | "disputes"
   | "resolveDispute"
+  | "exportAll"
+  | "purgePreview"
+  | "purge"
   | "goals"
   | "createGoal"
   | "updateGoal"
@@ -41,10 +47,28 @@ export type InspectorApi = Pick<
   | "findingAction"
 >;
 
-const TABS = ["Mind", "Memory", "Goals", "Curiosity"] as const;
+const TABS = ["Mind", "Memory", "Goals", "Curiosity", "Data"] as const;
 type Tab = (typeof TABS)[number];
 
-export default function InspectorPane({ api = client }: { api?: InspectorApi }): JSX.Element {
+/** Hand bytes to the user as a file. Injected so tests need no browser download machinery. */
+export type SaveFile = (data: ArrayBuffer, name: string) => void;
+
+const saveInBrowser: SaveFile = (data, name) => {
+  const url = URL.createObjectURL(new Blob([data], { type: "application/zip" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+export default function InspectorPane({
+  api = client,
+  save = saveInBrowser,
+}: {
+  api?: InspectorApi;
+  save?: SaveFile;
+}): JSX.Element {
   const [tab, setTab] = useState<Tab>("Mind");
 
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -78,6 +102,7 @@ export default function InspectorPane({ api = client }: { api?: InspectorApi }):
         {tab === "Memory" && <MemoryTab api={api} />}
         {tab === "Goals" && <GoalsTab api={api} />}
         {tab === "Curiosity" && <CuriosityTab api={api} />}
+        {tab === "Data" && <DataTab api={api} save={save} />}
       </div>
     </section>
   );
@@ -493,6 +518,148 @@ function CuriosityTab({ api }: { api: InspectorApi }): JSX.Element {
           </li>
         ))}
       </ul>
+    </>
+  );
+}
+
+/**
+ * Leaving is easy, and erasing is real (docs/21 §7). Download gives the user everything. Erase is
+ * two steps: a preview that changes nothing, then a confirmation of exactly what it showed.
+ */
+function DataTab({ api, save }: { api: InspectorApi; save: SaveFile }): JSX.Element {
+  const [exporting, setExporting] = useState(false);
+  const [phrase, setPhrase] = useState("");
+  const [preview, setPreview] = useState<PurgePreview | null>(null);
+  const [receipt, setReceipt] = useState<PurgeReceipt | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  const attempt = async (work: () => Promise<void>) => {
+    try {
+      setProblem(null);
+      await work();
+    } catch (caught: unknown) {
+      setProblem(caught instanceof ApiError ? caught.message : "That did not work.");
+    }
+  };
+  const download = () =>
+    attempt(async () => {
+      setExporting(true);
+      try {
+        save(await api.exportAll(), "hedwig-export.zip");
+      } finally {
+        setExporting(false);
+      }
+    });
+  const look = () =>
+    attempt(async () => {
+      setReceipt(null);
+      setPreview(await api.purgePreview("phrase", phrase.trim()));
+    });
+  const erase = (confirm: string) =>
+    attempt(async () => {
+      setReceipt(await api.purge("phrase", phrase.trim(), confirm));
+      setPreview(null);
+      setPhrase("");
+    });
+
+  return (
+    <>
+      <h3 className="inspector__heading">Download everything</h3>
+      <p className="panel__hint">
+        Every conversation, memory and goal, as readable files and the full database.
+      </p>
+      <button
+        className="button button--small"
+        type="button"
+        disabled={exporting}
+        onClick={() => void download()}
+      >
+        {exporting ? "Preparing…" : "Download everything"}
+      </button>
+
+      <h3 className="inspector__heading">Erase for good</h3>
+      <p className="panel__hint">
+        Unlike Forget, this cannot be undone. It removes every message and memory containing the
+        words, what HEDWIG made from them, and backups that still hold them.
+      </p>
+      <form
+        className="inspector__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void look();
+        }}
+      >
+        <input
+          aria-label="Words to erase"
+          className="inspector__input"
+          placeholder="A name, a place, a phrase…"
+          value={phrase}
+          onChange={(event) => {
+            setPhrase(event.target.value);
+            setPreview(null);
+          }}
+        />
+        <button className="button button--small" type="submit" disabled={phrase.trim().length < 3}>
+          Preview
+        </button>
+      </form>
+      {problem && (
+        <p className="panel__hint" role="alert">
+          {problem}
+        </p>
+      )}
+      {preview && !preview.confirm && <p className="panel__hint">Nothing contains that.</p>}
+      {preview?.confirm && (
+        <section aria-label="Erase preview" className="item">
+          <p className="item__text">This will permanently erase:</p>
+          <ul>
+            {Object.entries(preview.counts).map(([label, count]) => (
+              <li key={label} className="item__meta">
+                {count} {count === 1 ? label.replace(/s$/, "") : label}
+              </li>
+            ))}
+          </ul>
+          {preview.examples.map((example) => (
+            <p key={example} className="item__meta">
+              e.g. “{example}”
+            </p>
+          ))}
+          {preview.backups > 0 && (
+            <p className="item__meta">
+              and delete {preview.backups} {preview.backups === 1 ? "backup" : "backups"}, which
+              still contain it.
+            </p>
+          )}
+          <div className="item__actions">
+            <button
+              className="button button--small button--danger"
+              type="button"
+              onClick={() => void erase(preview.confirm ?? "")}
+            >
+              Erase permanently
+            </button>
+            <button
+              className="button button--small"
+              type="button"
+              onClick={() => {
+                setPreview(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
+      {receipt && (
+        <p className="panel__hint" role={receipt.verified === "failed" ? "alert" : "status"}>
+          {receipt.verified === "failed"
+            ? "Erased, but traces were found in the database file. Stop HEDWIG and run `hedwig purge --everything` to be sure."
+            : `Erased${receipt.verified === "file" ? ", and checked against the database file" : ""}.` +
+              (receipt.also_elsewhere > 0
+                ? " Some of the same words are in things you did not choose to erase."
+                : "")}
+        </p>
+      )}
     </>
   );
 }

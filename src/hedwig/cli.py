@@ -16,6 +16,7 @@ import contextlib
 import json
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import typer
@@ -511,6 +512,140 @@ def reflect() -> None:
     )
     for stage, stats in result["stats"].items():
         print(f"  {stage:<10} {json.dumps(stats)}")
+
+
+@app.command()
+def export(
+    out: Annotated[
+        Path, typer.Option(help="A file, or a folder for the dated zip HEDWIG names.")
+    ] = Path(),
+) -> None:
+    """Download everything HEDWIG holds: the database, plus conversations and memories as files."""
+    written = _call(lambda c: c.export(out))
+    assert isinstance(written, Path)
+    destination = written
+    size = destination.stat().st_size
+    print(f"wrote {destination} ({size / 1_048_576:.1f} MB). It contains everything; keep it safe.")
+
+
+@app.command()
+def purge(
+    memory: Annotated[
+        str | None, typer.Option(help="Erase one memory and what came from it.")
+    ] = None,
+    session: Annotated[str | None, typer.Option(help="Erase one conversation.")] = None,
+    phrase: Annotated[
+        str | None, typer.Option(help="Erase everything whose text contains this phrase.")
+    ] = None,
+    everything: Annotated[
+        bool,
+        typer.Option("--everything", help="Erase all of HEDWIG's data. HEDWIG must be stopped."),
+    ] = False,
+    confirm: Annotated[
+        str | None, typer.Option(help="The preview's code, to erase without being asked.")
+    ] = None,
+) -> None:
+    """Erase permanently. Unlike `memory forget`, this cannot be undone (docs/21 §7.3)."""
+    chosen = [
+        (k, v) for k, v in (("memory", memory), ("session", session), ("phrase", phrase)) if v
+    ]
+    if everything:
+        if chosen:
+            raise typer.BadParameter("--everything stands alone.")
+        _erase_everything()
+        return
+    if len(chosen) != 1:
+        raise typer.BadParameter("Choose one of --memory, --session, --phrase or --everything.")
+    scope, value = chosen[0]
+    preview = _call(lambda c: c.purge_preview(scope, value))
+    assert isinstance(preview, dict)
+    if not preview["confirm"]:
+        print("nothing to erase")
+        return
+    print("This will permanently erase:")
+    for label, count in preview["counts"].items():
+        print(f"  {count:>5}  {label.removesuffix('s') if count == 1 else label}")
+    for example in preview["examples"]:
+        print(f"         e.g. {example}")
+    if preview["backups"]:
+        print(f"  and delete {preview['backups']} backup(s), which still contain it.")
+    if confirm is None:
+        typed = typer.prompt('Type "erase" to continue', default="", show_default=False)
+        if typed.strip().lower() != "erase":
+            print("nothing erased")
+            raise typer.Exit(1)
+        confirm = str(preview["confirm"])
+    receipt = _call(lambda c: c.purge(scope, value, confirm))
+    assert isinstance(receipt, dict)
+    if receipt["verified"] == "failed":
+        typer.secho(
+            "Erased, but the check found traces left in the database file. Run "
+            "`hedwig purge --everything` with HEDWIG stopped to be sure.",
+            fg=typer.colors.RED,
+            err=True,
+        )
+        raise typer.Exit(2)
+    note = (
+        f"; {receipt['also_elsewhere']} piece(s) of it are also said elsewhere, outside what you chose"
+        if receipt["also_elsewhere"]
+        else ""
+    )
+    print(f"erased and verified against the database file{note}.")
+
+
+def _erase_everything() -> None:
+    import shutil
+    import socket
+
+    config = load_config()
+    try:
+        with socket.create_connection((config.api.host, config.api.port), timeout=1):
+            running = True
+    except OSError:
+        running = False
+    if running:
+        typer.secho(
+            "HEDWIG is running. Stop it first, then run this again.", fg=typer.colors.RED, err=True
+        )
+        raise typer.Exit(1)
+
+    runtime = config.runtime
+    database = config.database_path
+    doomed = [
+        p
+        for p in (
+            database,
+            database.with_name(database.name + "-wal"),
+            database.with_name(database.name + "-shm"),
+            runtime.blobs_dir,
+            runtime.backups_dir,
+            runtime.logs_dir,
+            runtime.token_path,
+        )
+        if p.exists()
+    ]
+    if not doomed:
+        print("nothing to erase")
+        return
+    print("This will permanently delete:")
+    for path in doomed:
+        size = (
+            sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+            if path.is_dir()
+            else path.stat().st_size
+        )
+        print(f"  {path}  ({size / 1_048_576:.1f} MB)")
+    print("Downloaded voices and your configuration files are kept.")
+    typed = typer.prompt('Type "erase everything" to continue', default="", show_default=False)
+    if typed.strip().lower() != "erase everything":
+        print("nothing erased")
+        raise typer.Exit(1)
+    for path in doomed:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    print("erased. HEDWIG will start fresh next time.")
 
 
 @app.command()

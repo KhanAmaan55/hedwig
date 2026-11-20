@@ -9,7 +9,8 @@ docs/17 §9). The TypeScript twin is `frontend/src/transport/client.ts`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from typing import Any, NoReturn
 from urllib.parse import quote
 
 import httpx
@@ -199,6 +200,39 @@ class HedwigClient:
             json={"choice": choice},
         )
 
+    def export(self, destination: Path) -> Path:
+        """Download everything HEDWIG holds as a zip: into `destination`, or into it as a folder
+        under the dated name the server gives."""
+        try:
+            with self._http.stream(
+                "POST", "/v1/export", headers={"Authorization": f"Bearer {self._token}"}
+            ) as response:
+                if not response.is_success:
+                    response.read()
+                    self._fail(response)
+                if destination.is_dir():
+                    _, _, name = response.headers.get("content-disposition", "").partition(
+                        "filename="
+                    )
+                    destination = destination / (name.strip('"') or "hedwig-export.zip")
+                with destination.open("wb") as out:
+                    for chunk in response.iter_bytes():
+                        out.write(chunk)
+        except httpx.TransportError as error:
+            raise ClientError("unreachable", f"Could not reach HEDWIG: {error}") from error
+        return destination
+
+    def purge_preview(self, scope: str, value: str) -> dict[str, Any]:
+        return self._request("POST", "/v1/purge/preview", json={"scope": scope, "value": value})
+
+    def purge(self, scope: str, value: str, confirm: str) -> dict[str, Any]:
+        return self._request(
+            "POST", "/v1/purge", json={"scope": scope, "value": value, "confirm": confirm}
+        )
+
+    def purge_receipts(self) -> list[dict[str, Any]]:
+        return list(self._request("GET", "/v1/purge/receipts")["receipts"])
+
     def egress(self, *, limit: int = 50) -> list[dict[str, Any]]:
         return list(self._request("GET", "/v1/egress", params={"limit": limit})["requests"])
 
@@ -222,7 +256,10 @@ class HedwigClient:
 
         if response.is_success:
             return response.json()  # type: ignore[no-any-return]
+        self._fail(response)
 
+    @staticmethod
+    def _fail(response: httpx.Response) -> NoReturn:
         try:
             envelope = dict(response.json()["error"])
         except (ValueError, KeyError, TypeError):

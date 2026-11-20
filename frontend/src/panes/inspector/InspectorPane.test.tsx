@@ -72,6 +72,23 @@ function fakeApi(overrides: Partial<InspectorApi> = {}): InspectorApi {
     memoryAction: vi.fn().mockResolvedValue({ ...MEMORY, forgotten: true }),
     disputes: vi.fn().mockResolvedValue([]),
     resolveDispute: vi.fn().mockResolvedValue(undefined),
+    exportAll: vi.fn().mockResolvedValue(new ArrayBuffer(4)),
+    purgePreview: vi.fn().mockResolvedValue({
+      scope: "phrase",
+      counts: { messages: 2, beliefs: 1 },
+      examples: ["My sister Ana lives in Porto."],
+      backups: 1,
+      confirm: "abc123def456",
+    }),
+    purge: vi.fn().mockResolvedValue({
+      id: "purge_1",
+      scope_kind: "phrase",
+      created_at: "",
+      counts: { messages: 2, beliefs: 1 },
+      verified: "file",
+      also_elsewhere: 0,
+      backups_deleted: 1,
+    }),
     goals: vi.fn().mockResolvedValue([GOAL]),
     createGoal: vi.fn().mockResolvedValue(GOAL),
     updateGoal: vi.fn().mockResolvedValue({ ...GOAL, status: "active" }),
@@ -209,6 +226,58 @@ describe("InspectorPane", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("mentions you");
+  });
+
+  it("downloads everything", async () => {
+    const api = fakeApi();
+    const save = vi.fn();
+    render(<InspectorPane api={api} save={save} />);
+    tab("Data");
+    fireEvent.click(screen.getByRole("button", { name: "Download everything" }));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith(expect.any(ArrayBuffer), "hedwig-export.zip");
+    });
+  });
+
+  it("erases only after showing exactly what will go", async () => {
+    const api = fakeApi();
+    render(<InspectorPane api={api} />);
+    tab("Data");
+    fireEvent.change(screen.getByLabelText("Words to erase"), { target: { value: "Ana" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    const preview = await screen.findByRole("region", { name: "Erase preview" });
+    expect(preview).toHaveTextContent("2 messages");
+    expect(preview).toHaveTextContent("1 backup");
+    expect(api.purge).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Erase permanently" }));
+    await waitFor(() => {
+      expect(api.purge).toHaveBeenCalledWith("phrase", "Ana", "abc123def456");
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "checked against the database file",
+    );
+  });
+
+  it("says plainly when an erasure could not be verified", async () => {
+    const api = fakeApi({
+      purge: vi.fn().mockResolvedValue({
+        id: "purge_1",
+        scope_kind: "phrase",
+        created_at: "",
+        counts: {},
+        verified: "failed",
+        also_elsewhere: 0,
+        backups_deleted: 0,
+      }),
+    });
+    render(<InspectorPane api={api} />);
+    tab("Data");
+    fireEvent.change(screen.getByLabelText("Words to erase"), { target: { value: "Ana" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Erase permanently" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("traces were found");
   });
 
   it("moves between tabs with the arrow keys", () => {

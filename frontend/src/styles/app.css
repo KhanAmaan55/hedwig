@@ -768,3 +768,8 @@ code {
 .why__meta {
   color: var(--colour-text-faint);
 }
+
+.button--danger {
+  color: var(--colour-error);
+  border-color: var(--colour-error);
+}

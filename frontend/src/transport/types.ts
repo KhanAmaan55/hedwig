@@ -167,6 +167,28 @@ export interface BeliefDispute {
   second: { id: string; statement: string };
 }
 
+export type PurgeScope = "memory" | "session" | "phrase";
+
+/** What erasing would remove. Nothing has changed yet (docs/21 §7.4). */
+export interface PurgePreview {
+  scope: PurgeScope;
+  counts: Record<string, number>;
+  examples: string[];
+  backups: number;
+  confirm: string | null;
+}
+
+/** That an erasure happened, and how much — never what. */
+export interface PurgeReceipt {
+  id: string;
+  scope_kind: PurgeScope;
+  created_at: string;
+  counts: Record<string, number>;
+  verified: "file" | "query" | "failed";
+  also_elsewhere: number;
+  backups_deleted: number;
+}
+
 export type DisputeChoice = "first" | "second" | "both" | "same";
 
 export interface Finding {

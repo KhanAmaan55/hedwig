@@ -133,8 +133,10 @@ accumulates errors forever, and the user is the highest-trust source available.
 | `GET`/`PATCH` | `/config` | Safe config subset; secrets never returned |
 | `GET` | `/jobs` · `POST /jobs/{name}/trigger` · `/pause` | Job control |
 | `GET` | `/notices` | Unresolved system notices (dead letters, degraded subsystems, pending approvals) |
-| `POST` | `/export` | Full portable export (async job → download) |
-| `POST` | `/purge` | Privacy purge; requires `confirm` and a scope ([21](21-security-privacy-ethics.md) §7) |
+| `POST` | `/export` | Full portable export, streamed as a zip (built: synchronous, not a job — SEC-02) |
+| `POST` | `/purge/preview` | `{scope, value}` → counts, examples, backups affected, `confirm` code; changes nothing (SEC-02) |
+| `POST` | `/purge` | Privacy purge; `{scope, value, confirm}` ([21](21-security-privacy-ethics.md) §7.4) |
+| `GET` | `/purge/receipts` | Past purges: scope kind, counts, verification; never content (SEC-02) |
 
 ### 4.6 Error format
 

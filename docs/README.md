@@ -34,7 +34,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 21 | [Security, Privacy and Ethics](21-security-privacy-ethics.md) | Threat model, trust tiers, honesty invariants, export and deletion |
 | 22 | [Development Roadmap](22-roadmap.md) | Eight phases with exit criteria |
 | 23 | [Challenged Assumptions and Open Questions](23-challenged-assumptions.md) | Where the README's premises are wrong or underspecified, and the tradeoff register |
-| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0023, the decisions the rest of the docs assume |
+| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0024, the decisions the rest of the docs assume |
 | 25 | [Core Infrastructure](25-core-infrastructure.md) ✅ | What Milestone 2 built: the seven platform services, their ports, and how they start |
 | 26 | [The Turn/Memory Loop](26-turn-memory-loop.md) ✅ | What Milestone 6 built: observe → retrieve → inject → response context → store → persist |
 | 27 | [Personality, Relationship and the Prompt](27-personality-relationship-and-the-prompt.md) ✅ | What Milestone 9 built: traits and their brakes, the relationship, and the prompt the model receives |
@@ -107,6 +107,7 @@ of what exists in code. Update it as each milestone lands.
 | Goals: store, lifecycle, API/CLI, in the prompt, from reflection | **Implemented** (GOA-01/02, [08](08-state-management.md) §6.1) | `src/hedwig/goals/` |
 | Web research: opt-in search, fetch controls, citations, egress audit | **Implemented** (KNW-02/03, [13](13-knowledge-and-tools.md) §13) | `src/hedwig/knowledge/`, `src/hedwig/tools/research.py` |
 | Curiosity: gap register, gated exploration, findings feed, deferred surfacing | **Implemented** (CUR-01/02/03, [11](11-curiosity-engine.md) §13) | `src/hedwig/curiosity/` |
+| Export everything; purge with derivation-following and file-level verification | **Implemented** (SEC-02, [21](21-security-privacy-ethics.md) §7.4, [ADR-0024](adr/0024-purge-is-one-classified-sweep.md)) | `src/hedwig/privacy/`, inspector *Data* tab |
 | Reflection T2 nightly: day summaries, belief merge and promotion, judged conflicts put to the user | **Implemented** (REF-02a/b/c, [12](12-reflection-engine.md) §15) | `src/hedwig/reflection/nightly.py`, `frontend/src/panes/inspector/` |
 | Reflection T2 procedures and drift; T3–T4 | Not started — [29](29-backlog.md) | — |
 
