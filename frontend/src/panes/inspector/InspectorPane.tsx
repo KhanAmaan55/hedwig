@@ -19,6 +19,7 @@ import type {
   Gap,
   Goal,
   MemoryItem,
+  PersonalityChange,
   PurgePreview,
   PurgeReceipt,
 } from "../../transport/types";
@@ -29,6 +30,8 @@ export type InspectorApi = Pick<
   HedwigClient,
   | "emotion"
   | "personality"
+  | "personalityHistory"
+  | "revertChange"
   | "relationship"
   | "memories"
   | "searchMemory"
@@ -162,9 +165,63 @@ function MindTab({ api }: { api: InspectorApi }): JSX.Element {
       ) : (
         <p className="panel__hint">{personality.error ?? "Loading…"}</p>
       )}
+      <Changes api={api} onChange={personality.reload} />
     </>
   );
 }
+
+/**
+ * How HEDWIG has changed, and why — each change undoable (docs/10 §5.5, §13). Drift that cannot be
+ * seen or undone would be a one-way risk; this is where the user sees it.
+ */
+function Changes({ api, onChange }: { api: InspectorApi; onChange: () => void }): JSX.Element {
+  const changes = useLoad(useCallback(() => api.personalityHistory(), [api]));
+  const shown: PersonalityChange[] = Array.isArray(changes.data) ? changes.data : [];
+  const revert = async (change: PersonalityChange) => {
+    await api.revertChange(change.id);
+    changes.reload();
+    onChange();
+  };
+  if (shown.length === 0) return <></>;
+  return (
+    <section aria-label="Recent changes">
+      <h3 className="inspector__heading">Recent changes</h3>
+      <ul className="items">
+        {shown.map((change) => (
+          <li key={change.id} className={`item${change.reverted_at ? " item--muted" : ""}`}>
+            <p className="item__text">
+              {change.trait} {change.delta > 0 ? "+" : "−"}
+              {Math.abs(change.delta).toFixed(3)}
+            </p>
+            <p className="item__meta">
+              {change.applied_at.slice(0, 10)} · {SOURCES[change.source] ?? change.source}
+              {change.rationale ? ` · ${change.rationale}` : ""}
+              {change.reverted_at ? " · undone" : ""}
+            </p>
+            {!change.reverted_at && change.source !== "revert" && (
+              <div className="item__actions">
+                <button
+                  className="button button--small"
+                  type="button"
+                  onClick={() => void revert(change)}
+                >
+                  Revert
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const SOURCES: Record<string, string> = {
+  instruction: "you asked",
+  inferred: "from your reactions",
+  reset: "reset",
+  revert: "undo",
+};
 
 function MemoryTab({ api }: { api: InspectorApi }): JSX.Element {
   const [showForgotten, setShowForgotten] = useState(false);

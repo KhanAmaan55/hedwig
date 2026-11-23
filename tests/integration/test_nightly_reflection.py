@@ -366,7 +366,7 @@ async def test_it_yields_while_the_user_is_talking_and_resumes_after(
     clock.advance(minutes=3)
     resumed = await running_container.nightly.run()
     assert resumed["status"] == "completed"
-    assert list(resumed["stats"]) == ["summarise", "merge", "judge", "promote", "maintain"]
+    assert list(resumed["stats"]) == ["summarise", "merge", "judge", "promote", "drift", "maintain"]
 
 
 async def test_every_run_is_recorded(running_container: Container) -> None:
@@ -375,7 +375,7 @@ async def test_every_run_is_recorded(running_container: Container) -> None:
     run = running_container.nightly.runs()[0]
     assert run["id"] == mine["id"]
     assert run["status"] == "completed" and run["content_hash"] and run["finished_at"]
-    assert set(run["stats"]) == {"summarise", "merge", "judge", "promote", "maintain"}
+    assert set(run["stats"]) == {"summarise", "merge", "judge", "promote", "drift", "maintain"}
 
 
 def test_it_is_scheduled_nightly(container: Container) -> None:

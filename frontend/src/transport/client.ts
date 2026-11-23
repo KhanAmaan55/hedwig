@@ -19,6 +19,7 @@ import type {
   Health,
   MemoryItem,
   MemorySearch,
+  PersonalityChange,
   PersonalityReading,
   PurgePreview,
   PurgeReceipt,
@@ -175,6 +176,20 @@ export class HedwigClient {
 
   async personality(): Promise<PersonalityReading> {
     return this.request<PersonalityReading>("GET", "/v1/mind/personality", { auth: true });
+  }
+
+  async personalityHistory(limit = 8): Promise<PersonalityChange[]> {
+    return this.request<PersonalityChange[]>(
+      "GET",
+      `/v1/mind/personality/history?limit=${String(limit)}`,
+      { auth: true },
+    );
+  }
+
+  async revertChange(id: string): Promise<void> {
+    await this.request<unknown>("POST", `/v1/mind/personality/revert/${encodeURIComponent(id)}`, {
+      auth: true,
+    });
   }
 
   async relationship(): Promise<RelationshipReading> {

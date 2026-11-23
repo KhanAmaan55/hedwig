@@ -219,6 +219,17 @@ export interface PersonalityReading {
   version: number;
 }
 
+/** One change to a trait, and why (docs/10 §5.5, §13). */
+export interface PersonalityChange {
+  id: string;
+  trait: string;
+  delta: number;
+  source: string;
+  applied_at: string;
+  reverted_at: string | null;
+  rationale: string | null;
+}
+
 export interface RelationshipReading {
   familiarity: number;
   affinity: number;

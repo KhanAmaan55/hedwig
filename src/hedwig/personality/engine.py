@@ -15,6 +15,7 @@ the fast path for an explicit request, and it is live today.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 from hedwig.core.logging import fields, get_logger
@@ -27,6 +28,7 @@ from hedwig.core.ports.personality import (
     Evidence,
     IdentityCore,
     PersonalityProfile,
+    StyleObservation,
     Trait,
 )
 from hedwig.personality.drift import evaluate
@@ -122,6 +124,59 @@ class PersonalityEngine:
             rationale=rationale,
             correlation_id=correlation_id,
         )
+
+    # -- evidence → proposals (docs/10 §13) ----------------------------------------
+
+    async def observe(self, observations: Sequence[StyleObservation]) -> int:
+        """Record what reflection observed. Decides nothing: `consider_drift` does, through
+        the guardrails."""
+        return self._store.add_evidence(observations, now=self._clock.now())
+
+    async def consider_drift(self) -> list[DriftDecision]:
+        """One proposal per trait that the unused evidence of the last fortnight supports.
+
+        The direction with more weight is proposed only if the other side has less than half
+        of it: mixed signals propose nothing. Evidence that moved a trait is spent; evidence a
+        guardrail refused waits, so next week's budget can still act on it.
+        """
+        since = self._clock.now() - self._limits.oscillation_window
+        by_trait: dict[str, list[dict[str, object]]] = {}
+        for row in self._store.open_evidence(since=since):
+            by_trait.setdefault(str(row["trait"]), []).append(row)
+
+        decisions = []
+        for trait_name, rows in sorted(by_trait.items()):
+            up = [r for r in rows if int(str(r["direction"])) > 0]
+            down = [r for r in rows if int(str(r["direction"])) < 0]
+            weight_up = sum(float(str(r["weight"])) for r in up)
+            weight_down = sum(float(str(r["weight"])) for r in down)
+            winner, loser = (up, weight_down) if weight_up >= weight_down else (down, weight_up)
+            winning = max(weight_up, weight_down)
+            if not winner or loser * 2 >= winning:
+                continue
+            direction = 1 if winner is up else -1
+            evidence = [
+                Evidence(
+                    memory_id=str(r["source_id"]),
+                    weight=float(str(r["weight"])),
+                    observed_at=datetime.fromisoformat(str(r["observed_at"])),
+                    kind=str(r["kind"]),
+                )
+                for r in winner
+            ]
+            quotes = "; ".join(f'"{r["quote"]}"' for r in winner[:3])
+            decision = await self.propose(
+                trait_name,
+                direction * self._limits.per_proposal_cap,
+                evidence=evidence,
+                rationale=f"the user's reactions: {quotes}",
+            )
+            if decision.outcome is not DriftOutcome.REJECTED and decision.proposal_id:
+                self._store.spend_evidence(
+                    [str(r["id"]) for r in winner], proposal_id=decision.proposal_id
+                )
+            decisions.append(decision)
+        return decisions
 
     # -- the fast path ---------------------------------------------------------
 

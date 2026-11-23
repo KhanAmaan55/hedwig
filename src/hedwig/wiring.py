@@ -476,6 +476,7 @@ def build_container(
         clock=clock,
         timezone=config.runtime.timezone,
         auto_apply=config.reflection.auto_apply_judgements,
+        drift=personality,  # evidence in; the guardrails decide (docs/10 §13)
     )
     scheduler.register(
         TaskSpec(

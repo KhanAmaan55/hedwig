@@ -356,3 +356,61 @@ Built as specified, with the full design, deviations and findings in
 Not built: snapshot restore (needs [08](08-state-management.md) §7.1), the personality
 endpoints of [16](16-api-structure.md) §4, and emotion shifting trait *bands* (§4's modulation
 arrow) — emotion's own directives are merged after personality's instead.
+
+---
+
+## 13. Drift from evidence (PER-02)
+
+§12 left inferred drift "complete and with no caller". This is the caller.
+
+```mermaid
+graph LR
+    M["the user's messages since the last scan"] --> X["nightly stage: drift<br/><small>personality/feedback.py — rules, no model</small>"]
+    X -->|"speaks to HEDWIG · not a question ·<br/>not about someone else · not an instruction"| E[("personality_evidence<br/><small>trait · ±1 · weight 0.8 · message id · the words</small>")]
+    E --> A["assemble per trait, last 14 days, unused<br/><small>one direction must dominate</small>"]
+    A --> P["PersonalityEngine.propose<br/><small>the seven guardrails, unchanged</small>"]
+    P -->|"applied / partially"| U["evidence spent · history row with the reason<br/>Mind tab: Recent changes · Revert"]
+    P -->|"rejected"| K["evidence waits until it ages out"]
+```
+
+* **What counts.** What §5.1 allows and HEDWIG can observe: the user reacting to *how* HEDWIG
+  spoke without asking for a change — "that was a wall of text", "you're hilarious", "you sound
+  like a corporate memo", "you're being so vague". Weight 0.8, "repeated explicit feedback". An
+  explicit request is the fast path's (§5.4) and is skipped so it never counts twice.
+  Behavioural and outcome signals (§5.1's 0.4 and 0.2 rows) need observations HEDWIG does not
+  make yet (did the user skim? did the session run longer?) and are future work.
+* **Read by rules, not by the model — measured.** The first version asked the utility model
+  (gemma4:e2b) which messages were reactions. On 24 held-out exchanges it found 9 of 10 real
+  reactions but also labelled 13 of 14 ordinary messages ("thanks" → less formal, "I'm going to
+  the beach tomorrow" → less formal); restricted to messages addressed to HEDWIG it still
+  labelled every one it saw ("thank you so much" → more warmth): 7 of 15 right, identical on
+  both runs. It cannot say "none". So reactions are read like instructions, by strict patterns
+  (`personality/feedback.py`): the message must speak to HEDWIG ("you", "your") unless the
+  phrase can only be about text ("a lot to read", "wall of text"); questions ask rather than
+  react; descriptions of someone else ("my sister is hilarious", "he's so pushy") are skipped;
+  and each phrase is tied to one trait and one direction. Measured: **17 of 17 precise**, 17 of
+  22 reactions found, including 10 of 12 phrasings written after the rules. Both sets are pinned
+  in `tests/unit/test_personality_feedback.py`. The run also found two bugs a test with a
+  scripted model could not have: the model's pretty-printed JSON overran the token limit, and
+  it numbered items from 1 against a list numbered from 0 — moot now, recorded because the next
+  model-read signal will meet them.
+* **Assembly.** Per trait, evidence from the last 14 days not yet spent: the direction with the
+  greater weight is proposed if the other side has less than half of it (mixed signals propose
+  nothing), at `per_proposal_cap`. Evidence that moved a trait is spent; evidence a guardrail
+  refused waits, so a budget that refills next week can still act on it.
+* **Visible and undoable.** The Mind tab lists recent changes — trait, amount, "you asked" or
+  "from your reactions", the words that caused it — each with *Revert*. The history API now
+  carries the reason (the proposal's rationale).
+* **Storage.** `personality_evidence` (migration 0018), owned by personality and written through
+  the `DriftEvidence` port by reflection. It quotes the user, so purge sweeps it by message id and
+  phrase (ADR-0024 classification `RECORD`).
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Patterns, not the model | Precision that can be tested; no model call | Recall: "you never get to the point" is missed | A model passes the held-out set at high precision |
+| Speaks-to-HEDWIG requirement | "that's harsh, my boss fired him" is not evidence | "too much detail, I just wanted the gist" is missed | — |
+| Guardrails unchanged | Three reactions over two days, ≤0.02/week, reversible | Slow by design | Users find it too slow (config, §8) |
+
+**Future improvements.** Behavioural signals (reply length the user skims past, follow-ups
+asking for the short version) once turns record them. A model-read signal behind the same
+held-out precision gate. The weekly T3 tier, when there is more for it to do than this.
