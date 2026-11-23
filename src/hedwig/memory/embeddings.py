@@ -138,6 +138,19 @@ class EmbeddingIndex:
             pending.append((MemoryId(str(row["id"])), str(row["kind"]), text))
             if limit is not None and len(pending) >= limit:
                 break
+        if not ids:  # document passages (docs/13 §14): immutable, so only missing or other-model
+            for row in self._db.query(
+                "SELECT c.id, c.heading_path, c.text FROM document_chunk c "
+                "JOIN document d ON d.id = c.document_id "
+                "LEFT JOIN document_embedding v ON v.chunk_id = c.id AND v.model = ? "
+                "WHERE d.removed_at IS NULL AND v.chunk_id IS NULL",
+                (self._model,),
+            ):
+                if limit is not None and len(pending) >= limit:
+                    break
+                pending.append(
+                    (MemoryId(str(row["id"])), "document", f"{row['heading_path']}: {row['text']}")
+                )
         return pending
 
     async def _embed(self, pending: list[tuple[MemoryId, str, str]]) -> int:
@@ -150,6 +163,13 @@ class EmbeddingIndex:
             now = self._clock.now().isoformat()
             with self._db.transaction() as tx:
                 for (memory_id, kind, text), vector in zip(batch, vectors, strict=True):
+                    if kind == "document":
+                        tx.execute(
+                            "INSERT OR REPLACE INTO document_embedding "
+                            "(chunk_id, model, dims, vector, created_at) VALUES (?,?,?,?,?)",
+                            (memory_id, self._model, len(vector), _blob(vector), now),
+                        )
+                        continue
                     tx.execute(
                         "INSERT OR REPLACE INTO memory_embedding "
                         "(memory_id, memory_kind, model, dims, vector, text_hash, created_at) "
@@ -181,11 +201,15 @@ class EmbeddingIndex:
         if not vectors:
             return []
         allowed = [k.value for k in kinds if k in (MemoryKind.EPISODE, MemoryKind.BELIEF)]
-        if not allowed:
+        documents = MemoryKind.DOCUMENT in kinds
+        if not allowed and not documents:
             return []
         best: dict[MemoryId, float] = {}
-        marks = ",".join("?" * len(allowed))
+        marks = ",".join("?" * len(allowed)) or "NULL"
         for vector in vectors:
+            blob = _blob(vector)
+            # Memories and the user's documents are ranked together, so "near" is judged
+            # against everything HEDWIG could recall, not against each store alone.
             rows = self._db.query(
                 "SELECT m.memory_id, vec_distance_cosine(m.vector, ?) AS distance "
                 "FROM memory_embedding m "
@@ -195,8 +219,22 @@ class EmbeddingIndex:
                 "(e.id IS NOT NULL AND e.tombstoned_at IS NULL) OR "
                 "(b.id IS NOT NULL AND b.tombstoned_at IS NULL "
                 "AND b.status IN ('tentative','active'))) "
+                "UNION ALL "
+                "SELECT v.chunk_id, vec_distance_cosine(v.vector, ?) FROM document_embedding v "
+                "JOIN document_chunk c ON c.id = v.chunk_id "
+                "JOIN document d ON d.id = c.document_id "
+                "WHERE ? AND v.model = ? AND v.dims = ? AND d.removed_at IS NULL "
                 "ORDER BY distance",
-                (_blob(vector), self._model, len(vector), *allowed),
+                (
+                    blob,
+                    self._model,
+                    len(vector),
+                    *allowed,
+                    blob,
+                    int(documents),
+                    self._model,
+                    len(vector),
+                ),
             )
             for memory_id, distance in _close(
                 [(MemoryId(str(r["memory_id"])), float(r["distance"])) for r in rows], limit

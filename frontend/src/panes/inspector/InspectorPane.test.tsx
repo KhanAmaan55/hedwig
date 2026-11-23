@@ -76,6 +76,16 @@ function fakeApi(overrides: Partial<InspectorApi> = {}): InspectorApi {
     disputes: vi.fn().mockResolvedValue([]),
     resolveDispute: vi.fn().mockResolvedValue(undefined),
     exportAll: vi.fn().mockResolvedValue(new ArrayBuffer(4)),
+    documents: vi.fn().mockResolvedValue({ roots: [], documents: [] }),
+    addDocuments: vi.fn().mockResolvedValue({
+      added: 2,
+      updated: 0,
+      unchanged: 0,
+      removed: 0,
+      skipped: [{ path: "/notes/credentials.txt", reason: "looks like a secrets file" }],
+    }),
+    removeDocument: vi.fn().mockResolvedValue(undefined),
+    forgetFolder: vi.fn().mockResolvedValue(undefined),
     purgePreview: vi.fn().mockResolvedValue({
       scope: "phrase",
       counts: { messages: 2, beliefs: 1 },
@@ -285,6 +295,23 @@ describe("InspectorPane", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("mentions you");
+  });
+
+  it("adds a folder of notes and says what it skipped", async () => {
+    const api = fakeApi();
+    render(<InspectorPane api={api} />);
+    tab("Data");
+    fireEvent.change(await screen.findByLabelText("Folder of notes"), {
+      target: { value: "/notes" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => {
+      expect(api.addDocuments).toHaveBeenCalledWith("/notes");
+    });
+    expect(
+      await screen.findByText(/credentials.txt \(looks like a secrets file\)/),
+    ).toBeInTheDocument();
+    expect(api.documents).toHaveBeenCalledTimes(2);
   });
 
   it("downloads everything", async () => {

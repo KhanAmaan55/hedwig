@@ -168,7 +168,9 @@ class RetrievalPolicy:
     recency_weight: float = 1.0
     diversity: float = 0.3
     """MMR λ. 0 = most relevant, 1 = maximally diverse (docs/06 §5.5)."""
-    include_kinds: frozenset[MemoryKind] = frozenset({MemoryKind.EPISODE, MemoryKind.BELIEF})
+    include_kinds: frozenset[MemoryKind] = frozenset(
+        {MemoryKind.EPISODE, MemoryKind.BELIEF, MemoryKind.DOCUMENT}
+    )
     entity_focus: tuple[EntityId, ...] = ()
     min_confidence: float = 0.0
     candidates_per_channel: int = 30

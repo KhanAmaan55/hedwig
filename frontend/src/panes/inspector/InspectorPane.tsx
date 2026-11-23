@@ -15,6 +15,7 @@ import { ApiError, client, type HedwigClient } from "../../transport/client";
 import type {
   BeliefDispute,
   DisputeChoice,
+  IngestReport,
   Finding,
   Gap,
   Goal,
@@ -40,6 +41,10 @@ export type InspectorApi = Pick<
   | "disputes"
   | "resolveDispute"
   | "exportAll"
+  | "documents"
+  | "addDocuments"
+  | "removeDocument"
+  | "forgetFolder"
   | "purgePreview"
   | "purge"
   | "goals"
@@ -211,6 +216,111 @@ function Changes({ api, onChange }: { api: InspectorApi; onChange: () => void })
             )}
           </li>
         ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * The user's own notes (docs/13 §14). HEDWIG reads only the folders named here, recalls their
+ * passages with the file's name, and never treats them as instructions. What it skipped, and why,
+ * is shown, so a secrets file left out is visible rather than silently missing.
+ */
+function Documents({ api }: { api: InspectorApi }): JSX.Element {
+  const listing = useLoad(useCallback(() => api.documents(), [api]));
+  const [path, setPath] = useState("");
+  const [report, setReport] = useState<IngestReport | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const roots = listing.data?.roots ?? [];
+  const files = listing.data?.documents ?? [];
+
+  const act = async (work: () => Promise<void>) => {
+    try {
+      setProblem(null);
+      await work();
+      listing.reload();
+    } catch (caught: unknown) {
+      setProblem(caught instanceof ApiError ? caught.message : "That did not work.");
+    }
+  };
+
+  return (
+    <section aria-label="Your documents">
+      <h3 className="inspector__heading">Your documents</h3>
+      <p className="panel__hint">
+        A folder of notes HEDWIG can recall and cite. Text files only; anything that looks like a
+        secret is skipped.
+      </p>
+      <form
+        className="inspector__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void act(async () => {
+            setReport(await api.addDocuments(path.trim()));
+            setPath("");
+          });
+        }}
+      >
+        <input
+          aria-label="Folder of notes"
+          className="inspector__input"
+          placeholder="/Users/you/notes"
+          value={path}
+          onChange={(event) => {
+            setPath(event.target.value);
+          }}
+        />
+        <button className="button button--small" type="submit" disabled={!path.trim()}>
+          Add
+        </button>
+      </form>
+      {problem && (
+        <p className="panel__hint" role="alert">
+          {problem}
+        </p>
+      )}
+      {report && (
+        <p className="panel__hint" role="status">
+          Added {report.added}, updated {report.updated}
+          {report.skipped.length > 0 &&
+            ` · skipped ${report.skipped.map((s) => `${s.path.split("/").pop() ?? s.path} (${s.reason})`).join(", ")}`}
+        </p>
+      )}
+      <ul className="items">
+        {roots.map((root) => (
+          <li key={root.path} className="item">
+            <p className="item__text">{root.path}</p>
+            <p className="item__meta">
+              {files.filter((f) => f.root === root.path && !f.removed_at).length} files
+            </p>
+            <div className="item__actions">
+              <button
+                className="button button--small"
+                type="button"
+                onClick={() => void act(() => api.forgetFolder(root.path))}
+              >
+                Stop reading
+              </button>
+            </div>
+          </li>
+        ))}
+        {files
+          .filter((file) => !file.removed_at)
+          .map((file) => (
+            <li key={file.id} className="item">
+              <p className="item__text">{file.path.split("/").pop()}</p>
+              <p className="item__meta">{file.chunk_count} passages</p>
+              <div className="item__actions">
+                <button
+                  className="button button--small"
+                  type="button"
+                  onClick={() => void act(() => api.removeDocument(file.id))}
+                >
+                  Set aside
+                </button>
+              </div>
+            </li>
+          ))}
       </ul>
     </section>
   );
@@ -701,6 +811,8 @@ function DataTab({ api, save }: { api: InspectorApi; save: SaveFile }): JSX.Elem
       >
         {exporting ? "Preparing…" : "Download everything"}
       </button>
+
+      <Documents api={api} />
 
       <h3 className="inspector__heading">Erase for good</h3>
       <p className="panel__hint">

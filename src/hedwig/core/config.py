@@ -250,6 +250,11 @@ class KnowledgeConfig(BaseModel):
     — only those, never the conversation — and every request is in `egress_log`."""
     search_endpoint: str = "https://html.duckduckgo.com/html/"
     timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 10.0
+    documents_enabled: bool = True
+    """Local documents (docs/13 §14): read only under folders the user adds, never anywhere else."""
+    document_max_bytes: Annotated[int, Field(ge=1_000, le=50_000_000)] = 2_000_000
+    document_max_files: Annotated[int, Field(ge=1, le=100_000)] = 5_000
+    """Per folder. A folder bigger than this is refused rather than half-read silently."""
 
 
 class SpeechConfig(BaseModel):

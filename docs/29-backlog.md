@@ -77,7 +77,7 @@ the repository, ahead of any new cognitive capability.
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
 | 5 | Emotion: never manipulative / dependent | **PARTIAL** | Prohibition tests exist for bindings; no honesty eval yet |
 | 6 | Curiosity engine | **PARTIAL** | Gap register (offline), gated budgeted exploration, findings feed, deferred surfacing (CUR-01/02/03); active unprompted messages need the WebSocket |
-| 7 | Knowledge: local docs, web search, provenance, citations | **PARTIAL** | Opt-in DuckDuckGo research with fetch controls, injection quarantine, citations and egress audit (KNW-02/03); local documents not built (KNW-01) |
+| 7 | Knowledge: local docs, web search, provenance, citations | **COMPLETE** | Local documents read narrowly with secrets skipped, recalled by words and meaning at CURATED trust with the file named (KNW-01); opt-in web research with citations and egress audit (KNW-02/03). PDFs not yet |
 | 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
 | 8 | Avatar: VRM renderer, expression from emotion, blink, saccade, breath, head drift | **COMPLETE** | `frontend/src/panes/avatar/`; `idle.test.ts`, `compose.test.ts`, `test_expression.py` |
 | 8 | Avatar: speaking / thinking / attention states | **COMPLETE** | Thinking from `Brain.busy` and the pane; speaking from the voice (AVA-01, docs/15 §13) |
@@ -311,7 +311,7 @@ or encourage dependence (INV-10).
 ### 4.6 Knowledge and web
 
 #### KNW-01 — Local document ingestion
-**Status:** Todo · **P2** · **L** · **Depends on:** COG-02 · **Modules:** `knowledge/`
+**Status:** Done (2026-11-23) · **P2** · **L** · **Depends on:** COG-02 · **Modules:** `knowledge/documents.py`, retrieval, embeddings, prompts, purge, Data tab, migration 0019
 
 As the user, I want to point HEDWIG at a folder of notes and have them retrievable with
 attribution, with secrets skipped.
@@ -694,4 +694,9 @@ tables, or copied rows). Nothing existing was changed or deleted.
   reactions are read by strict, tested patterns (`personality/feedback.py`): 17 of 17 precise on
   held-out sets, 17 of 22 found. The Mind tab shows recent changes with the reason and *Revert*.
   Design in [10](10-personality-engine.md) §13.
+- **KNW-01** Local documents — `knowledge/documents.py`: folders the user adds, read narrowly
+  (text only, caps, no hidden files, no escaping symlinks, root/home/data refused), secrets
+  skipped and reported, chunked by heading, recalled by words and meaning as *your documents*
+  (CURATED, file named, never instructions, never beliefs). Set aside / stop reading; purge
+  covers HEDWIG's copy. Migration 0019. Verified live. Design in [13](13-knowledge-and-tools.md) §14.
 

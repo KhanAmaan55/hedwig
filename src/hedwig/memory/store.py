@@ -556,6 +556,8 @@ class SqliteMemoryStore:
         Retrieval and use are recorded separately because they reinforce by different
         amounts (docs/06 §7.2).
         """
+        # A document passage is the user's file, not a memory: it is never reinforced or decayed.
+        items = [item for item in items if item.kind is not MemoryKind.DOCUMENT]
         if not items:
             return
 

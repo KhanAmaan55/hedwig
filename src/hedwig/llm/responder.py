@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Protocol
 
 from hedwig.core.errors import CapabilityUnavailableError
@@ -96,7 +97,12 @@ class GatewayResponder:
             memory=[
                 Entry(text=item.text, rank=item.score)
                 for item in context.recalled
-                if item.trust is not TrustTier.UNTRUSTED
+                if item.trust not in (TrustTier.UNTRUSTED, TrustTier.CURATED)
+            ],
+            documents=[
+                Entry(text=f"{Path(item.source).name} > {item.text}", rank=item.score)
+                for item in context.recalled
+                if item.trust is TrustTier.CURATED
             ],
             # Ranked by position: the first goal is the highest priority, so it survives
             # trimming longest (docs/08 §6.1).

@@ -91,14 +91,15 @@ class Explainer:
         items = []
         for item in json.loads(log["items"] or "[]"):
             memory = await self._memory.inspect(MemoryId(str(item.get("memory_id", ""))))
+            passage = None if memory else self._passage(str(item.get("memory_id", "")))
             items.append(
                 {
                     "memory_id": item.get("memory_id"),
                     "score": item.get("score"),
                     "trust": item.get("trust"),
                     "source": item.get("source"),
-                    "kind": _kind(memory),
-                    "text": _text(memory)[:EXCERPT] if memory else None,
+                    "kind": _kind(memory) or ("document" if passage else None),
+                    "text": (_text(memory) if memory else (passage or ""))[:EXCERPT] or None,
                     "forgotten_since": bool(memory and memory.tombstoned_at),
                     "cited_in_reply": True,
                 }
@@ -109,6 +110,15 @@ class Explainer:
             "token_count": log["token_count"],
             "dropped_count": log["dropped_count"],
         }
+
+    def _passage(self, chunk_id: str) -> str | None:
+        """A passage of the user's documents (docs/13 §14), with the file it came from."""
+        row = self._db.query_one(
+            "SELECT c.heading_path, c.text, d.path FROM document_chunk c "
+            "JOIN document d ON d.id = c.document_id WHERE c.id = ?",
+            (chunk_id,),
+        )
+        return f"{row['path']} — {row['heading_path']}: {row['text']}" if row else None
 
     def _tools(self, correlation: str | None) -> list[dict[str, Any]]:
         if not correlation:

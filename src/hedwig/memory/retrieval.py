@@ -58,6 +58,7 @@ KIND_QUOTAS: dict[MemoryKind, float] = {
     # No kind may crowd out the others (docs/06 §5.5).
     MemoryKind.EPISODE: 0.65,
     MemoryKind.BELIEF: 0.45,
+    MemoryKind.DOCUMENT: 0.3,
 }
 
 _WORD = re.compile(r"[0-9A-Za-z_]+")
@@ -273,6 +274,18 @@ class HybridRetrieval:
                         (match, policy.candidates_per_channel),
                     )
                 ]
+            if MemoryKind.DOCUMENT in policy.include_kinds:
+                hits += [
+                    (str(row["id"]), float(row["rank"]))
+                    for row in self._db.query(
+                        "SELECT c.id, bm25(document_chunk_fts) AS rank FROM document_chunk_fts f "
+                        "JOIN document_chunk c ON c.rowid = f.rowid "
+                        "JOIN document d ON d.id = c.document_id "
+                        "WHERE document_chunk_fts MATCH ? AND d.removed_at IS NULL "
+                        "ORDER BY rank LIMIT ?",
+                        (match, policy.candidates_per_channel),
+                    )
+                ]
             for memory_id, rank in hits:  # bm25(): lower is better
                 key = MemoryId(memory_id)
                 scored[key] = min(scored.get(key, 0.0), rank)
@@ -354,6 +367,26 @@ class HybridRetrieval:
                 trust=TrustTier(row["trust_tier"]),
                 source_ref=row["source_ref"],
             )
+
+        if MemoryKind.DOCUMENT in policy.include_kinds:
+            for row in self._db.query(
+                f"SELECT c.id, c.text, c.heading_path, d.path, d.modified_at FROM document_chunk c "
+                f"JOIN document d ON d.id = c.document_id "
+                f"WHERE c.id IN ({placeholders}) AND d.removed_at IS NULL",
+                ordered,
+            ):
+                memory_id = MemoryId(str(row["id"]))
+                candidates[memory_id] = Candidate(
+                    memory_id=memory_id,
+                    kind=MemoryKind.DOCUMENT,
+                    text=f"{row['heading_path']}: {row['text']}",
+                    occurred_at=datetime.fromisoformat(row["modified_at"]),
+                    salience=0.5,
+                    confidence=1.0,
+                    base_importance=0.5,
+                    trust=TrustTier.CURATED,
+                    source_ref=str(row["path"]),
+                )
 
         return {
             memory_id: candidate

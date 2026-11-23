@@ -11,12 +11,14 @@ import type {
   BeliefDispute,
   DisputeChoice,
   EmotionReading,
+  DocumentListing,
   Explanation,
   ExpressionIntent,
   Finding,
   Gap,
   Goal,
   Health,
+  IngestReport,
   MemoryItem,
   MemorySearch,
   PersonalityChange,
@@ -308,6 +310,28 @@ export class HedwigClient {
       auth: true,
       binary: "application/zip",
     });
+  }
+
+  async documents(): Promise<DocumentListing> {
+    return this.request<DocumentListing>("GET", "/v1/documents", { auth: true });
+  }
+
+  async addDocuments(path: string): Promise<IngestReport> {
+    return this.request<IngestReport>("POST", "/v1/documents", { body: { path }, auth: true });
+  }
+
+  async removeDocument(id: string): Promise<void> {
+    await this.request<unknown>("DELETE", `/v1/documents/${encodeURIComponent(id)}`, {
+      auth: true,
+    });
+  }
+
+  async forgetFolder(path: string): Promise<void> {
+    await this.request<unknown>(
+      "DELETE",
+      `/v1/documents?${new URLSearchParams({ path }).toString()}`,
+      { auth: true },
+    );
   }
 
   async purgePreview(scope: PurgeScope, value: string): Promise<PurgePreview> {
