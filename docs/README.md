@@ -34,7 +34,7 @@ depends on. After that, read whatever subsystem you are working on.
 | 21 | [Security, Privacy and Ethics](21-security-privacy-ethics.md) | Threat model, trust tiers, honesty invariants, export and deletion |
 | 22 | [Development Roadmap](22-roadmap.md) | Eight phases with exit criteria |
 | 23 | [Challenged Assumptions and Open Questions](23-challenged-assumptions.md) | Where the README's premises are wrong or underspecified, and the tradeoff register |
-| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0024, the decisions the rest of the docs assume |
+| 24 | [Decision Records](24-decision-records.md) | ADR-0001 … ADR-0025, the decisions the rest of the docs assume |
 | 25 | [Core Infrastructure](25-core-infrastructure.md) ✅ | What Milestone 2 built: the seven platform services, their ports, and how they start |
 | 26 | [The Turn/Memory Loop](26-turn-memory-loop.md) ✅ | What Milestone 6 built: observe → retrieve → inject → response context → store → persist |
 | 27 | [Personality, Relationship and the Prompt](27-personality-relationship-and-the-prompt.md) ✅ | What Milestone 9 built: traits and their brakes, the relationship, and the prompt the model receives |
@@ -76,6 +76,7 @@ of what exists in code. Update it as each milestone lands.
 | Memory: episodic, semantic, importance, decay, forgetting | **Implemented** (M5) | `src/hedwig/memory/` |
 | Retrieval: lexical, structural, temporal channels | **Implemented** (M5) | `src/hedwig/memory/retrieval.py` |
 | Memory control: `/v1/memory`, `hedwig memory` (list, search, pin, forget, restore) | **Implemented** (MEM-02, [06](06-memory-architecture.md) §16) | `src/hedwig/api/routes/memory.py` |
+| Project memory: goals with a journal; finished projects recalled when named | **Implemented** (MEM-06, [08](08-state-management.md) §13, [ADR-0025](adr/0025-projects-are-goals-with-a-journal.md)) | `src/hedwig/goals/`, Goals tab *Journal* |
 | Local documents: notes recalled with the file named, secrets skipped | **Implemented** (KNW-01, [13](13-knowledge-and-tools.md) §14) | `src/hedwig/knowledge/documents.py`, Data tab *Your documents* |
 | Personality drift from the user's reactions, guarded and revertable | **Implemented** (PER-02, [10](10-personality-engine.md) §13) | `src/hedwig/personality/feedback.py`, Mind tab *Recent changes* |
 | Memory correction: the user's word replaces, the old version stays as history | **Implemented** (MEM-03, [06](06-memory-architecture.md) §18) | `src/hedwig/memory/store.py`, inspector *Correct* |

@@ -486,6 +486,30 @@ def _set_goal(goal_id: str, **changes: Any) -> None:
     print(_goal_line(goal))
 
 
+@goals_app.command("journal")
+def goals_journal(goal_id: str) -> None:
+    """A project's journal: what was decided, what moved, what is still open."""
+    notes = _call(lambda c: c.goal_notes(goal_id))
+    assert isinstance(notes, list)
+    if not notes:
+        print("nothing written yet")
+    for note in reversed(notes):
+        print(f"{note['created_at'][:10]}  {note['kind']:<9} {note['text']}  ({note['source']})")
+
+
+@goals_app.command("note")
+def goals_note(
+    goal_id: str,
+    text: str,
+    kind: Annotated[
+        str, typer.Option(help="decision, progress, question, blocker or done.")
+    ] = "progress",
+) -> None:
+    """Write in a project's journal."""
+    _call(lambda c: c.add_goal_note(goal_id, text, kind=kind))
+    print("noted")
+
+
 @goals_app.command("activate")
 def goals_activate(goal_id: str) -> None:
     """Accept a goal HEDWIG proposed, or reopen one."""

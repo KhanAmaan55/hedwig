@@ -41,6 +41,7 @@ expensive to reverse, or (c) is one a future reader would otherwise assume was a
 | [0022](adr/0022-the-token-gates-user-content.md) | The API token gates user content, read from a file on every request | Accepted |
 | [0023](adr/0023-live-turn-output-through-a-scoped-sink.md) | Live turn output travels through a context-scoped sink, not the event bus | Accepted |
 | [0024](adr/0024-purge-is-one-classified-sweep.md) | Purge is one sweep over a classified schema, verified against the file | Accepted |
+| [0025](adr/0025-projects-are-goals-with-a-journal.md) | Projects are goals with a journal, not a new kind of thing | Accepted |
 
 ---
 

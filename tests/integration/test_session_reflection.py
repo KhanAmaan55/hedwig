@@ -18,6 +18,7 @@ FACTS = {
     "title": "Tea and a Rust compiler",
     "summary": "The user said their favourite tea is lapsang souchong and that they are "
     "writing a compiler in Rust called Fernweh. HEDWIG acknowledged both.",
+    "journal": [],
     "facts": [
         {"statement": "The user's favourite tea is smoky lapsang souchong.", "confidence": 0.9},
         {"statement": "The user is writing a compiler in Rust called Fernweh.", "confidence": 0.8},

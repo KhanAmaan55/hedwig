@@ -17,6 +17,7 @@ import type {
   Finding,
   Gap,
   Goal,
+  GoalNote,
   Health,
   IngestReport,
   MemoryItem,
@@ -257,6 +258,19 @@ export class HedwigClient {
 
   async createGoal(description: string): Promise<Goal> {
     return this.request<Goal>("POST", "/v1/goals", { body: { description }, auth: true });
+  }
+
+  async goalNotes(id: string): Promise<GoalNote[]> {
+    return this.request<GoalNote[]>("GET", `/v1/goals/${encodeURIComponent(id)}/notes`, {
+      auth: true,
+    });
+  }
+
+  async addGoalNote(id: string, text: string, kind: GoalNote["kind"]): Promise<GoalNote> {
+    return this.request<GoalNote>("POST", `/v1/goals/${encodeURIComponent(id)}/notes`, {
+      body: { text, kind },
+      auth: true,
+    });
   }
 
   async updateGoal(id: string, changes: Partial<Pick<Goal, "status" | "progress">>): Promise<Goal> {

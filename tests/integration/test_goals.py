@@ -121,6 +121,7 @@ async def test_reflection_proposes_a_project_and_moves_an_active_goal(
                 "worth_remembering": True,
                 "title": "Compiler and Portuguese",
                 "summary": "The user got the parser working and started learning Portuguese.",
+                "journal": [],
                 "facts": [],
                 "projects": [
                     {"goal": "Help the user learn Portuguese", "done_when": "basic conversation"},
@@ -158,6 +159,7 @@ async def test_reflection_never_moves_progress_backwards(
                 "worth_remembering": True,
                 "title": "t",
                 "summary": "Talked about shipping.",
+                "journal": [],
                 "facts": [],
                 "progress": [{"goal": "G1", "progress": 0.2}],
             }

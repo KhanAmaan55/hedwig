@@ -169,6 +169,16 @@ export interface BeliefDispute {
   second: { id: string; statement: string };
 }
 
+/** One entry in a project's journal (ADR-0025). */
+export interface GoalNote {
+  id: string;
+  kind: "decision" | "progress" | "question" | "blocker" | "done";
+  text: string;
+  source: "system" | "reflection" | "user";
+  session_id: string | null;
+  created_at: string;
+}
+
 /** The folders HEDWIG reads, and every file in them (docs/13 §14). */
 export interface DocumentListing {
   roots: { path: string; added_at: string }[];
