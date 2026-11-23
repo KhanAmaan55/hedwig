@@ -36,12 +36,19 @@ from hedwig.core.ports.memory import (
     EpisodeKind,
     ForgetReason,
 )
+from hedwig.core.ports.personality import (
+    DriftEvidence,
+    DriftOutcome,
+    StyleObservation,
+)
 from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.core.store import Database
 from hedwig.core.types import MemoryId, TrustTier
 from hedwig.memory.capture import CaptureService, EpisodeCandidate, Verdict, similarity
 from hedwig.memory.maintenance import MemoryMaintenance
 from hedwig.memory.store import SqliteMemoryStore
+from hedwig.personality.feedback import detect_feedback
+from hedwig.personality.instructions import detect_instructions
 
 logger = get_logger(__name__)
 
@@ -60,7 +67,9 @@ TENTATIVE_CAP = 0.5
 ACTIVE_WINDOW = timedelta(minutes=2)
 MAX_PAIRS = 20
 
-STAGES = ("summarise", "merge", "judge", "promote", "maintain")
+STAGES = ("summarise", "merge", "judge", "promote", "drift", "maintain")
+STYLE_MAX_PER_RUN = 500
+STYLE_FIRST_LOOK = timedelta(days=7)
 
 
 class Generator(Protocol):
@@ -130,6 +139,7 @@ class NightlyReflection:
         clock: Clock,
         timezone: str = "",
         auto_apply: bool = False,
+        drift: DriftEvidence | None = None,
     ) -> None:
         self._db = database
         self._store = store
@@ -140,6 +150,7 @@ class NightlyReflection:
         self._clock = clock
         self._zone = ZoneInfo(timezone) if timezone else None
         self._auto_apply = auto_apply
+        self._drift = drift
 
     # -- the run --------------------------------------------------------------------
 
@@ -162,6 +173,7 @@ class NightlyReflection:
             "merge": self._merge,
             "judge": self._judge,
             "promote": self._promote,
+            "drift": self._style,
             "maintain": self._maintain,
         }
         status, next_stage, error = "completed", None, None
@@ -456,6 +468,55 @@ class NightlyReflection:
                 )
                 promoted += 1
         return {"promoted": promoted}
+
+    # -- stage: drift (docs/10 §13) -------------------------------------------------
+
+    async def _style(self) -> dict[str, Any]:
+        """Read the user's reactions to how HEDWIG talks; personality's guardrails decide.
+
+        Rules, not the model: measured live, the utility model called nearly every message a
+        reaction to some trait (`personality/feedback.py`, docs/10 §13).
+        """
+        if self._drift is None:
+            return {"scanned": 0}
+        since = self._style_cursor()
+        rows = self._db.query(
+            "SELECT id, text, created_at FROM message WHERE role = 'user' AND created_at > ? "
+            "ORDER BY created_at LIMIT ?",
+            (since, STYLE_MAX_PER_RUN),
+        )
+        observed = [
+            StyleObservation(
+                trait=reaction.trait,
+                direction=reaction.direction,
+                source_id=str(row["id"]),
+                quote=reaction.phrase,
+                observed_at=datetime.fromisoformat(str(row["created_at"])),
+            )
+            for row in rows
+            # An explicit request already moved the trait on the fast path (docs/10 §5.4).
+            if not detect_instructions(str(row["text"]))
+            for reaction in detect_feedback(str(row["text"]))
+        ]
+        new = await self._drift.observe(observed) if observed else 0
+        decisions = await self._drift.consider_drift()
+        moved = [d for d in decisions if d.outcome is not DriftOutcome.REJECTED]
+        return {
+            "scanned": len(rows),
+            "observed": new,
+            "changed": [f"{d.trait}{d.applied:+.3f}" for d in moved],
+            "refused": [f"{d.trait}:{d.rule}" for d in decisions if d not in moved],
+            "scanned_until": str(rows[-1]["created_at"]) if rows else since,
+        }
+
+    def _style_cursor(self) -> str:
+        for row in self._db.query(
+            "SELECT stats FROM reflection_run ORDER BY started_at DESC, rowid DESC LIMIT 50"
+        ):
+            mark = json.loads(row["stats"] or "{}").get("drift", {}).get("scanned_until")
+            if mark:
+                return str(mark)
+        return self._iso(self._clock.now() - STYLE_FIRST_LOOK)
 
     # -- stage: maintain -----------------------------------------------------------
 

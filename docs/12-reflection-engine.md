@@ -387,7 +387,7 @@ third person; the reflection takes 1–3 s after the end.
 REF-02 was split before starting. Built: the nightly run and the stages that act on what HEDWIG
 already records. Deferred, each waiting for something that does not exist yet: procedures (no
 procedural memory), drift analysis (PER-02), FTS/vacuum maintenance, and the weekly and monthly
-tiers T3 and T4.
+tiers T3 and T4. (Drift analysis has since landed as the `drift` stage, PER-02 — docs/10 §13.)
 
 ```mermaid
 graph TB

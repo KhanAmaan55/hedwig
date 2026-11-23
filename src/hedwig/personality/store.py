@@ -16,6 +16,7 @@ from hedwig.core.ports.personality import (
     Evidence,
     IdentityCore,
     PersonalityProfile,
+    StyleObservation,
     Trait,
     TraitState,
 )
@@ -110,16 +111,14 @@ class PersonalityStore:
         ]
 
     def history(self, *, trait: Trait | None = None, limit: int = 100) -> list[dict[str, object]]:
-        if trait is None:
-            rows = self._db.query(
-                "SELECT * FROM personality_history ORDER BY applied_at DESC LIMIT ?", (limit,)
-            )
-        else:
-            rows = self._db.query(
-                "SELECT * FROM personality_history WHERE trait = ? "
-                "ORDER BY applied_at DESC LIMIT ?",
-                (trait.value, limit),
-            )
+        """Every change, newest first, with the reason it was made (the proposal's rationale)."""
+        where, parameters = ("WHERE h.trait = ?", (trait.value, limit)) if trait else ("", (limit,))
+        rows = self._db.query(
+            "SELECT h.*, p.rationale FROM personality_history h "
+            "LEFT JOIN drift_proposal p ON p.id = h.proposal_id "
+            f"{where} ORDER BY h.applied_at DESC LIMIT ?",
+            parameters,
+        )
         return [dict(row) for row in rows]
 
     def proposals(self, *, limit: int = 100) -> list[dict[str, object]]:
@@ -172,6 +171,46 @@ class PersonalityStore:
             ),
         )
         return proposal_id
+
+    # -- evidence (docs/10 §13) ------------------------------------------------
+
+    def add_evidence(self, observations: Sequence[StyleObservation], *, now: datetime) -> int:
+        added = 0
+        with self._db.transaction() as tx:
+            for item in observations:
+                cursor = tx.execute(
+                    "INSERT OR IGNORE INTO personality_evidence (id, trait, direction, weight, "
+                    "kind, source_id, quote, observed_at, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        new_id("evd"),
+                        item.trait.value,
+                        1 if item.direction > 0 else -1,
+                        item.weight,
+                        item.kind,
+                        item.source_id,
+                        item.quote,
+                        _iso(item.observed_at),
+                        _iso(now),
+                    ),
+                )
+                added += cursor.rowcount
+        return added
+
+    def open_evidence(self, *, since: datetime) -> list[dict[str, object]]:
+        """Evidence not yet spent by a change, observed since `since`."""
+        rows = self._db.query(
+            "SELECT * FROM personality_evidence WHERE used_by IS NULL AND observed_at >= ? "
+            "ORDER BY observed_at",
+            (_iso(since),),
+        )
+        return [dict(row) for row in rows]
+
+    def spend_evidence(self, ids: Sequence[str], *, proposal_id: str) -> None:
+        if ids:
+            self._db.execute(
+                f"UPDATE personality_evidence SET used_by = ? WHERE id IN ({','.join('?' * len(ids))})",
+                (proposal_id, *ids),
+            )
 
     def apply(
         self,

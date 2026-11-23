@@ -48,6 +48,7 @@ TABLES: dict[str, Kind] = {
     "belief_judgement": Kind.RECORD,
     "egress_log": Kind.RECORD,
     "drift_proposal": Kind.RECORD,
+    "personality_evidence": Kind.RECORD,
     "relationship_tally": Kind.RECORD,
     "state_document": Kind.RECORD,
     "state_history": Kind.RECORD,

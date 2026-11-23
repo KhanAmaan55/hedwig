@@ -76,6 +76,7 @@ of what exists in code. Update it as each milestone lands.
 | Memory: episodic, semantic, importance, decay, forgetting | **Implemented** (M5) | `src/hedwig/memory/` |
 | Retrieval: lexical, structural, temporal channels | **Implemented** (M5) | `src/hedwig/memory/retrieval.py` |
 | Memory control: `/v1/memory`, `hedwig memory` (list, search, pin, forget, restore) | **Implemented** (MEM-02, [06](06-memory-architecture.md) §16) | `src/hedwig/api/routes/memory.py` |
+| Personality drift from the user's reactions, guarded and revertable | **Implemented** (PER-02, [10](10-personality-engine.md) §13) | `src/hedwig/personality/feedback.py`, Mind tab *Recent changes* |
 | Memory correction: the user's word replaces, the old version stays as history | **Implemented** (MEM-03, [06](06-memory-architecture.md) §18) | `src/hedwig/memory/store.py`, inspector *Correct* |
 | Retrieval: semantic/embedding channel; recall eval (recall@5 0.306 → 0.972) | **Implemented** (MEM-04, MEM-05, [06](06-memory-architecture.md) §17) | `src/hedwig/memory/embeddings.py`, `tests/evals/`, `scripts/eval_recall.py` |
 | Conversation log: sessions, messages, turns, working-set log | **Implemented** (M6) | `src/hedwig/sessions/` |

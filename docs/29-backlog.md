@@ -73,7 +73,7 @@ the repository, ahead of any new cognitive capability.
 | 3 | User-controlled deletion, searchable, explainable | **PARTIAL** | `/v1/memory` and `hedwig memory`: list, search with score breakdown, pin, forget, restore (MEM-02); no `/explain` yet |
 | 3 | Embedding retrieval channel | **COMPLETE** (MEM-04) | nomic-embed-text via the gateway, `sqlite-vec` in hedwig.db; recall@5 0.514 → 0.972 on the eval corpus (docs/06 §17) |
 | 4 | Personality: traits, identity core, guarded drift, reversal | **COMPLETE** | `personality/`; `test_personality_*`, `test_personality_in_the_turn.py` |
-| 4 | Personality: evidence-based drift *proposals* | **MISSING** | The proposer is reflection's job |
+| 4 | Personality: evidence-based drift *proposals* | **COMPLETE** (PER-02) | Reactions read by tested rules (17/17 precise), nightly `drift` stage, the seven guardrails, Recent changes + Revert (docs/10 §13) |
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
 | 5 | Emotion: never manipulative / dependent | **PARTIAL** | Prohibition tests exist for bindings; no honesty eval yet |
 | 6 | Curiosity engine | **PARTIAL** | Gap register (offline), gated budgeted exploration, findings feed, deferred surfacing (CUR-01/02/03); active unprompted messages need the WebSocket |
@@ -291,7 +291,11 @@ the answer in its context — so that memory is felt rather than merely stored. 
   live eval script (`scripts/eval_models.py` exists) asserting recalled facts are used.
 
 #### PER-02 — Drift proposals from reflection evidence
-**Status:** Todo · **P2** · **M** · **Depends on:** REF-02 · **Modules:** `reflection/`, `personality/`
+**Status:** Done (2026-11-23) · **P2** · **M** · **Depends on:** REF-02 · **Modules:** `personality/feedback.py`, `personality/engine.py`, `reflection/nightly.py`, inspector, migration 0018
+
+As HEDWIG, I want my manner to shift slowly with how the user reacts to it — never on one
+conversation, always visibly and reversibly — so that I grow with them instead of only obeying
+explicit requests.
 
 ### 4.5 Emotion
 
@@ -680,4 +684,14 @@ tables, or copied rows). Nothing existing was changed or deleted.
   `source_ref = correction:<id>` record it; no migration. Open REF-02 proposals about the old
   belief disappear, and erasing the wrong version keeps the correction. Design in
   [06](06-memory-architecture.md) §18.
+
+### 2026-11-23 — Session 1, continued: "keep going until it's done"
+
+- **PER-02** Drift from evidence — the user's reactions to how HEDWIG talks become evidence
+  (`personality_evidence`, migration 0018) in a nightly `drift` stage, and the existing seven
+  guardrails decide. **Finding:** the utility model, asked which messages were reactions,
+  labelled nearly all of them (7 of 15 right even after filtering) — it cannot say "none". So
+  reactions are read by strict, tested patterns (`personality/feedback.py`): 17 of 17 precise on
+  held-out sets, 17 of 22 found. The Mind tab shows recent changes with the reason and *Revert*.
+  Design in [10](10-personality-engine.md) §13.
 

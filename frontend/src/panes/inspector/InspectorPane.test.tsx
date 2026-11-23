@@ -58,6 +58,8 @@ function fakeApi(overrides: Partial<InspectorApi> = {}): InspectorApi {
       traits: [{ trait: "warmth", value: 0.7, anchor: 0.7, lifetime_drift: 0 }],
       version: 1,
     }),
+    personalityHistory: vi.fn().mockResolvedValue([]),
+    revertChange: vi.fn().mockResolvedValue(undefined),
     relationship: vi.fn().mockResolvedValue({
       familiarity: 0.1,
       affinity: 0,
@@ -119,6 +121,31 @@ describe("InspectorPane", () => {
     expect(screen.getByText(/not feelings/)).toBeInTheDocument();
     expect(await screen.findByText("3 turns together.")).toBeInTheDocument();
     expect(await screen.findByRole("meter", { name: "warmth" })).toBeInTheDocument();
+  });
+
+  it("shows how HEDWIG changed and why, and undoes a change", async () => {
+    const api = fakeApi({
+      personalityHistory: vi.fn().mockResolvedValue([
+        {
+          id: "hist_1",
+          trait: "verbosity",
+          delta: -0.02,
+          source: "inferred",
+          applied_at: "2026-11-21T03:00:00",
+          reverted_at: null,
+          rationale: 'the user\'s reactions: "wall of text"',
+        },
+      ]),
+    });
+    render(<InspectorPane api={api} />);
+    const changes = await screen.findByRole("region", { name: "Recent changes" });
+    expect(changes).toHaveTextContent("verbosity −0.020");
+    expect(changes).toHaveTextContent("from your reactions");
+    expect(changes).toHaveTextContent("wall of text");
+    fireEvent.click(screen.getByRole("button", { name: "Revert" }));
+    await waitFor(() => {
+      expect(api.revertChange).toHaveBeenCalledWith("hist_1");
+    });
   });
 
   it("forgets a memory on the user's word", async () => {

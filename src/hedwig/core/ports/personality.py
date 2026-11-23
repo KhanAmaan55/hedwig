@@ -7,7 +7,7 @@ emotion without importing any of the three modules (ADR-0008).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -164,6 +164,34 @@ class PersonaControl(Protocol):
     async def revert(self, history_id: str) -> bool: ...
 
     async def reset(self, trait: Trait) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class StyleObservation:
+    """The user reacted to how HEDWIG talks (docs/10 §13). Evidence, not a decision."""
+
+    trait: Trait
+    direction: int
+    """+1: more of it; -1: less."""
+    source_id: str
+    """The user's message: §5.1 says evidence is traceable or it is not evidence."""
+    quote: str
+    observed_at: datetime
+    weight: float = 0.8
+    kind: str = "feedback"
+
+
+@runtime_checkable
+class DriftEvidence(Protocol):
+    """How reflection feeds personality (docs/10 §13) without deciding anything itself."""
+
+    async def observe(self, observations: Sequence[StyleObservation]) -> int:
+        """Record observations; returns how many were new."""
+        ...
+
+    async def consider_drift(self) -> list[DriftDecision]:
+        """Propose what the unused evidence supports; the guardrails decide."""
+        ...
 
 
 @runtime_checkable
