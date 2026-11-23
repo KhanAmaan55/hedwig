@@ -288,7 +288,12 @@ def build_container(
         enabled=config.memory.semantic_recall,
     )
     for kind in ("memory.episode.stored", "memory.belief.formed"):
-        bus.subscribe(kind, embeddings.handle, name=f"memory-embeddings-{kind.split('.')[1]}")
+        bus.subscribe(
+            kind,
+            embeddings.handle,
+            name=f"memory-embeddings-{kind.split('.')[1]}",
+            timeout=120.0,  # a cold embedding model loads before it answers
+        )
     scheduler.register(
         TaskSpec(
             name="memory.embed",

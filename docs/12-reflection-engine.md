@@ -478,3 +478,14 @@ believes about them. The asymmetry decides it.
 gates `auto_apply_judgements`; proposals that expire when one side is edited or forgotten
 (MEM-03); a badge on the Memory tab when something needs the user's eye.
 
+### 15.2 Found end to end: reflection was timing out (2026-11-23)
+
+A full run of the app — talk, end the conversation, look at memory — showed no summary and no
+beliefs. Session reflection sends a whole conversation through the utility model; with the
+journal field it now writes (docs/08 §13) that took longer than the event bus's 30-second
+handler default on gemma4:e2b, so every attempt timed out and retried. The bus port now declares
+the per-subscription `timeout` the in-process bus already supported; reflection takes ten
+minutes, the embedding subscriber two. Re-run: reflection finished 15 s after the conversation
+ended, with a summary and three correct beliefs. Scripted tests could not see this — a recorded
+model answers instantly.
+

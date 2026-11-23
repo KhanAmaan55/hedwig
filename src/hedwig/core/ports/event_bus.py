@@ -127,11 +127,13 @@ class EventBus(Protocol):
         *,
         name: str,
         delivery: Delivery = Delivery.AT_LEAST_ONCE,
+        timeout: float | None = None,
     ) -> Subscription:
         """Register `handler` for every event matching `pattern`.
 
         `name` must be stable across restarts: it keys the delivery cursor and the
-        idempotency record.
+        idempotency record. `timeout` overrides the bus default for a handler whose work is
+        legitimately long — one that waits on a language model.
         """
         ...
 
