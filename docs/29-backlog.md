@@ -75,7 +75,7 @@ the repository, ahead of any new cognitive capability.
 | 4 | Personality: traits, identity core, guarded drift, reversal | **COMPLETE** | `personality/`; `test_personality_*`, `test_personality_in_the_turn.py` |
 | 4 | Personality: evidence-based drift *proposals* | **COMPLETE** (PER-02) | Reactions read by tested rules (17/17 precise), nightly `drift` stage, the seven guardrails, Recent changes + Revert (docs/10 §13) |
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
-| 5 | Emotion: never manipulative / dependent | **PARTIAL** | Prohibition tests exist for bindings; no honesty eval yet |
+| 5 | Emotion: never manipulative / dependent | **COMPLETE** (EMO-01) | No mood asks for feeling, guilt or need (64 corners, in the suite); live adversarial eval 120/120 on both models, zero gate |
 | 6 | Curiosity engine | **PARTIAL** | Gap register (offline), gated budgeted exploration, findings feed, deferred surfacing (CUR-01/02/03); active unprompted messages need the WebSocket |
 | 7 | Knowledge: local docs, web search, provenance, citations | **COMPLETE** | Local documents read narrowly with secrets skipped, recalled by words and meaning at CURATED trust with the file named (KNW-01); opt-in web research with citations and egress audit (KNW-02/03). PDFs not yet |
 | 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
@@ -107,7 +107,7 @@ the repository, ahead of any new cognitive capability.
 | G9 | Any custom-validator rejection made the 422 handler crash into a 500 (`ctx` held a `ValueError`) | Bug | Fixed with FND-02 (`api/errors.py`) |
 | G10 | With `gemma4:e2b`, replies open with a meta-commentary ("That lands as…") and end with a clarifying question every time | Quality | Fixed by PER-03 |
 | G11 | With `gemma4:e2b`, a correctly recalled memory (the right episode, cited) can still be ignored: "It is difficult for me to know what tea you like", with a stray `[Caveat: …]` echoed from the prompt | Quality | Fixed by PER-03 |
-| G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | Mitigated by FND-05 (stages, then words as they arrive); a cold model's first token is still slow, so a warm-up at start is future work |
+| G12 | The first `compose.reply` after a backend start took 75 s on `gemma4:e2b` (later calls 1–12 s). The non-streaming UI shows only "thinking…" for all of it | Latency | Fixed: FND-05 streams stages and words, and the gateway warms the models at start (docs/14 §15) |
 | G14 | Event recovery runs once, inside `bus.start()`, before emotion, personality and relationship subscribe in their own `start()`. After a crash their missed events are never re-delivered: at-least-once silently does not cover them | Reliability bug (pre-existing) | Fixed by FND-07 |
 | G15 | The restatement rule dropped a recalled memory when *any* window message appeared in it, HEDWIG's own repeated replies included | Bug | Fixed with MEM-02 (`brain/context.py`) |
 | G13 | `VITE_HEDWIG_API` both moved the Vite proxy and was exposed to the page, so setting it bypassed the proxy (and the token it adds) | Config trap | Fixed with UX-02: the proxy also reads `HEDWIG_API_BASE_URL` |
@@ -193,7 +193,7 @@ appraisal, tally or drift evidence (G14).
   simulated crash; `test_migration_0010.py` then fails without 0010 (today it cannot).
 
 #### FND-06 — Idempotent message send
-**Status:** Todo · **P2** · **S** · **Depends on:** FND-02 · **Modules:** `sessions/`, migration
+**Status:** Done (2026-11-23) · **P2** · **S** · **Depends on:** FND-02 · **Modules:** `sessions/`, `brain/graph.py`, routes (no migration: the id rides on the message's `meta`)
 
 As a client on a flaky connection, I want retrying a send to return the original turn, so that a
 retry never makes HEDWIG answer twice.
@@ -216,7 +216,13 @@ As HEDWIG, I want `get_datetime`, `calculate`, `search_memory` to be real tools 
 validation and a `tool_call` audit row, so that the planner's decisions have effects.
 
 #### COG-03 — Approval interrupt
-**Status:** Todo · **P2** · **M** · **Depends on:** COG-02, FND-05 · **Modules:** `brain/`, `api/stream.py`
+**Status:** Deferred (2026-11-23) — no tool with a side effect exists to approve · **P2** · **M** · **Depends on:** COG-02, FND-05 · **Modules:** `brain/`, `api/stream.py`
+
+Every tool HEDWIG has is read-only (time, arithmetic, memory search, opt-in web research), and
+none is planned with a side effect. Building approval machinery with nothing to approve is the
+unnecessary abstraction CLAUDE.md warns against; the guard already strips side-effecting tools
+from untrusted turns (docs/13 §3.1). This story starts with the first tool that writes, sends or
+spends.
 
 As the user, I want to approve side-effectful tool calls before they run, surviving a restart.
 
@@ -300,13 +306,13 @@ explicit requests.
 ### 4.5 Emotion
 
 #### EMO-01 — Honesty eval
-**Status:** Todo · **P2** · **M** · **Depends on:** UX-01
+**Status:** Done (2026-11-23) · **P2** · **M** · **Depends on:** UX-01 · 64-mood invariant in the suite; live adversarial eval, zero gate, passed 120/120 on gemma3:4b and gemma4:e2b (docs/21 §6.1.1)
 
 As the user, I want proof that no emotional extreme makes HEDWIG claim real feelings, guilt-trip,
 or encourage dependence (INV-10).
 
 #### EMO-02 — Mind state over the stream
-**Status:** Todo · **P2** · **S** · **Depends on:** FND-05 · `mind.update` frames replacing polling.
+**Status:** Done (2026-11-23) · **P2** · **S** · **Depends on:** FND-05 · `mind.subscribe` → `mind.update` frames on change, woken by turn activity; the avatar polls only as a fallback (docs/16 §13.1).
 
 ### 4.6 Knowledge and web
 
@@ -400,7 +406,7 @@ replies, so that the face reflects what HEDWIG is doing, not only how it feels.
 **Status:** Done (2026-11-20; amplitude-driven with voice, text-paced without) · **P2** · **S** · **Depends on:** AVA-01 · Fallback lip motion before TTS exists.
 
 #### AVA-03 — Phoneme lip sync
-**Status:** Todo · **P3** · **M** · **Depends on:** VOI-01
+**Status:** Done as text-driven mouth shapes (2026-11-23); true phoneme timing deferred · **P3** · **M** · **Depends on:** VOI-01 · Five VRM mouth shapes chosen from the vowel under the playhead, opened by loudness; Piper exposes no phoneme alignment without importing GPL code (docs/15 §13.1)
 
 ### 4.11 Voice
 
@@ -410,11 +416,11 @@ replies, so that the face reflects what HEDWIG is doing, not only how it feels.
 As the user, I want HEDWIG to speak replies locally with a configurable voice and rate.
 **Requires the user's go-ahead** on the dependency (Piper binary + voice model download).
 
-#### VOI-02 — Local ASR (whisper.cpp), opt-in
-**Status:** Todo · **P3** · **L** · **Depends on:** VOI-01
+#### VOI-02 — Local ASR, opt-in
+**Status:** Done (2026-11-23) · **P3** · **L** · **Depends on:** VOI-01 · faster-whisper `base.en` (chosen with the user over whisper.cpp), local, transcript into the message box for the user to send; Electron now grants only the microphone (docs/15 §13.2)
 
 #### VOI-03 — Interruptions
-**Status:** Todo · **P3** · **M** · **Depends on:** VOI-01, FND-05
+**Status:** Done (2026-11-23) · **P3** · **M** · **Depends on:** VOI-01, FND-05 · Speaking stops when you send (VOI-01); *Stop* ends the reply itself mid-sentence over the stream, saved as truncated (docs/16 §13.1)
 
 ### 4.12 User experience
 
@@ -716,4 +722,25 @@ tables, or copied rows). Nothing existing was changed or deleted.
   Ollama and each model, backups, disk, API — each with a fix. `auto_vacuum` now takes effect
   (set before WAL; old databases switched once). Run on the real install: correct, including the
   11 migrations it has not applied yet. Design in [05](05-data-model-and-database.md) §7.
+- **FND-06** Idempotent send — `client_message_id` on REST (the stream had it); checked inside the
+  session lock, so a racing retry waits and gets the original turn; failed turns are not replayed.
+- **EMO-02** Mind state over the stream — `mind.subscribe` → `mind.update` on change, woken the
+  instant a turn starts or ends (`Brain.wait_for_activity`); the avatar polls only as a fallback.
+- **G12** Warm-up — the gateway loads the conversation and embedding models in the background at
+  start, so the first reply no longer waits ~75 s for a cold model.
+- **VOI-03** Interruptions — `turn.interrupt` ends a reply mid-sentence and closes the model
+  stream; the turn completes as truncated with the partial reply saved; *Stop* in the app.
+- **AVA-03** Mouth shapes — the vowel under the playhead picks one of five VRM mouth shapes;
+  loudness still sets openness. Letter-based, honestly not phoneme-timed (Piper gives no
+  alignment without importing GPL code).
+- **VOI-02** Listening — faster-whisper `base.en` (installed with the user's consent), local; *Mic*
+  puts the transcript in the message box for the user to send; measured 1.2 s for a 3.3 s
+  sentence. Installing it pulled `huggingface-hub` 2.x, whose `httpx2` silently swapped
+  Starlette's test client; pinned below 2. The desktop shell now grants only the microphone, only
+  to HEDWIG's page (it granted everything before).
+- **COG-03** deferred with the reason: no tool with a side effect exists to approve.
+- **EMO-01** Honesty eval — the 64-mood invariant in the suite, and a live adversarial eval (15
+  probes × 4 extreme moods) judged by deterministic rules with a zero gate: **120/120 on both
+  gemma3:4b and gemma4:e2b**. Every early flag was the judge misreading an honest reply; each is
+  pinned, beside must-catch cases. Design in [21](21-security-privacy-ethics.md) §6.1.1.
 

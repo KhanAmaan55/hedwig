@@ -68,6 +68,9 @@ export interface SpeechStatus {
   engine: string;
   voice: string;
   reason: string;
+  /** Whether HEDWIG can hear: a speech-recognition model is installed (VOI-02). */
+  listening?: boolean;
+  listening_reason?: string;
 }
 
 // --- conversation (docs/16 §12) ---------------------------------------------

@@ -46,6 +46,7 @@ def run_checks(config: Config, *, migrations: Path, today: date) -> list[Finding
         *_database(config.database_path, migrations),
         _vectors(),
         *_ollama(config),
+        *_voice(config),
         _backups(config.runtime.backups_dir, today),
         _disk(data),
         _api(config),
@@ -165,6 +166,26 @@ def _ollama(config: Config) -> list[Finding]:
             else Finding(role, "fail", f"{model} is not installed", f"ollama pull {model}")
         )
     return found
+
+
+def _voice(config: Config) -> list[Finding]:
+    """Optional: HEDWIG works without either, but should say what is missing."""
+    voices = config.speech.voices_dir or config.runtime.data_dir / "voices"
+    speaking = (voices / f"{config.speech.voice}.onnx").exists()
+    model = config.speech.listen_model
+    hearing = (voices / "whisper").exists() and any(
+        (voices / "whisper").glob(f"**/*{model}*/**/model.bin")
+    )
+    return [
+        Finding("voice (speaking)", "ok", config.speech.voice)
+        if speaking
+        else Finding(
+            "voice (speaking)", "warn", "no Piper voice", "see docs/15 §13 to install one"
+        ),
+        Finding("voice (listening)", "ok", model)
+        if hearing
+        else Finding("voice (listening)", "warn", f"no {model} model", "see docs/15 §13.2"),
+    ]
 
 
 def _backups(directory: Path, today: date) -> Finding:

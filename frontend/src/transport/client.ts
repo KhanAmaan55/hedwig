@@ -156,11 +156,15 @@ export class HedwigClient {
   }
 
   /** Say something; resolves with the complete reply (non-streaming, docs/16 §12.3). */
-  async send(sessionId: string, text: string): Promise<TurnReply> {
+  /** With `clientMessageId`, sending the same message again returns the same turn (FND-06). */
+  async send(sessionId: string, text: string, clientMessageId?: string): Promise<TurnReply> {
     return this.request<TurnReply>(
       "POST",
       `/v1/sessions/${encodeURIComponent(sessionId)}/messages`,
-      { body: { text }, auth: true },
+      {
+        body: clientMessageId ? { text, client_message_id: clientMessageId } : { text },
+        auth: true,
+      },
     );
   }
 
@@ -304,6 +308,23 @@ export class HedwigClient {
 
   async speechStatus(): Promise<SpeechStatus> {
     return this.request<SpeechStatus>("GET", "/v1/speech", { auth: true });
+  }
+
+  /** What was said in a recording, transcribed on this machine (VOI-02). */
+  async transcribe(audio: Blob): Promise<{ text: string; seconds: number }> {
+    const token = await this.tokenSource(false);
+    const response = await fetch(`${this.baseUrl}/v1/speech/transcribe`, {
+      method: "POST",
+      headers: {
+        "Content-Type": audio.type || "application/octet-stream",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "omit",
+      body: audio,
+    });
+    if (!response.ok) throw await ApiError.fromResponse(response);
+    return (await response.json()) as { text: string; seconds: number };
   }
 
   /** The reply as audio/wav. */

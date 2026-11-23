@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -44,6 +45,7 @@ from hedwig.core.ports import (
     Message,
     ModelTier,
     ProviderHealth,
+    RequestPriority,
     Role,
     StreamChunk,
 )
@@ -117,6 +119,7 @@ class LanguageModelGateway:
         self._slots = asyncio.Semaphore(max(1, config.max_concurrent))
         self._last_health: ProviderHealth | None = None
         self._started = False
+        self._warming: asyncio.Task[None] | None = None
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -146,9 +149,31 @@ class LanguageModelGateway:
                     models={tier.value: name for tier, name in self._models.items()},
                 ),
             )
+            if self._config.warm_up and self._provider.name != "recorded":
+                self._warming = asyncio.create_task(self._warm())
+
+    async def _warm(self) -> None:
+        """One token and one embedding, so the models are loaded before anyone is waiting."""
+        started = time.monotonic()
+        try:
+            await self.generate(
+                GenerationRequest(
+                    messages=(Message(role=Role.USER, content="Hi."),),
+                    purpose="compose.warmup",
+                    max_tokens=1,
+                    temperature=0.0,
+                    priority=RequestPriority.BACKGROUND,
+                )
+            )
+            await self.embed(["warm up"])
+            logger.info("models warmed", extra=fields(seconds=round(time.monotonic() - started, 1)))
+        except Exception as error:  # a cold first reply is the worst case; never a crash
+            logger.info("model warm-up skipped", extra=fields(error=str(error)))
 
     async def stop(self) -> None:
         self._started = False
+        if self._warming is not None and not self._warming.done():
+            self._warming.cancel()
         await self._provider.close()
         logger.info("language model gateway stopped", extra=fields(**self.metrics.snapshot()))
 

@@ -487,6 +487,28 @@ cold model's time to first token (G12). It makes the wait legible.
 
 ---
 
+### 13.1 Idempotent sends and pushed mind state (FND-06, EMO-02)
+
+* **A retry returns the original turn.** `POST …/messages` takes an optional
+  `client_message_id`; the stream's `message.send` already carried one. It is stored on the
+  user's message (`meta`, no migration), and `Brain.run_turn` checks for it *inside* the
+  per-session lock: a retry that arrives while the original is still running waits, then gets
+  it back — same `turn_id`, same reply, no second model call. A turn that failed is not replayed,
+  so a retry after an outage is answered. Without an id, every send is a new turn, as before.
+* **`mind.subscribe` → `mind.update`.** A client subscribes once per socket; the server then
+  sends the avatar's expression intent (the same body as `GET /v1/mind/expression`, built by the
+  same function) whenever it changes. It wakes the instant any turn starts or ends —
+  `Brain.wait_for_activity`, a condition the session lock notifies — so "thinking" appears with
+  the turn, from any client, rather than up to two seconds later; otherwise it rechecks every
+  0.4 s for mood changes and sends nothing if nothing changed. The app's avatar uses the push and
+  polls only while the socket is unavailable, retrying the socket every ten seconds.
+* **`turn.interrupt` (VOI-03).** `{turn_id}` stops a reply mid-sentence. The stream keeps a handle
+  per running turn (`core.live`); the responder checks it after each token, stops, and closes the
+  model stream so generation actually ends. The turn still completes — `truncated`, the partial
+  reply saved and ending "(I stopped early: I was asked to stop.)" — so memory, explain and the
+  history all see what was really said. In the app, *Stop* appears while HEDWIG is replying or
+  speaking and stops both.
+
 ## 14. Implementation record — why HEDWIG said that (SEC-01)
 
 `GET /v1/explain/{message_id}`, behind the token, for any reply HEDWIG gave. It is an

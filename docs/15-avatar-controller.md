@@ -386,3 +386,42 @@ uv tool install piper-tts
 ~/.local/share/uv/tools/piper-tts/bin/python -m piper.download_voices en_US-lessac-medium --download-dir ~/.hedwig/voices
 ```
 
+### 13.1 Mouth shapes from the words (AVA-03)
+
+AVA-02 opened the mouth with the voice's loudness, always as `aa`. Now the *shape* comes from the
+text being spoken: the playhead's position in the audio (or in the text-paced fallback) picks a
+position in the words, and the vowel there — with common digraphs, "oo"/"ou" round, "ee"/"ea"
+wide — picks one of VRM's five mouth shapes (`aa`, `ee`, `ih`, `oh`, `ou`). Loudness still sets
+how open it is. `voice/visemes.ts`, pure and tested.
+
+**Not phoneme timing.** Piper's command line gives no phoneme alignment, and its Python API would
+pull GPL code into HEDWIG's process (docs/15 §13 keeps Piper a separate process for that reason).
+Letter-based shapes are approximate — "though" is not "tow" — but a mouth that rounds on "you" and
+widens on "see" reads as speech in a way one open-close shape did not. True phoneme timing waits
+for a voice that reports alignments, behind the same `visemeAt` seam.
+
+### 13.2 Listening (VOI-02)
+
+Talking to HEDWIG instead of typing, entirely on this machine. A *Mic* button by the message box
+records with the browser's `MediaRecorder`; pressing it again posts the recording once to
+`POST /v1/speech/transcribe` (behind the token), where faster-whisper (`base.en`, int8 on CPU)
+turns it into text in a worker thread. The text goes **into the message box**, not straight to
+HEDWIG: recognition makes mistakes, and the user should see what will be sent. The audio is
+never stored and never leaves the machine; the transcript becomes a message only if it is sent.
+
+* **Setup** (done with the user's consent, 2026-11-23): `faster-whisper` (with PyAV pinned below 16,
+  whose newer API faster-whisper 1.2 does not yet speak) and the `base.en` model (~145 MB) in
+  `<data_dir>/voices/whisper`. The model is loaded with `local_files_only`: HEDWIG never downloads
+  anything at runtime.
+* **Without the model**, `GET /v1/speech` reports `listening: false` with the reason, the *Mic*
+  button does not appear, and `hedwig doctor` says what to install.
+* **Measured**: a 3.3-second spoken sentence transcribed word for word in 2.4 s the first time
+  (loading the model) and 1.2 s after, through the API.
+* **The desktop shell now refuses every permission but the microphone**, and that only for
+  HEDWIG's own page. Electron grants everything by default; enabling a microphone use was the
+  moment to stop granting camera, location and the rest.
+
+**Future improvements.** Push-to-talk on a key; streaming recognition so words appear while
+speaking; a larger model as an option; speaking the reply automatically when the message was
+spoken.
+

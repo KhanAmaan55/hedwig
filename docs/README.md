@@ -76,6 +76,8 @@ of what exists in code. Update it as each milestone lands.
 | Memory: episodic, semantic, importance, decay, forgetting | **Implemented** (M5) | `src/hedwig/memory/` |
 | Retrieval: lexical, structural, temporal channels | **Implemented** (M5) | `src/hedwig/memory/retrieval.py` |
 | Memory control: `/v1/memory`, `hedwig memory` (list, search, pin, forget, restore) | **Implemented** (MEM-02, [06](06-memory-architecture.md) §16) | `src/hedwig/api/routes/memory.py` |
+| Voice: talk by microphone (local faster-whisper), stop a reply mid-sentence, mouth shapes from the words | **Implemented** (VOI-02, VOI-03, AVA-03, [15](15-avatar-controller.md) §13.1–13.2) | `src/hedwig/speech/whisper.py`, `frontend/src/voice/` |
+| Live channel: idempotent sends, pushed mind state, model warm-up | **Implemented** (FND-06, EMO-02, G12, [16](16-api-structure.md) §13.1, [14](14-language-model-gateway.md) §15) | `src/hedwig/api/routes/stream.py`, `src/hedwig/brain/graph.py` |
 | Nightly checked backups, offline restore, `hedwig doctor` | **Implemented** (SEC-03, [05](05-data-model-and-database.md) §7) | `src/hedwig/core/store/backups.py`, `src/hedwig/doctor.py` |
 | Project memory: goals with a journal; finished projects recalled when named | **Implemented** (MEM-06, [08](08-state-management.md) §13, [ADR-0025](adr/0025-projects-are-goals-with-a-journal.md)) | `src/hedwig/goals/`, Goals tab *Journal* |
 | Local documents: notes recalled with the file named, secrets skipped | **Implemented** (KNW-01, [13](13-knowledge-and-tools.md) §14) | `src/hedwig/knowledge/documents.py`, Data tab *Your documents* |

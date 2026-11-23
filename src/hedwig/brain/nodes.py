@@ -23,6 +23,7 @@ from hedwig.brain.routing import DEFAULT_CAPS, TurnCaps, terminal_status, trunca
 from hedwig.brain.state import TurnState, outcomes_of
 from hedwig.core.errors import CapabilityUnavailableError
 from hedwig.core.ids import new_id
+from hedwig.core.live import live_stopped
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports.brain import (
     Guard,
@@ -105,12 +106,14 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
         text = state.get("input", "")
 
         created = await deps.conversation.open(session_id)
+        client_message_id = state.get("client_message_id")
         await deps.conversation.record_message(
             session_id=session_id,
             message_id=user_message_id,
             role=MessageRole.USER,
             text=text,
             trust=TrustTier.USER,
+            meta={"client_message_id": client_message_id} if client_message_id else None,
         )
 
         if created:
@@ -281,6 +284,8 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
                 metrics={"context_tokens": float(response_context.token_count)},
             )
         reason = truncation_reason(state, deps.caps)
+        if live_stopped():
+            reason = "was asked to stop"  # VOI-03: the partial reply is kept, and says so
         if reason:
             # A cap degrades to a reply that says so, never to an error (docs/07 §3.2).
             reply = f"{reply}\n\n(I stopped early: I {reason}.)"

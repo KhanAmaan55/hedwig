@@ -59,6 +59,43 @@ function harness(tokens: (string | null)[] = ["tok"]) {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("HedwigStream", () => {
+  it("asks the server to stop a reply by its turn", async () => {
+    const { stream, sockets } = harness();
+    void stream.send(null, "hi");
+    await tick();
+    const socket = sockets[0];
+    if (!socket) throw new Error("no socket");
+    socket.accept();
+    await tick();
+    stream.interrupt("turn_1");
+    expect(socket.sent.at(-1)).toEqual({ type: "turn.interrupt", payload: { turn_id: "turn_1" } });
+  });
+
+  it("pushes the avatar's expression once subscribed, and says when it is lost", async () => {
+    const { stream, sockets } = harness();
+    const seen: string[] = [];
+    let lost = false;
+    const watching = stream.watchMind(
+      (intent) => seen.push(intent.action),
+      () => {
+        lost = true;
+      },
+    );
+    await tick();
+    const socket = sockets[0];
+    if (!socket) throw new Error("no socket");
+    socket.accept();
+    await watching;
+    expect(socket.sent).toEqual([{ type: "mind.subscribe" }]);
+
+    socket.push("mind.update", { action: "thinking" });
+    socket.push("mind.update", { action: "idle" });
+    expect(seen).toEqual(["thinking", "idle"]);
+
+    socket.close();
+    expect(lost).toBe(true);
+  });
+
   it("offers the token as a subprotocol, never in the URL", async () => {
     const { stream, sockets } = harness();
     void stream.send(null, "hi");

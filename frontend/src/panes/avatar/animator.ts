@@ -17,6 +17,7 @@ import { IdleScheduler, type Random } from "./idle";
 import { OVERLAYS, type CharacterProfile } from "./profile";
 import { clamp, type RigTarget } from "./rig";
 import { Spring, TIME_CONSTANTS } from "./spring";
+import type { Viseme } from "../../voice/visemes";
 
 /** What the face is doing besides feeling (docs/15 §13). */
 export type Activity = "idle" | "thinking" | "speaking";
@@ -51,6 +52,7 @@ export class AvatarAnimator {
   private readonly mouthSpring = new Spring(0, 0.04);
   private activity: Activity = "idle";
   private mouthLevel = 0;
+  private mouthShape: Viseme = "aa";
   private readonly idle: IdleScheduler;
   private target: ExpressionIntent = RESTING_INTENT;
   private expressionNames = new Set<string>();
@@ -74,8 +76,9 @@ export class AvatarAnimator {
   }
 
   /** 0..1, from the voice's amplitude or the text pacer. Read every frame. */
-  setMouth(level: number): void {
+  setMouth(level: number, shape: Viseme = "aa"): void {
     this.mouthLevel = level;
+    this.mouthShape = shape;
   }
 
   setReducedMotion(reduced: boolean): void {
@@ -111,7 +114,11 @@ export class AvatarAnimator {
     // An eyelid is closed by whichever is stronger: a blink, or fatigue holding it half down.
     weights.blink = Math.max(weights.blink ?? 0, idle.blink);
     // The mouth is speech, not emotion: outside the emotional blend cap, like the blink.
-    if (mouth > 0.01) weights.aa = Math.max(weights.aa ?? 0, mouth * MOUTH_OPEN);
+    // How open from loudness (AVA-02); which shape from the words (AVA-03).
+    if (mouth > 0.01) {
+      const shape = this.mouthShape;
+      weights[shape] = Math.max(weights[shape] ?? 0, mouth * MOUTH_OPEN);
+    }
 
     // Expressions that faded to nothing must be set back to zero, not merely left out.
     for (const name of this.expressionNames) if (!(name in weights)) rig.setExpression(name, 0);

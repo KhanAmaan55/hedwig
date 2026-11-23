@@ -208,6 +208,9 @@ class InMemoryConversation:
         self.ended.add(session_id)
         return True
 
+    async def replay(self, session_id: str, client_message_id: str) -> Mapping[str, Any] | None:
+        return None
+
     async def record_message(
         self,
         *,

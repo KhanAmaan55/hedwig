@@ -43,20 +43,20 @@ afterEach(() => {
 
 describe("AvatarPane", () => {
   it("says plainly when the display cannot run WebGL", () => {
-    render(<AvatarPane webgl={false} />);
+    render(<AvatarPane webgl={false} live={null} />);
     expect(screen.getByRole("status")).toHaveTextContent("can’t run WebGL");
   });
 
   it("explains how to provide a model when there is none", async () => {
     nextStatus = { state: "missing", reason: "nothing at avatars/hedwig.vrm (404)" };
-    render(<AvatarPane webgl />);
+    render(<AvatarPane webgl live={null} />);
     expect(await screen.findByText("No avatar model yet.")).toBeInTheDocument();
     expect(screen.getByText(/frontend\/public\/avatars\/hedwig.vrm/)).toBeInTheDocument();
   });
 
   it("shows a load error without crashing", async () => {
     nextStatus = { state: "error", message: "this file is glTF but not VRM" };
-    render(<AvatarPane webgl />);
+    render(<AvatarPane webgl live={null} />);
     expect(await screen.findByText("this file is glTF but not VRM")).toBeInTheDocument();
   });
 
@@ -71,21 +71,21 @@ describe("AvatarPane", () => {
         version: "1",
       },
     };
-    render(<AvatarPane webgl />);
+    render(<AvatarPane webgl live={null} />);
     const link = await screen.findByRole("link", { name: /VRM Public License/ });
     expect(link).toHaveAttribute("href", "https://vrm.dev/licenses/1.0/");
     expect(screen.getByText(/Sample · pixiv/)).toBeInTheDocument();
   });
 
   it("hands the renderer the expression from the backend — the emotion API", async () => {
-    render(<AvatarPane webgl />);
+    render(<AvatarPane webgl live={null} />);
     await waitFor(() => {
       expect(lastProps?.expression).toEqual(AMUSED);
     });
   });
 
   it("shows what the face is being asked to express, strongest first", async () => {
-    render(<AvatarPane webgl />);
+    render(<AvatarPane webgl live={null} />);
     const readout = await screen.findByLabelText("Current expression");
     expect(readout).toHaveTextContent("amusement 0.60 · warmth 0.30");
     expect(readout).not.toHaveTextContent("fatigue"); // below the display threshold
@@ -93,7 +93,7 @@ describe("AvatarPane", () => {
 
   it("says when it has lost the mood feed, and keeps the avatar", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
-    render(<AvatarPane webgl />);
+    render(<AvatarPane webgl live={null} />);
     expect(await screen.findByText("mood offline")).toBeInTheDocument();
     expect(screen.getByTestId("vrm")).toBeInTheDocument();
   });
@@ -104,7 +104,7 @@ describe("AvatarPane", () => {
       "URL",
       Object.assign(URL, { createObjectURL: created, revokeObjectURL: vi.fn() }),
     );
-    const { container } = render(<AvatarPane webgl />);
+    const { container } = render(<AvatarPane webgl live={null} />);
     const pane = container.querySelector(".avatar");
     expect(pane).not.toBeNull();
 

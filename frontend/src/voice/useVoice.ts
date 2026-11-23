@@ -84,7 +84,7 @@ export function useVoice(api: VoiceApi = defaultClient): Voice {
         api
           .speak(text)
           .then((audio) => {
-            begin(speakAudio(audio));
+            begin(speakAudio(audio, undefined, text));
           })
           .catch(() => {
             if (fallback) begin(speakSilently(text));

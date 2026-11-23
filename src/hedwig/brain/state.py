@@ -53,6 +53,10 @@ class TurnState(TypedDict, total=False):
     turn_id: str
     session_id: str
     correlation_id: str
+    client_message_id: str
+    """The sender's id for this message, if it gave one: a retry with the same id gets this
+    turn back instead of a second one (FND-06)."""
+    replayed: bool
     user_message_id: str
     reply_message_id: str
     """Minted at `ingest` and written at `finalize`, so `emit` can announce an id that the
@@ -109,9 +113,18 @@ class TurnState(TypedDict, total=False):
     metrics: Annotated[dict[str, float], merge_metrics]
 
 
-def new_turn(*, turn_id: str, session_id: str, correlation_id: str, text: str) -> TurnState:
+def new_turn(
+    *,
+    turn_id: str,
+    session_id: str,
+    correlation_id: str,
+    text: str,
+    client_message_id: str | None = None,
+) -> TurnState:
     """The initial state for a turn. The only place defaults are set."""
+    extra = TurnState(client_message_id=client_message_id) if client_message_id else TurnState()
     return TurnState(
+        **extra,
         turn_id=turn_id,
         session_id=session_id,
         correlation_id=correlation_id,
