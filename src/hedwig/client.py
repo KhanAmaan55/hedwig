@@ -163,6 +163,15 @@ class HedwigClient:
 
     # -- goals (docs/08 §6.1) --------------------------------------------------
 
+    def goal_notes(self, goal_id: str) -> list[dict[str, Any]]:
+        body: Any = self._request("GET", f"/v1/goals/{goal_id}/notes")
+        return list(body)
+
+    def add_goal_note(self, goal_id: str, text: str, *, kind: str = "progress") -> dict[str, Any]:
+        return self._request(
+            "POST", f"/v1/goals/{goal_id}/notes", json={"kind": kind, "text": text}
+        )
+
     def goals(self, *, statuses: tuple[str, ...] = ()) -> list[dict[str, Any]]:
         params = [("status", status) for status in statuses]
         return list(self._request("GET", "/v1/goals", params=params)["goals"])

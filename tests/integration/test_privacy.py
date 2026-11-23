@@ -73,6 +73,7 @@ async def _seed(container: Container, llm_provider: RecordedProvider) -> None:
                 "worth_remembering": True,
                 "title": f"About {SECRET}",
                 "summary": f"The user's sister {SECRET} lives in {PLACE}.",
+                "journal": [],
                 "facts": [
                     {
                         "statement": f"The user's sister {SECRET} lives in {PLACE}.",

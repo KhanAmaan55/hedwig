@@ -49,7 +49,9 @@ MAX_PROPOSALS = 2
 GOAL_SIMILARITY = 0.6
 """Word overlap above which a proposal is the same goal as an open one, worded differently."""
 PURPOSE = "reflect.session"
-PROMPT_VERSION = "reflect.session.v4"
+PROMPT_VERSION = "reflect.session.v5"
+MAX_JOURNAL = 4
+"""Per conversation: the few things worth writing in a project's journal (ADR-0025)."""
 
 SCHEMA: Mapping[str, Any] = {
     "type": "object",
@@ -75,10 +77,23 @@ SCHEMA: Mapping[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "goal": {"type": "string", "maxLength": 8},
+                    "goal": {"type": "string", "maxLength": 200},
                     "progress": {"type": "number", "minimum": 0, "maximum": 1},
                 },
                 "required": ["goal", "progress"],
+            },
+        },
+        "journal": {
+            "type": "array",
+            "maxItems": 6,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "goal": {"type": "string", "maxLength": 200},
+                    "kind": {"type": "string", "enum": ["decision", "question", "blocker"]},
+                    "text": {"type": "string", "maxLength": 200},
+                },
+                "required": ["goal", "kind", "text"],
             },
         },
         "curious_about": {
@@ -99,7 +114,10 @@ SCHEMA: Mapping[str, Any] = {
             },
         },
     },
-    "required": ["worth_remembering", "title", "summary", "facts"],
+    # `journal` is required because, measured live, an optional one was never filled: the model
+    # put "decided to use a Pratt parser" under facts instead (ADR-0025). Entries for goals it
+    # was not shown are dropped, so requiring it cannot attach a note to the wrong project.
+    "required": ["worth_remembering", "title", "summary", "facts", "journal"],
 }
 
 INSTRUCTIONS = """You are HEDWIG's memory. Read the conversation below between the user and \
@@ -116,6 +134,7 @@ the user stated it, 0 to 1. Leave the list empty if there are none.
 
 - projects: ongoing projects or plans the user is working on and may want help with over time, each as a goal for HEDWIG ("Help the user finish their Rust compiler") and, if clear, done_when. Empty if none. Do not repeat a goal already listed under [goals].
 - progress: for goals listed under [goals], how far along each now is, 0 to 1, by its label ("G1"). Only goals this conversation actually moved.
+- journal: for goals listed under [goals], what this conversation decided ("decision"), left unresolved ("question") or found in the way ("blocker"), each as one short sentence in the third person ("The user chose Postgres over SQLite."), by the goal's label. Only what was actually said. Empty if none.
 
 - curious_about: up to three general questions about subjects the user is interested in that are worth learning more about, phrased with no personal details at all ("What are current approaches to long-term memory for LLM agents?"). Empty if none.
 
@@ -244,6 +263,7 @@ class SessionReflector:
 
         kept = await self._keep(session_id, since=since, parsed=parsed, model_id=model_id)
         proposed, progressed = await self._goals_from(parsed, active)
+        await self._journal(parsed, active, session_id)
         return await self._done(
             Reflection(
                 session_id,
@@ -359,11 +379,10 @@ class SessionReflector:
             return (), ()
 
         progressed: list[str] = []
-        labels = {f"G{i + 1}": goal for i, goal in enumerate(active)}
         for item in parsed.get("progress") or []:
             if not isinstance(item, Mapping):
                 continue
-            goal = labels.get(str(item.get("goal", "")).strip().upper())
+            goal = _which_goal(item.get("goal"), active)
             value = float(item.get("progress", 0.0))
             if goal is None or value <= goal.progress:
                 continue
@@ -395,6 +414,31 @@ class SessionReflector:
             proposed.append(goal.id)
         return tuple(proposed), tuple(progressed)
 
+    async def _journal(
+        self, parsed: Mapping[str, Any], active: Sequence[Goal], session_id: str
+    ) -> int:
+        """What this conversation decided, left open or hit, in each goal's journal (ADR-0025).
+
+        Only for goals the model was shown, only the three kinds a conversation can establish,
+        and a sentence long — a note is labelled as reflection's and changes nothing else.
+        """
+        if self._goals is None:
+            return 0
+        written = 0
+        for item in list(parsed.get("journal") or [])[:MAX_JOURNAL]:
+            if not isinstance(item, Mapping):
+                continue
+            goal = _which_goal(item.get("goal"), active)
+            text = " ".join(str(item.get("text", "")).split())
+            kind = str(item.get("kind", ""))
+            if goal is None or kind not in {"decision", "question", "blocker"}:
+                continue
+            if not 8 <= len(text) <= 200:
+                continue
+            await self._goals.note(goal.id, kind, text, source="reflection", session_id=session_id)
+            written += 1
+        return written
+
     async def _done(self, reflection: Reflection) -> Reflection:
         logger.info(
             "session reflection",
@@ -420,3 +464,24 @@ class SessionReflector:
                 correlation_id=reflection.session_id,
             )
         return reflection
+
+
+def _which_goal(named: object, shown: Sequence[Goal]) -> Goal | None:
+    """The goal the model meant, out of those it was shown (docs/08 §13).
+
+    By label ("G1") as asked — but measured live, the model writes the goal's description
+    instead, which an 8-character limit cut to "Help the", so every progress update and journal
+    note from a real conversation was dropped. A description resolves to a shown goal when it
+    is worded like exactly one of them.
+    """
+    text = str(named or "").strip()
+    labels = {f"G{i + 1}": goal for i, goal in enumerate(shown)}
+    if text.upper() in labels:
+        return labels[text.upper()]
+    close = [g for g in shown if similarity(text, g.description) >= GOAL_SIMILARITY]
+    if len(close) == 1:
+        return close[0]
+    starts = [
+        g for g in shown if len(text) >= 12 and g.description.lower().startswith(text.lower())
+    ]
+    return starts[0] if len(starts) == 1 else None

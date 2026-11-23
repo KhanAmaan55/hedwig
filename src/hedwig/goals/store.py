@@ -15,7 +15,7 @@ from hedwig.core.errors import InvalidRequestError, NotFoundError
 from hedwig.core.ids import new_id
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock, EventBus, Health, HealthStatus
-from hedwig.core.ports.goals import Goal, GoalKind, GoalStatus
+from hedwig.core.ports.goals import Goal, GoalKind, GoalNote, GoalStatus, NoteKind
 from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.core.store import Database
 
@@ -149,11 +149,97 @@ class GoalStore:
             f"UPDATE goal SET {assignments}, version = version + 1 WHERE id = ?",
             (*changes.values(), goal_id),
         )
+        # The journal records the store's own changes, so it is complete with no model at all.
+        if status is not None and status is not goal.status and status in STATUS_NOTES:
+            kind, text = STATUS_NOTES[status]
+            await self.note(goal_id, kind, text, source="system")
+        if "progress" in changes:
+            await self.note(
+                goal_id,
+                NoteKind.PROGRESS,
+                f"progress {round(goal.progress * 100)}% → {round(changes['progress'] * 100)}%",
+                source="system",
+            )
         updated = await self._require(goal_id)
         await self._announce("goals.goal.updated", updated)
         if status is GoalStatus.ACTIVE or priority is not None:
             await self._enforce_cap()
         return updated
+
+    # -- the journal (ADR-0025) ---------------------------------------------------------
+
+    async def note(
+        self,
+        goal_id: str,
+        kind: NoteKind | str,
+        text: str,
+        *,
+        source: str = "user",
+        session_id: str | None = None,
+    ) -> GoalNote:
+        await self._require(goal_id)
+        try:
+            chosen = NoteKind(kind)
+        except ValueError as error:
+            raise InvalidRequestError(f"No note kind {kind!r}.") from error
+        body = " ".join(text.split())
+        if not body:
+            raise InvalidRequestError("A note needs some text.")
+        note_id, now = new_id("note"), self._now()
+        self._db.execute(
+            "INSERT INTO goal_note (id, goal_id, kind, text, source, session_id, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (note_id, goal_id, chosen.value, body[:500], source, session_id, now),
+        )
+        self._db.execute("UPDATE goal SET last_touched_at = ? WHERE id = ?", (now, goal_id))
+        return GoalNote(
+            id=note_id,
+            goal_id=goal_id,
+            kind=chosen,
+            text=body[:500],
+            source=source,
+            created_at=datetime.fromisoformat(now),
+            session_id=session_id,
+        )
+
+    async def notes(self, goal_id: str, *, limit: int = 20) -> Sequence[GoalNote]:
+        rows = self._db.query(
+            "SELECT * FROM goal_note WHERE goal_id = ? ORDER BY created_at DESC, rowid DESC "
+            "LIMIT ?",
+            (goal_id, limit),
+        )
+        return [
+            GoalNote(
+                id=str(r["id"]),
+                goal_id=str(r["goal_id"]),
+                kind=NoteKind(r["kind"]),
+                text=str(r["text"]),
+                source=str(r["source"]),
+                created_at=datetime.fromisoformat(r["created_at"]),
+                session_id=r["session_id"],
+            )
+            for r in rows
+        ]
+
+    async def mentioned_in(self, text: str, *, limit: int = 2) -> Sequence[Goal]:
+        """Closed or blocked goals sharing a telling word with `text` (ADR-0025).
+
+        A word counts if it has four or more letters and is not one every goal shares
+        ("project", "help", "user"), so "how did the compiler go?" finds the compiler.
+        """
+        words = _telling(text)
+        if not words:
+            return []
+        found = []
+        for row in self._db.query(
+            "SELECT * FROM goal WHERE status IN ('done','abandoned','blocked') "
+            "ORDER BY updated_at DESC LIMIT 200"
+        ):
+            if words & _telling(str(row["description"])):
+                found.append(_goal(row))
+            if len(found) >= limit:
+                break
+        return found
 
     # -- lifecycle ------------------------------------------------------------------
 
@@ -260,3 +346,58 @@ def _goal(row: Any) -> Goal:
         last_progress_at=_dt(row["last_progress_at"]),
         due_at=_dt(row["due_at"]),
     )
+
+
+STATUS_NOTES: dict[GoalStatus, tuple[NoteKind, str]] = {
+    GoalStatus.ACTIVE: (NoteKind.PROGRESS, "started"),
+    GoalStatus.BLOCKED: (NoteKind.BLOCKER, "blocked"),
+    GoalStatus.DONE: (NoteKind.DONE, "finished"),
+    GoalStatus.ABANDONED: (NoteKind.DONE, "dropped"),
+}
+
+GENERIC = frozenset(
+    [
+        "help",
+        "user",
+        "user's",
+        "their",
+        "project",
+        "projects",
+        "goal",
+        "goals",
+        "finish",
+        "finished",
+        "start",
+        "started",
+        "make",
+        "keep",
+        "work",
+        "working",
+        "with",
+        "about",
+        "into",
+        "from",
+        "that",
+        "this",
+        "what",
+        "when",
+        "where",
+        "which",
+        "going",
+        "done",
+        "want",
+        "learn",
+        "learning",
+        "build",
+        "building",
+        "get",
+        "getting",
+        "more",
+        "less",
+    ]
+)
+
+
+def _telling(text: str) -> set[str]:
+    words = {w.strip(".,;:!?'\"()").lower() for w in text.split()}
+    return {w.removesuffix("'s") for w in words if len(w) >= 4} - GENERIC

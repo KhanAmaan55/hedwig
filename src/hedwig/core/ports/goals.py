@@ -48,8 +48,38 @@ class Goal:
     due_at: datetime | None = None
 
 
+class NoteKind(StrEnum):
+    """A project journal entry (ADR-0025)."""
+
+    DECISION = "decision"
+    PROGRESS = "progress"
+    QUESTION = "question"
+    BLOCKER = "blocker"
+    DONE = "done"
+
+
+@dataclass(frozen=True, slots=True)
+class GoalNote:
+    id: str
+    goal_id: str
+    kind: NoteKind
+    text: str
+    source: str
+    """`system` (the store's own changes), `reflection`, or `user`."""
+    created_at: datetime
+    session_id: str | None = None
+
+
 @runtime_checkable
 class GoalReader(Protocol):
     async def active(self, *, limit: int = 12) -> Sequence[Goal]:
         """Active goals, highest priority first."""
+        ...
+
+    async def notes(self, goal_id: str, *, limit: int = 20) -> Sequence[GoalNote]:
+        """A goal's journal, newest first (ADR-0025)."""
+        ...
+
+    async def mentioned_in(self, text: str, *, limit: int = 2) -> Sequence[Goal]:
+        """Finished, dropped or blocked goals the text names — "how did the compiler go?"."""
         ...

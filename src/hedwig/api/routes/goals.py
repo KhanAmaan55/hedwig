@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from hedwig.api.auth import require_token
 from hedwig.api.deps import ContainerDep
 from hedwig.core.errors import NotFoundError
-from hedwig.core.ports.goals import Goal, GoalStatus
+from hedwig.core.ports.goals import Goal, GoalNote, GoalStatus
 
 router = APIRouter(prefix="/goals", tags=["goals"], dependencies=[Depends(require_token)])
 
@@ -33,6 +33,20 @@ class GoalRead(BaseModel):
 
 class GoalList(BaseModel):
     goals: list[GoalRead]
+
+
+class NoteRead(BaseModel):
+    id: str
+    kind: Literal["decision", "progress", "question", "blocker", "done"]
+    text: str
+    source: str = Field(description="system, reflection or user (ADR-0025).")
+    session_id: str | None
+    created_at: str
+
+
+class NoteCreate(BaseModel):
+    kind: Literal["decision", "progress", "question", "blocker", "done"] = "progress"
+    text: str = Field(min_length=1, max_length=500)
 
 
 class GoalCreate(BaseModel):
@@ -92,6 +106,36 @@ async def update_goal(goal_id: str, body: GoalPatch, container: ContainerDep) ->
         completion=body.completion,
     )
     return _read(goal)
+
+
+@router.get("/{goal_id}/notes", response_model=list[NoteRead], summary="The project's journal")
+async def notes(
+    goal_id: str, container: ContainerDep, limit: Annotated[int, Query(ge=1, le=200)] = 50
+) -> list[NoteRead]:
+    if await container.goals.get(goal_id) is None:
+        raise NotFoundError("No such goal.", goal_id=goal_id)
+    return [_note(n) for n in await container.goals.notes(goal_id, limit=limit)]
+
+
+@router.post(
+    "/{goal_id}/notes",
+    response_model=NoteRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Write in the project's journal",
+)
+async def add_note(goal_id: str, body: NoteCreate, container: ContainerDep) -> NoteRead:
+    return _note(await container.goals.note(goal_id, body.kind, body.text, source="user"))
+
+
+def _note(note: GoalNote) -> NoteRead:
+    return NoteRead(
+        id=note.id,
+        kind=note.kind.value,
+        text=note.text,
+        source=note.source,
+        session_id=note.session_id,
+        created_at=note.created_at.isoformat(timespec="milliseconds"),
+    )
 
 
 def _read(goal: Goal) -> GoalRead:

@@ -121,6 +121,7 @@ async def test_reflection_interests_become_gaps_through_an_event(
                 "worth_remembering": True,
                 "title": "Memory systems",
                 "summary": "The user talked about agent memory.",
+                "journal": [],
                 "facts": [],
                 "curious_about": [QUESTION, "What is my favourite memory paper?"],
             }

@@ -105,6 +105,17 @@ function fakeApi(overrides: Partial<InspectorApi> = {}): InspectorApi {
     goals: vi.fn().mockResolvedValue([GOAL]),
     createGoal: vi.fn().mockResolvedValue(GOAL),
     updateGoal: vi.fn().mockResolvedValue({ ...GOAL, status: "active" }),
+    goalNotes: vi.fn().mockResolvedValue([
+      {
+        id: "note_1",
+        kind: "decision",
+        text: "The user chose a Pratt parser.",
+        source: "reflection",
+        session_id: "s",
+        created_at: "2026-11-20T10:00:00",
+      },
+    ]),
+    addGoalNote: vi.fn().mockResolvedValue({}),
     gaps: vi.fn().mockResolvedValue([]),
     askCuriosity: vi
       .fn()
@@ -274,6 +285,23 @@ describe("InspectorPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Activate" }));
     await waitFor(() => {
       expect(api.updateGoal).toHaveBeenCalledWith("goal_1", { status: "active" });
+    });
+  });
+
+  it("opens a project's journal and writes in it", async () => {
+    const api = fakeApi();
+    render(<InspectorPane api={api} />);
+    tab("Goals");
+    fireEvent.click(await screen.findByRole("button", { name: "Journal" }));
+    expect(await screen.findByRole("region", { name: "Journal" })).toHaveTextContent(
+      "decision: The user chose a Pratt parser. · from a conversation",
+    );
+    fireEvent.change(screen.getByLabelText("Journal note"), {
+      target: { value: "Error recovery next." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Note" }));
+    await waitFor(() => {
+      expect(api.addGoalNote).toHaveBeenCalledWith("goal_1", "Error recovery next.", "decision");
     });
   });
 

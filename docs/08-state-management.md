@@ -331,3 +331,57 @@ path.** Otherwise a bug in an increment is permanent.
 | CRDT-shaped Tier-3 state | Multi-device sync becomes a goal ([23](23-challenged-assumptions.md) §12) |
 | Move session window assembly into a materialised view | Window queries appear in profiles |
 | User-visible "state history" timeline in the inspector | Phase 5 feedback asks for it |
+
+---
+
+## 13. Project memory — goals with a journal (MEM-06)
+
+[ADR-0025](adr/0025-projects-are-goals-with-a-journal.md): a project is a goal; each goal keeps
+a journal.
+
+```mermaid
+graph LR
+    S["goals store<br/><small>activated · progress 40%→60% · done · dropped</small>"] --> N[("goal_note<br/><small>kind · text · source · session · when</small>")]
+    R["session reflection<br/><small>decisions, open questions, blockers<br/>for goals it was shown (G1, G2…)</small>"] --> N
+    U["the user<br/><small>Goals tab · POST /v1/goals/{id}/notes · hedwig goals note</small>"] --> N
+    N --> M["GoalsMindReader<br/><small>active goals + latest notes;<br/>a finished project the message names</small>"]
+    M --> P["[goals] block in the prompt"]
+```
+
+* **Kinds:** `decision` ("chose Postgres over SQLite"), `progress`, `question` (left open),
+  `blocker`, `done`. Each carries `source` (`system`, `reflection`, `user`) and the session.
+* **Deterministic notes** for every status change and progress change, so the journal is complete
+  even with no model.
+* **Reflection notes** are validated (a goal it was shown, a known kind, 8–200 characters) and
+  capped at four per conversation.
+* **In the turn:** each active goal's line ends with its two latest notes; a finished, dropped or
+  blocked goal whose words the user's message shares (a content word of four or more letters
+  that is not generic, like "project" or "help") is added, marked as finished, with its notes.
+* **Purge and export:** notes quote conversations, so purge sweeps them by goal, session and
+  phrase (ADR-0024 `RECORD`); the export's `goals.md` includes each journal.
+* **The app:** a *Journal* toggle on each goal in the Goals tab lists its entries (with "from a
+  conversation" or "you") and takes a new one; `hedwig goals journal <id>`, `hedwig goals note`.
+
+**Measured live (gemma4:e2b)** — two findings no scripted test could make:
+
+* An optional `journal` field was never filled: the model put "decided to use a Pratt parser"
+  under facts. It is now required; entries for goals the model was not shown are dropped, so
+  requiring it cannot misfile a note.
+* The model names goals by their description, not the `G1` label it is asked for, and the
+  8-character limit on that field cut it to "Help the". So every journal note — and, it turned
+  out, **every progress update reflection had ever made from a real conversation (GOA-02)** —
+  was silently dropped. Goals now resolve by label, or by wording close to exactly one goal the
+  model was shown; ambiguous names are dropped. After the fix, two live runs wrote "The user still
+  doesn't know how to handle generics" and "The user's laptop keeps overheating when they build"
+  as blockers, and moved progress 0% → 10%. The "decision" in the same conversation was still
+  filed as a fact — recall for decisions is the weak spot, and a missed note costs only a note.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Projects are goals (ADR-0025) | One concept, one view, existing lifecycle | A project never proposed as a goal has no journal | Users talk about projects HEDWIG never proposed |
+| Notes never decay | A project's decisions do not fade with disuse | The journal grows; only the latest two reach the prompt | Journals get long: summarise old notes in T2 |
+| Finished projects found by shared words | Deterministic, no model call | "How did that thing with the parser go?" without the goal's words misses | Embeddings for goals |
+
+**Future improvements.** Find a finished project by meaning (embed goal descriptions); a weekly
+project digest in T3; decisions extracted more reliably (a larger utility model, measured).
+

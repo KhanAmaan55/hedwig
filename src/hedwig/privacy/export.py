@@ -170,7 +170,8 @@ class Exporter:
     def _goals(self) -> str:
         lines = ["# Goals", ""]
         goals = self._db.query(
-            "SELECT description, status, progress, context, created_at FROM goal ORDER BY created_at"
+            "SELECT id, description, status, progress, context, created_at FROM goal "
+            "ORDER BY created_at"
         )
         if not goals:
             lines.append("_None yet._")
@@ -180,6 +181,11 @@ class Exporter:
             )
             if g["context"]:
                 lines.append(f"  {g['context']}")
+            for note in self._db.query(  # the project's journal (ADR-0025)
+                "SELECT kind, text, created_at FROM goal_note WHERE goal_id = ? ORDER BY created_at",
+                (g["id"],),
+            ):
+                lines.append(f"  - {str(note['created_at'])[:10]} {note['kind']}: {note['text']}")
         return "\n".join(lines) + "\n"
 
 

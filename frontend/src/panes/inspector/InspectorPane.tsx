@@ -19,6 +19,7 @@ import type {
   Finding,
   Gap,
   Goal,
+  GoalNote,
   MemoryItem,
   PersonalityChange,
   PurgePreview,
@@ -50,6 +51,8 @@ export type InspectorApi = Pick<
   | "goals"
   | "createGoal"
   | "updateGoal"
+  | "goalNotes"
+  | "addGoalNote"
   | "gaps"
   | "askCuriosity"
   | "findings"
@@ -579,6 +582,7 @@ function Disputes({ api, onSettled }: { api: InspectorApi; onSettled: () => void
 function GoalsTab({ api }: { api: InspectorApi }): JSX.Element {
   const goals = useLoad(useCallback(() => api.goals(), [api]));
   const [draft, setDraft] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
   const set = async (goal: Goal, changes: Partial<Pick<Goal, "status" | "progress">>) => {
     await api.updateGoal(goal.id, changes);
     goals.reload();
@@ -647,11 +651,86 @@ function GoalsTab({ api }: { api: InspectorApi }): JSX.Element {
               >
                 Drop
               </button>
+              <button
+                className="button button--small"
+                type="button"
+                aria-expanded={open === goal.id}
+                onClick={() => {
+                  setOpen(open === goal.id ? null : goal.id);
+                }}
+              >
+                Journal
+              </button>
             </div>
+            {open === goal.id && <Journal api={api} goalId={goal.id} />}
           </li>
         ))}
       </ul>
     </>
+  );
+}
+
+const NOTE_SOURCES: Record<GoalNote["source"], string> = {
+  system: "",
+  reflection: " · from a conversation",
+  user: " · you",
+};
+
+/** A project's journal: what was decided, what moved, what is still open (ADR-0025). */
+function Journal({ api, goalId }: { api: InspectorApi; goalId: string }): JSX.Element {
+  const notes = useLoad(useCallback(() => api.goalNotes(goalId), [api, goalId]));
+  const [text, setText] = useState("");
+  const [kind, setKind] = useState<GoalNote["kind"]>("decision");
+  const shown = Array.isArray(notes.data) ? notes.data : [];
+  return (
+    <section aria-label="Journal" className="journal">
+      {shown.length === 0 && <p className="panel__hint">Nothing written yet.</p>}
+      <ul className="items">
+        {shown.map((note) => (
+          <li key={note.id} className="item__meta">
+            {note.created_at.slice(0, 10)} · {note.kind}: {note.text}
+            {NOTE_SOURCES[note.source]}
+          </li>
+        ))}
+      </ul>
+      <form
+        className="inspector__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!text.trim()) return;
+          void api.addGoalNote(goalId, text.trim(), kind).then(() => {
+            setText("");
+            notes.reload();
+          });
+        }}
+      >
+        <select
+          aria-label="Kind of note"
+          className="inspector__input"
+          value={kind}
+          onChange={(event) => {
+            setKind(event.target.value as GoalNote["kind"]);
+          }}
+        >
+          <option value="decision">decision</option>
+          <option value="progress">progress</option>
+          <option value="question">question</option>
+          <option value="blocker">blocker</option>
+        </select>
+        <input
+          aria-label="Journal note"
+          className="inspector__input"
+          placeholder="What was decided, or is still open…"
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+          }}
+        />
+        <button className="button button--small" type="submit">
+          Note
+        </button>
+      </form>
+    </section>
   );
 }
 

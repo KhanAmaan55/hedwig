@@ -68,7 +68,7 @@ the repository, ahead of any new cognitive capability.
 | 3 | Semantic memory (beliefs) | **PARTIAL** | T1 writes tentative beliefs (REF-01); T2 merges duplicates, promotes on two conversations, and puts judged conflicts to the user (REF-02). Recalled by meaning since MEM-04 |
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
-| 3 | Project memory | **MISSING** | No schema or module |
+| 3 | Project memory | **COMPLETE** (MEM-06) | Projects are goals with a journal (ADR-0025): system, reflection and user notes; finished projects come back when named (docs/08 §13) |
 | 3 | Consolidation / duplicates / conflicts | **PARTIAL** | Novelty gate reinforces lexical near-duplicates; `supersede_belief` exists but nothing detects conflicts |
 | 3 | User-controlled deletion, searchable, explainable | **PARTIAL** | `/v1/memory` and `hedwig memory`: list, search with score breakdown, pin, forget, restore (MEM-02); no `/explain` yet |
 | 3 | Embedding retrieval channel | **COMPLETE** (MEM-04) | nomic-embed-text via the gateway, `sqlite-vec` in hedwig.db; recall@5 0.514 → 0.972 on the eval corpus (docs/06 §17) |
@@ -264,7 +264,7 @@ As a developer, I want recall@5 measured on a fixed corpus, so that retrieval ch
 by numbers.
 
 #### MEM-06 — Project memory
-**Status:** Todo · **P2** · **L** · **Depends on:** REF-01, GOA-01
+**Status:** Done (2026-11-23) · **P2** · **L** · **Depends on:** REF-01, GOA-01 · **Modules:** `goals/`, `reflection/session.py`, Goals tab, migration 0020 · [ADR-0025](adr/0025-projects-are-goals-with-a-journal.md)
 
 As the user, I want HEDWIG to track my ongoing projects — decisions, progress, open questions —
 so that "how did that project go?" has a real answer. Design question first: an entity kind plus
@@ -699,4 +699,11 @@ tables, or copied rows). Nothing existing was changed or deleted.
   skipped and reported, chunked by heading, recalled by words and meaning as *your documents*
   (CURATED, file named, never instructions, never beliefs). Set aside / stop reading; purge
   covers HEDWIG's copy. Migration 0019. Verified live. Design in [13](13-knowledge-and-tools.md) §14.
+- **MEM-06** Project memory — a project is a goal with a journal
+  ([ADR-0025](adr/0025-projects-are-goals-with-a-journal.md), migration 0020): the store notes its
+  own changes, session reflection notes decisions, open questions and blockers, the user adds
+  notes; active goals carry their latest notes into the turn, and a finished project comes back
+  when the user names it. **Finding:** the model names goals by description, not label, and a
+  field limit cut it to "Help the" — so every live progress update since GOA-02 had been dropped.
+  Goals now resolve by label or by wording; verified live. Design in [08](08-state-management.md) §13.
 
