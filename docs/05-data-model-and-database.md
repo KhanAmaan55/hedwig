@@ -745,6 +745,40 @@ weekly (archive + incremental vacuum) and reports before/after sizes.
 - A restore test runs in CI against a seeded database, because an untested backup is not a
   backup.
 
+#### Implementation (SEC-03)
+
+```mermaid
+graph LR
+    T["storage.backup · nightly, at memory.maintenance_hour"] --> V["VACUUM INTO backups/.hedwig-DATE.db.tmp"]
+    V --> C{"integrity_check ok<br/>and schema present?"}
+    C -->|no| X["delete the copy · report failed · keep yesterday's"]
+    C -->|yes| R["rename → hedwig-YYYY-MM-DD.db"]
+    R --> P["prune: newest 7 days · newest per week ×4 · newest per month ×12<br/><small>pre-migration and pre-restore copies: newest 3 each</small>"]
+    D["hedwig doctor"] -.->|"reads"| B[("backups/")]
+    U["hedwig restore FILE · HEDWIG stopped"] --> K["check the backup · copy the current DB to pre-restore-… · swap"]
+```
+
+* **A backup is only kept once it has been opened and checked** (`PRAGMA integrity_check`, and
+  the migration table present). A copy that fails is deleted and reported; yesterday's stays.
+* **Retention** is the spec's 7 + 4 + 12, by the date in the file name. Pre-migration copies
+  (`pre-NNNN-…`) and pre-restore copies keep their newest three — they are for undoing one
+  step, not for history.
+* **Restore is offline** (`hedwig restore <file>`), refuses while HEDWIG is running, checks the
+  backup first, and keeps the database it replaces as `pre-restore-…`, so a restore can itself be
+  undone. Tested end to end: back up, change, restore, the change is gone.
+* **A purge deletes every backup older than itself** (ADR-0024); the next night makes a clean one.
+* **`auto_vacuum` now takes effect.** It was set after `journal_mode = WAL`, by which point a
+  new database already had its first page and the setting was silently ignored (found by the
+  purge completeness work, docs/21 §7.4). New databases set it first; an existing one is switched
+  by a single `VACUUM` the first time the backup task runs, and every night ends with
+  `PRAGMA incremental_vacuum`.
+
+`hedwig doctor` checks, offline or with HEDWIG running, and says what to do about each problem:
+the data folder's permissions and whether it sits in a synced folder (Dropbox, iCloud, OneDrive,
+Google Drive — docs/21 §9), the token file's permissions, database integrity and foreign keys,
+pending migrations, `sqlite-vec`, Ollama and each configured model, the newest backup's age,
+free disk space, and whether the API answers.
+
 ---
 
 ## 8. Tradeoffs

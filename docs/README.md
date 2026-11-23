@@ -76,6 +76,7 @@ of what exists in code. Update it as each milestone lands.
 | Memory: episodic, semantic, importance, decay, forgetting | **Implemented** (M5) | `src/hedwig/memory/` |
 | Retrieval: lexical, structural, temporal channels | **Implemented** (M5) | `src/hedwig/memory/retrieval.py` |
 | Memory control: `/v1/memory`, `hedwig memory` (list, search, pin, forget, restore) | **Implemented** (MEM-02, [06](06-memory-architecture.md) §16) | `src/hedwig/api/routes/memory.py` |
+| Nightly checked backups, offline restore, `hedwig doctor` | **Implemented** (SEC-03, [05](05-data-model-and-database.md) §7) | `src/hedwig/core/store/backups.py`, `src/hedwig/doctor.py` |
 | Project memory: goals with a journal; finished projects recalled when named | **Implemented** (MEM-06, [08](08-state-management.md) §13, [ADR-0025](adr/0025-projects-are-goals-with-a-journal.md)) | `src/hedwig/goals/`, Goals tab *Journal* |
 | Local documents: notes recalled with the file named, secrets skipped | **Implemented** (KNW-01, [13](13-knowledge-and-tools.md) §14) | `src/hedwig/knowledge/documents.py`, Data tab *Your documents* |
 | Personality drift from the user's reactions, guarded and revertable | **Implemented** (PER-02, [10](10-personality-engine.md) §13) | `src/hedwig/personality/feedback.py`, Mind tab *Recent changes* |

@@ -29,13 +29,15 @@ Transaction = sqlite3.Connection
 """A transaction is just the connection inside a `with database.transaction()` block."""
 
 PRAGMAS: tuple[tuple[str, str], ...] = (
+    # First: auto_vacuum only takes effect on a database with no pages yet, and setting WAL
+    # writes the first page. In the old order it was silently ignored (docs/05 §7, SEC-03).
+    ("auto_vacuum", "INCREMENTAL"),
     ("journal_mode", "WAL"),  # concurrent readers alongside one writer
     ("synchronous", "NORMAL"),  # safe under WAL; FULL only for the nightly backup
     ("foreign_keys", "ON"),  # a dangling reference in a memory system is a false memory
     ("busy_timeout", "5000"),
     ("temp_store", "MEMORY"),
     ("mmap_size", "268435456"),
-    ("auto_vacuum", "INCREMENTAL"),
 )
 
 

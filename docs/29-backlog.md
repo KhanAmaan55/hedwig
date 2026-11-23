@@ -462,7 +462,10 @@ is really gone, so that the data is mine.
   entity scopes, "similar memories" from embeddings, encrypted export, import.
 
 #### SEC-03 — Backup and `hedwig doctor`
-**Status:** Todo · **P3** · **M**
+**Status:** Done (2026-11-23) · **P3** · **M** · **Modules:** `core/store/backups.py`, `doctor.py`, CLI
+
+As the user, I want a checked backup every night, a tested way back, and one command that tells
+me whether everything HEDWIG needs is in place and what to do if not.
 
 ---
 
@@ -706,4 +709,11 @@ tables, or copied rows). Nothing existing was changed or deleted.
   when the user names it. **Finding:** the model names goals by description, not label, and a
   field limit cut it to "Help the" — so every live progress update since GOA-02 had been dropped.
   Goals now resolve by label or by wording; verified live. Design in [08](08-state-management.md) §13.
+- **SEC-03** Backups and doctor — `storage.backup` nightly: `VACUUM INTO`, opened and
+  integrity-checked before it is kept, 7 daily + 4 weekly + 12 monthly, one-step copies kept to
+  three. `hedwig restore` (offline, checks the backup, keeps what it replaces), tested round
+  trip. `hedwig doctor`: permissions, synced folders, token, integrity, migrations, sqlite-vec,
+  Ollama and each model, backups, disk, API — each with a fix. `auto_vacuum` now takes effect
+  (set before WAL; old databases switched once). Run on the real install: correct, including the
+  11 migrations it has not applied yet. Design in [05](05-data-model-and-database.md) §7.
 
