@@ -190,3 +190,10 @@ def test_a_fact_copied_in_the_first_person_is_kept_in_the_third(said: str, kept:
     """gemma4:e2b copied every fact verbatim in the live eval ("My favourite tea is…"), which
     stored reads as HEDWIG talking about itself (docs/12 §14)."""
     assert third_person(said) == kept
+
+
+async def test_reflection_is_given_time_for_a_slow_model(running_container: Container) -> None:
+    """Found end to end: the bus's 30 s default timed a 2B model's reflection out on every
+    retry, so a real conversation taught HEDWIG nothing."""
+    subscription = running_container.bus._subscriptions["reflection-session"]  # type: ignore[attr-defined]
+    assert subscription.timeout >= 300

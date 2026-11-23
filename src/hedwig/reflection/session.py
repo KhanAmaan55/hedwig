@@ -50,6 +50,7 @@ GOAL_SIMILARITY = 0.6
 """Word overlap above which a proposal is the same goal as an open one, worded differently."""
 PURPOSE = "reflect.session"
 PROMPT_VERSION = "reflect.session.v5"
+REFLECTION_TIMEOUT_SECONDS = 600.0
 MAX_JOURNAL = 4
 """Per conversation: the few things worth writing in a project's journal (ADR-0025)."""
 
@@ -219,7 +220,15 @@ class SessionReflector:
 
     async def start(self) -> None:
         if self._bus is not None and not self._subscribed:
-            self._bus.subscribe("conversation.session.ended", self.handle, name=SUBSCRIPTION)
+            # A whole conversation through the utility model: minutes on a laptop CPU, not the
+            # bus's 30-second default. Measured end to end: the default timed reflection out on
+            # every retry, so nothing was learned from a real conversation.
+            self._bus.subscribe(
+                "conversation.session.ended",
+                self.handle,
+                name=SUBSCRIPTION,
+                timeout=REFLECTION_TIMEOUT_SECONDS,
+            )
             self._subscribed = True
 
     async def stop(self) -> None:
