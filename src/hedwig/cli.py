@@ -742,6 +742,63 @@ def _erase_everything() -> None:
 
 
 @app.command()
+def doctor() -> None:
+    """Check everything HEDWIG needs, and say what to do about anything wrong."""
+    from hedwig.core.clock import SystemClock
+    from hedwig.doctor import run_checks
+    from hedwig.wiring import MIGRATIONS_DIR
+
+    findings = run_checks(
+        load_config(),
+        migrations=MIGRATIONS_DIR,
+        today=SystemClock().now().astimezone().date(),
+    )
+    marks = {
+        "ok": ("✓", typer.colors.GREEN),
+        "warn": ("!", typer.colors.YELLOW),
+        "fail": ("✗", typer.colors.RED),
+    }
+    for finding in findings:
+        mark, colour = marks[finding.status]
+        line = f"{mark} {finding.name}" + (f" — {finding.detail}" if finding.detail else "")
+        typer.secho(line, fg=colour if finding.status != "ok" else None)
+        if finding.fix and finding.status != "ok":
+            print(f"    → {finding.fix}")
+    if any(f.status == "fail" for f in findings):
+        raise typer.Exit(1)
+
+
+@app.command()
+def restore(
+    backup: Annotated[Path, typer.Argument(help="A backup from the backups folder.")],
+) -> None:
+    """Put a backup in place of the database. HEDWIG must be stopped; the current one is kept."""
+    import socket
+
+    from hedwig.core.clock import SystemClock
+    from hedwig.core.store.backups import BackupError
+    from hedwig.core.store.backups import restore as put_back
+
+    config = load_config()
+    try:
+        with socket.create_connection((config.api.host, config.api.port), timeout=1):
+            typer.secho("HEDWIG is running. Stop it first.", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+    except OSError:
+        pass
+    source = backup if backup.is_absolute() else config.runtime.backups_dir / backup
+    stamp = SystemClock().now().strftime("%Y%m%dT%H%M%S")
+    try:
+        safety = put_back(source, config.database_path, stamp=stamp)
+    except BackupError as error:
+        typer.secho(str(error), fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from None
+    print(f"restored {source.name}.")
+    if safety:
+        print(f"the database it replaced is kept as {safety.name}.")
+
+
+@app.command()
 def disputes() -> None:
     """Beliefs HEDWIG thinks repeat or conflict. Settle one with `hedwig settle`."""
     found = _call(lambda c: c.disputes())

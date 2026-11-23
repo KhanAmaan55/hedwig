@@ -54,6 +54,7 @@ from hedwig.core.scheduler import AsyncTaskScheduler, DailyTrigger, IntervalTrig
 from hedwig.core.state import SqliteStateManager
 from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
+from hedwig.core.store.backups import Backups
 from hedwig.curiosity import CuriosityStore, Explorer, FindingsMindReader, GapDetector
 from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
 from hedwig.goals import GoalsMindReader, GoalStore
@@ -531,6 +532,19 @@ def build_container(
             depends_on=("bus", "memory", "sessions", "llm", "goals"),
             critical=False,
         )
+
+    # Nightly backups, checked before they are kept (SEC-03, docs/05 §7).
+    backups = Backups(database, config.runtime.backups_dir, clock=clock)
+    scheduler.register(
+        TaskSpec(
+            name="storage.backup",
+            handler=backups.task,
+            trigger=DailyTrigger(hour=config.memory.maintenance_hour),
+            priority=Priority.MAINTENANCE,
+            description="Back up the database, check the copy, keep 7 daily + 4 weekly + 12 monthly.",
+            max_runtime_seconds=600.0,
+        )
+    )
 
     # Local documents (KNW-01, docs/13 §14): read only under folders the user adds.
     library = DocumentLibrary(

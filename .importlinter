@@ -15,7 +15,7 @@ layers =
     hedwig.cli
     hedwig.client
     hedwig.api
-    hedwig.wiring
+    hedwig.wiring | hedwig.doctor
     hedwig.brain | hedwig.reflection | hedwig.curiosity
     hedwig.tools | hedwig.speech | hedwig.explain | hedwig.privacy
     hedwig.emotion | hedwig.personality | hedwig.expression | hedwig.goals

@@ -122,7 +122,7 @@ async def test_a_purged_phrase_leaves_no_trace_in_the_database_file(
     preview = await on_disk.purger.preview("phrase", SECRET)
     assert preview["counts"]["messages"] == 1
     assert preview["counts"]["beliefs"] >= 1 and preview["counts"]["episodes"] >= 2
-    assert preview["backups"] == 1
+    assert preview["backups"] >= 1  # the test's own, and the nightly one made at start
     assert any(SECRET in example for example in preview["examples"])
     assert SECRET.encode() in _file_bytes(on_disk), "a preview must change nothing"
 
@@ -135,7 +135,7 @@ async def test_a_purged_phrase_leaves_no_trace_in_the_database_file(
     assert b"marmalade" not in raw
     assert KEPT.encode() in _file_bytes(on_disk), "an unrelated conversation was erased"
     assert not list(on_disk.config.runtime.backups_dir.glob("*")), "a backup still holds it"
-    assert receipt["backups_deleted"] == 1
+    assert receipt["backups_deleted"] == preview["backups"]
     assert on_disk.database.foreign_key_check() == []
     assert on_disk.database.integrity_check() == []
 

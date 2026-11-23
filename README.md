@@ -255,6 +255,8 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig purge --phrase …` | Erase for good, after a preview (`--memory`, `--session`, `--everything`) |
 | `uv run hedwig reflect` / `disputes` / `settle` | Run the nightly consolidation now; settle the conflicts it found |
 | `uv run python scripts/eval_recall.py` | Measure recall on the fixed corpus, words only and with meaning |
+| `uv run hedwig doctor` | Check everything HEDWIG needs, with what to do about anything wrong |
+| `uv run hedwig restore <backup>` | Put a nightly backup back (HEDWIG stopped; the current database is kept) |
 | `uv run hedwig config` | The effective configuration after all layers resolve |
 
 Configuration layers, lowest precedence first: defaults in code → `config/hedwig.toml` →
