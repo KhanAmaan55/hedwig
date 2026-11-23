@@ -57,6 +57,11 @@ class SessionList(BaseModel):
 
 class MessageCreate(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+    client_message_id: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Your id for this message. Sending it again returns the same turn (FND-06).",
+    )
 
     @field_validator("text")
     @classmethod
@@ -136,7 +141,10 @@ async def send_message(session_id: str, body: MessageCreate, container: Containe
     await _require_session(container, session_id)
 
     final = await container.brain.run_turn(
-        body.text, session_id=session_id, correlation_id=current_correlation_id()
+        body.text,
+        session_id=session_id,
+        correlation_id=current_correlation_id(),
+        client_message_id=body.client_message_id,
     )
     return turn_reply(final, session_id=session_id)
 

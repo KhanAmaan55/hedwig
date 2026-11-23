@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Protocol
 
 from hedwig.core.errors import CapabilityUnavailableError
-from hedwig.core.live import emit_live, is_live
+from hedwig.core.live import emit_live, is_live, live_stopped
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports.brain import (
     Intent,
@@ -157,24 +157,39 @@ class GatewayResponder:
 
     async def _stream(self, request: GenerationRequest) -> GenerationResult:
         pieces: list[str] = []
-        async for chunk in self.gateway.stream(request):
-            if chunk.text:
-                pieces.append(chunk.text)
-                await emit_live("token", {"text": chunk.text})
-            if chunk.done and chunk.result is not None:
-                return chunk.result
+        chunks = self.gateway.stream(request)
+        try:
+            async for chunk in chunks:
+                if chunk.text:
+                    pieces.append(chunk.text)
+                    await emit_live("token", {"text": chunk.text})
+                if live_stopped():
+                    # The user interrupted (VOI-03): keep what was said, stop the model.
+                    return _partial(pieces, request, fallback="…")
+                if chunk.done and chunk.result is not None:
+                    return chunk.result
+        finally:
+            closing = getattr(chunks, "aclose", None)
+            if closing is not None:
+                await closing()  # ends the request, so the model stops generating too
         # A provider that ended without a final chunk: keep what arrived.
-        return GenerationResult(
-            text="".join(pieces),
-            model="unknown",
-            tier=request.tier or ModelTier.CONVERSATIONAL,
-            purpose=request.purpose,
-            usage=TokenUsage(prompt=0, completion=0),
-            duration_ms=0.0,
-        )
+        return _partial(pieces, request)
 
     async def refuse(self, *, verdict: SafetyVerdict) -> str:
         return REFUSAL
+
+
+def _partial(
+    pieces: Sequence[str], request: GenerationRequest, *, fallback: str = ""
+) -> GenerationResult:
+    return GenerationResult(
+        text="".join(pieces) or fallback,
+        model="unknown",
+        tier=request.tier or ModelTier.CONVERSATIONAL,
+        purpose=request.purpose,
+        usage=TokenUsage(prompt=0, completion=0),
+        duration_ms=0.0,
+    )
 
 
 def _conversation(window: Sequence[WindowMessage], *, current: str) -> list[tuple[Role, str]]:

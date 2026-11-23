@@ -18,6 +18,9 @@ dependencies = [
     "langgraph>=1.2.10",
     "langgraph-checkpoint-sqlite>=3.1.1",
     "sqlite-vec>=0.1.9",
+    "faster-whisper>=1.2.1",
+    "av>=13,<16",
+    "huggingface-hub>=0.21,<2",
 ]
 
 [project.optional-dependencies]
@@ -101,7 +104,7 @@ disallow_untyped_decorators = false
 
 [[tool.mypy.overrides]]
 # sqlite-vec ships no type stubs; it is one call, `sqlite_vec.load(connection)`.
-module = "sqlite_vec"
+module = ["sqlite_vec", "faster_whisper"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------

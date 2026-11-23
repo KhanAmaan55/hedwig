@@ -212,3 +212,21 @@ async def test_a_watcher_that_goes_away_never_fails_the_turn(running_container: 
 
 async def test_nothing_is_emitted_without_a_watcher() -> None:
     await emit_live("token", {"text": "into the void"})  # no scope bound: a no-op
+
+
+def test_a_subscribed_socket_is_pushed_the_mind_as_it_changes(
+    http: TestClient, token: str, container: Container
+) -> None:
+    """EMO-02: the avatar learns HEDWIG is thinking the moment it is, not on the next poll."""
+    with http.websocket_connect(
+        "/v1/stream", subprotocols=["hedwig.v1", f"hedwig.token.{token}"]
+    ) as socket:
+        socket.send_json({"type": "mind.subscribe"})
+        first = socket.receive_json()
+        assert first["type"] == "mind.update" and first["payload"]["action"] == "idle"
+        assert http.get("/v1/mind/expression").json() == first["payload"], "push equals poll"
+
+        _send(socket, "Hello?", client_message_id="c1")
+        seen = _until(socket, "message.complete")
+        actions = [e["payload"]["action"] for e in seen if e["type"] == "mind.update"]
+        assert "thinking" in actions

@@ -8,7 +8,7 @@
  */
 
 import { ApiError, resolveBaseUrl, resolveTokenSource, type TokenSource } from "./client";
-import type { TurnReply } from "./types";
+import type { ExpressionIntent, TurnReply } from "./types";
 
 export interface StreamHandlers {
   readonly onStarted?: (sessionId: string, turnId: string) => void;
@@ -16,7 +16,10 @@ export interface StreamHandlers {
   readonly onToken?: (text: string) => void;
 }
 
-export type StreamApi = Pick<HedwigStream, "send">;
+export type StreamApi = Pick<HedwigStream, "send"> & Partial<Pick<HedwigStream, "interrupt">>;
+export type MindStream = Pick<HedwigStream, "watchMind">;
+
+type MindHandler = (intent: ExpressionIntent) => void;
 
 interface Envelope {
   readonly type: string;
@@ -53,6 +56,9 @@ export class HedwigStream {
   private readonly turns = new Map<string, string>();
   private keepalive = 0;
   private counter = 0;
+  private readonly mindHandlers = new Set<MindHandler>();
+  private readonly mindLost = new Set<() => void>();
+  private mindSubscribed = false;
 
   constructor(
     private readonly url: string = streamUrl(),
@@ -81,6 +87,32 @@ export class HedwigStream {
         }),
       );
     });
+  }
+
+  /** Stop a reply mid-sentence (VOI-03). The turn still completes, saved as far as it got. */
+  interrupt(turnId: string): void {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: "turn.interrupt", payload: { turn_id: turnId } }));
+    }
+  }
+
+  /**
+   * Have the avatar's expression pushed as it changes (EMO-02), instead of polling for it.
+   * Resolves once subscribed; `onLost` is called if the socket closes, so the caller can fall
+   * back to polling. Returns an unsubscribe function.
+   */
+  async watchMind(handler: MindHandler, onLost: () => void = () => undefined): Promise<() => void> {
+    const socket = await this.open();
+    this.mindHandlers.add(handler);
+    this.mindLost.add(onLost);
+    if (!this.mindSubscribed) {
+      socket.send(JSON.stringify({ type: "mind.subscribe" }));
+      this.mindSubscribed = true;
+    }
+    return () => {
+      this.mindHandlers.delete(handler);
+      this.mindLost.delete(onLost);
+    };
   }
 
   close(): void {
@@ -132,6 +164,10 @@ export class HedwigStream {
 
   private receive(envelope: Envelope): void {
     const { type, payload, corr } = envelope;
+    if (type === "mind.update") {
+      for (const handler of this.mindHandlers) handler(payload as unknown as ExpressionIntent);
+      return;
+    }
     const clientId =
       typeof payload.client_message_id === "string"
         ? payload.client_message_id
@@ -186,6 +222,10 @@ export class HedwigStream {
   private closed(): void {
     window.clearInterval(this.keepalive);
     this.socket = null;
+    this.mindSubscribed = false;
+    for (const lost of this.mindLost) lost();
+    this.mindLost.clear();
+    this.mindHandlers.clear();
     for (const [clientId, pending] of this.pending) {
       pending.reject(
         new ApiError(

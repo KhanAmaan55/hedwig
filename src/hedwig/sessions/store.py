@@ -156,6 +156,30 @@ class SqliteSessionStore:
 
     # -- messages ----------------------------------------------------------
 
+    async def replay(self, session_id: str, client_message_id: str) -> Mapping[str, Any] | None:
+        row = self._db.query_one(
+            "SELECT t.id AS turn_id, t.status, t.user_message_id, t.reply_message_id, "
+            "r.text AS reply FROM message u "
+            "JOIN turn t ON t.user_message_id = u.id "
+            "LEFT JOIN message r ON r.id = t.reply_message_id "
+            "WHERE u.session_id = ? AND u.role = 'user' "
+            "AND json_extract(u.meta, '$.client_message_id') = ? "
+            "ORDER BY u.seq DESC LIMIT 1",
+            (session_id, client_message_id),
+        )
+        if row is None or row["status"] not in ("completed", "refused", "truncated"):
+            return None
+        return {
+            "turn_id": row["turn_id"],
+            "session_id": session_id,
+            "status": row["status"],
+            "reply": row["reply"] or "",
+            "user_message_id": row["user_message_id"],
+            "reply_message_id": row["reply_message_id"],
+            "client_message_id": client_message_id,
+            "replayed": True,
+        }
+
     async def record_message(
         self,
         *,

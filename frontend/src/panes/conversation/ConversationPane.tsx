@@ -9,6 +9,7 @@ import {
 } from "./useConversation";
 import { client } from "../../transport/client";
 import type { StreamApi } from "../../transport/socket";
+import { useMicrophone, type ListenApi } from "../../voice/useMicrophone";
 import { useVoice, type VoiceApi } from "../../voice/useVoice";
 
 import { WhyPanel, type ExplainApi } from "./WhyPanel";
@@ -17,6 +18,8 @@ export interface ConversationPaneProps {
   readonly api?: ConversationApi;
   readonly storage?: SessionStorage;
   readonly voiceApi?: VoiceApi;
+  /** Speech input (VOI-02). */
+  readonly listenApi?: ListenApi;
   readonly explainApi?: ExplainApi;
   /** The live channel (docs/16 §13). Without it, replies arrive whole over REST. */
   readonly live?: StreamApi | null;
@@ -39,11 +42,13 @@ export default function ConversationPane({
   api = client,
   storage = browserStorage,
   voiceApi = client,
+  listenApi = client,
   explainApi = client,
   live = null,
 }: ConversationPaneProps): JSX.Element {
   const voice = useVoice(voiceApi);
-  const { messages, busy, loading, error, stage, send, startOver } = useConversation(
+  const microphone = useMicrophone(listenApi);
+  const { messages, busy, loading, error, stage, send, stop, startOver } = useConversation(
     api,
     storage,
     (text, streamed) => {
@@ -69,8 +74,15 @@ export default function ConversationPane({
       <div className="conversation__header">
         <h2 className="panel__title">Conversation</h2>
         <div className="conversation__actions">
-          {voice.speaking && (
-            <button className="button button--small" type="button" onClick={voice.stop}>
+          {(voice.speaking || (busy && stop)) && (
+            <button
+              className="button button--small"
+              type="button"
+              onClick={() => {
+                voice.stop();
+                stop?.();
+              }}
+            >
               Stop
             </button>
           )}
@@ -143,7 +155,7 @@ export default function ConversationPane({
         </p>
       )}
 
-      <Composer onSend={sendAndHush} disabled={busy || loading} />
+      <Composer onSend={sendAndHush} disabled={busy || loading} microphone={microphone} />
     </section>
   );
 }

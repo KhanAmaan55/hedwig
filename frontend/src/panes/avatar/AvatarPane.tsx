@@ -19,6 +19,8 @@ import {
 import type { ExpressionIntent } from "../../transport/types";
 
 import { DEFAULT_MODEL, hasWebGL } from "./environment";
+import { stream, type MindStream } from "../../transport/socket";
+
 import { useExpression } from "./useExpression";
 import { VrmAvatar, type AvatarStatus } from "./VrmAvatar";
 
@@ -44,16 +46,18 @@ function usePrefersReducedMotion(): boolean {
 export interface AvatarPaneProps {
   /** Injected in tests; detected otherwise. */
   readonly webgl?: boolean;
+  /** The live channel for pushed expression (EMO-02); `null` polls only. */
+  readonly live?: MindStream | null;
 }
 
-export default function AvatarPane({ webgl }: AvatarPaneProps): JSX.Element {
+export default function AvatarPane({ webgl, live = stream }: AvatarPaneProps): JSX.Element {
   const [supported] = useState(() => webgl ?? hasWebGL());
   const [dropped, setDropped] = useState<string | null>(null);
   const [status, setStatus] = useState<AvatarStatus>({ state: "loading" });
   const [dragging, setDragging] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const reducedMotion = usePrefersReducedMotion();
-  const { expression, connected } = useExpression();
+  const { expression, connected } = useExpression(2000, live);
 
   // An object URL holds the whole file in memory until revoked.
   useEffect(() => {

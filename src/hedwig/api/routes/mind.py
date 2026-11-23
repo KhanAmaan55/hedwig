@@ -125,6 +125,11 @@ class ExpressionRead(BaseModel):
 )
 async def expression(container: ContainerDep) -> ExpressionRead:
     """A neutral face, not a 503, when emotion is disabled: a flat companion still has a face."""
+    return await current_expression(container)
+
+
+async def current_expression(container: Any) -> ExpressionRead:
+    """Shared with the stream's `mind.update` frames (EMO-02), so poll and push cannot differ."""
     state = await container.emotion.state() if container.emotion is not None else None
     # Any client's turn counts — a question from `hedwig chat` makes the app's avatar think too.
     intent = resolve(state, thinking=container.brain.busy)

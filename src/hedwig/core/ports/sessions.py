@@ -108,6 +108,14 @@ class Conversation(Protocol):
         """
         ...
 
+    async def replay(self, session_id: str, client_message_id: str) -> Mapping[str, Any] | None:
+        """The finished turn a client message already started, for an idempotent retry (FND-06).
+
+        `None` when there is none, or when it failed: a retry after an outage should be
+        answered, not told again that HEDWIG could not answer.
+        """
+        ...
+
     async def record_message(
         self,
         *,

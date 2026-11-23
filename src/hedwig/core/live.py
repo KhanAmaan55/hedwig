@@ -23,24 +23,40 @@ Sink = Callable[[str, Mapping[str, Any]], Awaitable[None]]
 
 
 class _Binding:
-    __slots__ = ("alive", "sink")
+    __slots__ = ("alive", "sink", "stopped")
 
     def __init__(self, sink: Sink) -> None:
         self.sink = sink
         self.alive = True
+        self.stopped = False
+
+    def stop(self) -> None:
+        """The listener asked for the reply to end now (VOI-03). Producers check `live_stopped`."""
+        self.stopped = True
+
+
+LiveHandle = _Binding
+"""What `live_scope` yields: the listener's hold on this turn — today, a way to stop it."""
 
 
 _binding: ContextVar[_Binding | None] = ContextVar("hedwig_live_sink", default=None)
 
 
 @contextmanager
-def live_scope(sink: Sink) -> Iterator[None]:
+def live_scope(sink: Sink) -> Iterator[LiveHandle]:
     """Bind `sink` for the duration of the block. Nested scopes restore the outer one."""
-    token = _binding.set(_Binding(sink))
+    binding = _Binding(sink)
+    token = _binding.set(binding)
     try:
-        yield
+        yield binding
     finally:
         _binding.reset(token)
+
+
+def live_stopped() -> bool:
+    """Whether the listener asked this turn's reply to stop (VOI-03)."""
+    binding = _binding.get()
+    return binding is not None and binding.stopped
 
 
 def is_live() -> bool:

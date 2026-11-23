@@ -44,6 +44,8 @@ export interface Conversation {
   readonly stage: string | null;
   /** Resolves false when nothing was sent, so the composer can keep the text. */
   readonly send: (text: string) => Promise<boolean>;
+  /** Stop HEDWIG's reply where it is (VOI-03); present only on the live channel. */
+  readonly stop: (() => void) | null;
   readonly startOver: () => void;
 }
 
@@ -106,6 +108,7 @@ export function useConversation(
   const [error, setError] = useState<string | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const counter = useRef(0);
+  const turnId = useRef<string | null>(null);
   const nextKey = () => `local-${++counter.current}`;
 
   // Resume where the last window left off. Once, on mount.
@@ -156,7 +159,8 @@ export function useConversation(
         let quiet = 0;
         try {
           return await channel.send(sessionId, text, {
-            onStarted: (started) => {
+            onStarted: (started, turn) => {
+              turnId.current = turn;
               if (started !== sessionId) {
                 setSessionId(started);
                 storage.set(started);
@@ -275,5 +279,19 @@ export function useConversation(
     setError(null);
   }, [api, sessionId, storage]);
 
-  return { sessionId, messages, busy, loading, error, stage, send, startOver };
+  const stop = useCallback(() => {
+    if (turnId.current) live?.interrupt?.(turnId.current);
+  }, [live]);
+
+  return {
+    sessionId,
+    messages,
+    busy,
+    loading,
+    error,
+    stage,
+    send,
+    stop: live?.interrupt ? stop : null,
+    startOver,
+  };
 }

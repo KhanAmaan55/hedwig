@@ -8,6 +8,8 @@
 
 import { activityStore } from "../stores/activity";
 
+import { visemeAt } from "./visemes";
+
 export interface Utterance {
   /** Resolves when speaking ends, naturally or by `stop`. */
   readonly done: Promise<void>;
@@ -21,12 +23,15 @@ const MAX_PACED_MS = 6000;
 export function speakAudio(
   audio: ArrayBuffer,
   context: AudioContext = new AudioContext(),
+  text = "",
 ): Utterance {
   const analyser = context.createAnalyser();
   analyser.fftSize = 512;
   const samples = new Float32Array(analyser.fftSize);
   let source: AudioBufferSourceNode | null = null;
   let frame = 0;
+  let started = 0;
+  let duration = 1;
   let finish: () => void = () => undefined;
   const done = new Promise<void>((resolve) => {
     finish = resolve;
@@ -46,6 +51,7 @@ export function speakAudio(
     for (const sample of samples) sum += sample * sample;
     // RMS of speech sits around 0.05-0.2; scaled so ordinary speech opens the mouth well.
     activityStore.setMouth(Math.min(1, Math.sqrt(sum / samples.length) * 6));
+    if (text) activityStore.setShape(visemeAt(text, (context.currentTime - started) / duration));
     frame = requestAnimationFrame(level);
   };
 
@@ -58,6 +64,8 @@ export function speakAudio(
       analyser.connect(context.destination);
       source.onended = end;
       activityStore.set("speaking");
+      duration = Math.max(0.1, buffer.duration);
+      started = context.currentTime;
       source.start();
       frame = requestAnimationFrame(level);
     })
@@ -92,6 +100,7 @@ export function speakSilently(text: string): Utterance {
     }
     // Two overlapping rhythms read as syllables rather than a metronome.
     activityStore.setMouth(0.35 + 0.3 * Math.abs(Math.sin(t * 9)) + 0.15 * Math.sin(t * 3.7));
+    activityStore.setShape(visemeAt(text, (t * 1000) / duration));
   }, 50);
 
   function stop() {

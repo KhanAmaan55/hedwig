@@ -10,10 +10,13 @@
 
 import { useSyncExternalStore } from "react";
 
+import type { Viseme } from "../voice/visemes";
+
 export type Activity = "idle" | "thinking" | "speaking";
 
 let activity: Activity = "idle";
 let mouth = 0;
+let shape: Viseme = "aa";
 const listeners = new Set<() => void>();
 
 export const activityStore = {
@@ -36,6 +39,13 @@ export const activityStore = {
   },
   setMouth(level: number): void {
     mouth = Math.max(0, Math.min(1, level));
+  },
+  /** Which of the five mouth shapes, from the words being said (AVA-03). */
+  shape(): Viseme {
+    return shape;
+  },
+  setShape(next: Viseme): void {
+    shape = next;
   },
 };
 

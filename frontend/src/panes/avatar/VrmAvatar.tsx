@@ -132,7 +132,7 @@ export function VrmAvatar({
       if (current?.vrm && current.rig) {
         // Read, not subscribed: per-frame values never go through React (docs/18 §4 rule 3).
         animator.setActivity(activityStore.get());
-        animator.setMouth(activityStore.mouth());
+        animator.setMouth(activityStore.mouth(), activityStore.shape());
         animator.step(dt, current.rig);
         current.vrm.update(dt);
       }

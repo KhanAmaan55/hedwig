@@ -48,7 +48,7 @@ from hedwig.core.ports import (
 from hedwig.core.ports.brain import MindReader
 from hedwig.core.ports.personality import PersonaControl, PersonaReader, RelationshipReader, Trait
 from hedwig.core.ports.scheduler import Priority, TaskSpec
-from hedwig.core.ports.speech import Speaker
+from hedwig.core.ports.speech import Listener, Speaker
 from hedwig.core.registry import InMemoryServiceRegistry
 from hedwig.core.scheduler import AsyncTaskScheduler, DailyTrigger, IntervalTrigger
 from hedwig.core.state import SqliteStateManager
@@ -77,7 +77,7 @@ from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore,
 from hedwig.privacy import Exporter, Purger
 from hedwig.reflection import NightlyReflection, SessionReflector
 from hedwig.sessions import SqliteSessionStore
-from hedwig.speech import PiperSpeaker
+from hedwig.speech import PiperSpeaker, WhisperListener
 from hedwig.tools import (
     ToolRegistry,
     calculate_tool,
@@ -132,6 +132,7 @@ class Container:
     curiosity: CuriosityStore
     explorer: Explorer
     speaker: Speaker
+    listener: Listener
     nightly: NightlyReflection
     exporter: Exporter
     purger: Purger
@@ -453,6 +454,11 @@ def build_container(
         voices_dir=config.speech.voices_dir or config.runtime.data_dir / "voices",
         timeout_seconds=config.speech.timeout_seconds,
     )
+    listener: Listener = WhisperListener(
+        model=config.speech.listen_model,
+        models_dir=(config.speech.voices_dir or config.runtime.data_dir / "voices") / "whisper",
+        max_seconds=config.speech.listen_max_seconds,
+    )
 
     # 10b. Reflection, T1 (docs/12 §14): when a conversation ends, keep a summary and the
     #      facts the user stated, as tentative beliefs. A subscriber, like capture.
@@ -614,6 +620,7 @@ def build_container(
         curiosity=curiosity,
         explorer=explorer,
         speaker=speaker,
+        listener=listener,
         nightly=nightly,
         exporter=exporter,
         purger=purger,

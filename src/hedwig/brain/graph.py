@@ -15,6 +15,7 @@ Read the edges below and you have read the control flow of a turn:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -138,6 +139,7 @@ class Brain:
     checkpointer: Any | None = None
     _graph: Any = None
     _sessions: dict[str, _SessionLock] = field(default_factory=dict)
+    _activity: asyncio.Condition = field(default_factory=asyncio.Condition)
     """One lock per session with a turn in flight or waiting (docs/07 §16)."""
 
     def __post_init__(self) -> None:
@@ -170,20 +172,34 @@ class Brain:
         session_id: str = "session_local",
         turn_id: str | None = None,
         correlation_id: str | None = None,
+        client_message_id: str | None = None,
     ) -> TurnState:
-        """Run one turn to completion."""
+        """Run one turn to completion — or, for a retried client message, return the first.
+
+        The replay check sits inside the session lock: a retry that arrives while the original
+        is still running waits for it, then gets it back (FND-06).
+        """
         resolved_turn = turn_id or new_id("turn")
         state = new_turn(
             turn_id=resolved_turn,
             session_id=session_id,
             correlation_id=correlation_id or resolved_turn,
             text=text,
+            client_message_id=client_message_id,
         )
         config = {"configurable": {"thread_id": resolved_turn}}
 
         # One turn at a time per session: a second message waits, then sees the first's reply
         # in its window (docs/07 §16).
         async with self._session_turn(session_id):
+            if client_message_id:
+                earlier = await self.collaborators.conversation.replay(
+                    session_id, client_message_id
+                )
+                if earlier is not None:
+                    logger.info("turn replayed", extra=fields(turn=earlier.get("turn_id")))
+                    replayed: TurnState = TurnState(**earlier)  # type: ignore[typeddict-item]
+                    return replayed
             final: TurnState = await self._graph.ainvoke(state, config=config)
         logger.info("turn completed", extra=fields(**summarise(final)))
         return final
@@ -208,10 +224,13 @@ class Brain:
 
     @asynccontextmanager
     async def _session_turn(self, session_id: str) -> AsyncIterator[None]:
+        was_idle = not self._sessions
         entry = self._sessions.get(session_id)
         if entry is None:
             entry = self._sessions[session_id] = _SessionLock()
         entry.users += 1
+        if was_idle:
+            await self._announce_activity()
         try:
             async with entry.lock:
                 yield
@@ -219,6 +238,22 @@ class Brain:
             entry.users -= 1
             if entry.users == 0:
                 del self._sessions[session_id]
+            if not self._sessions:
+                await self._announce_activity()
+
+    async def wait_for_activity(self, timeout: float) -> None:
+        """Return when HEDWIG starts or stops thinking, or after `timeout` (EMO-02).
+
+        What lets the avatar show "thinking" the moment a turn begins, from any client,
+        without anyone polling faster.
+        """
+        async with self._activity:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(self._activity.wait(), timeout)
+
+    async def _announce_activity(self) -> None:
+        async with self._activity:
+            self._activity.notify_all()
 
     async def health(self) -> Any:
         """Report what the graph is made of.

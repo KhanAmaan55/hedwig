@@ -19,10 +19,11 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from hedwig.api.errors import error_body
 from hedwig.api.routes.conversation import MAX_MESSAGE_CHARS, turn_reply
+from hedwig.api.routes.mind import current_expression
 from hedwig.core.context import correlation_scope
 from hedwig.core.errors import HedwigError
 from hedwig.core.ids import new_id
-from hedwig.core.live import live_scope
+from hedwig.core.live import LiveHandle, live_scope
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.token import TokenFile
 
@@ -34,6 +35,9 @@ PROTOCOL = "hedwig.v1"
 TOKEN_PREFIX = "hedwig.token."
 UNAUTHORISED = 4401
 """Application close code: the 4xxx range is ours (RFC 6455 §7.4.2); 4401 mirrors HTTP 401."""
+MIND_CHECK_SECONDS = 0.4
+"""How often a subscribed socket's expression is recomputed. Frames go out only on change, so
+this is the latency of "thinking…" appearing, not a message rate (EMO-02)."""
 
 
 def _presented_token(websocket: WebSocket) -> str | None:
@@ -89,6 +93,8 @@ async def stream(websocket: WebSocket) -> None:
 
     connection = Connection(websocket, container.clock)
     turns: set[asyncio.Task[None]] = set()
+    watcher: asyncio.Task[None] | None = None
+    running: dict[str, LiveHandle] = {}
     try:
         while True:
             message = await websocket.receive_json()
@@ -98,10 +104,19 @@ async def stream(websocket: WebSocket) -> None:
                 await connection.send("pong", {})
             elif kind == "hello":
                 await connection.send("ready", {"server_version": container.version})
+            elif kind == "turn.interrupt":
+                # Stop the reply where it is (VOI-03); the turn still completes and is saved.
+                handle = running.get(str(payload.get("turn_id", "")))
+                if handle is not None:
+                    handle.stop()
+            elif kind == "mind.subscribe":
+                # Push the avatar's expression as it changes, instead of the client polling.
+                if watcher is None or watcher.done():
+                    watcher = asyncio.create_task(_watch_mind(container, connection))
             elif kind == "message.send":
                 # A task, so the socket keeps answering pings while HEDWIG thinks. The turn is
                 # not cancelled if the client leaves: it completes and persists (docs/16 §9).
-                task = asyncio.create_task(_turn(container, connection, payload))
+                task = asyncio.create_task(_turn(container, connection, payload, running))
                 turns.add(task)
                 task.add_done_callback(turns.discard)
             else:
@@ -115,9 +130,31 @@ async def stream(websocket: WebSocket) -> None:
         logger.exception("stream closed unexpectedly")
     finally:
         connection.open = False
+        if watcher is not None:
+            watcher.cancel()
 
 
-async def _turn(container: Any, connection: Connection, payload: Mapping[str, Any]) -> None:
+async def _watch_mind(container: Any, connection: Connection) -> None:
+    """Send `mind.update` whenever the expression changes, starting with the current one."""
+    last = None
+    while connection.open:
+        current = (await current_expression(container)).model_dump()
+        if current != last:
+            last = current
+            try:
+                await connection.send("mind.update", current)
+            except ConnectionError:
+                return
+        # Wakes the moment a turn starts or ends; otherwise rechecks for mood changes.
+        await container.brain.wait_for_activity(MIND_CHECK_SECONDS)
+
+
+async def _turn(
+    container: Any,
+    connection: Connection,
+    payload: Mapping[str, Any],
+    running: dict[str, LiveHandle],
+) -> None:
     client_id = payload.get("client_message_id")
     text = str(payload.get("text", ""))
     if not text.strip() or len(text) > MAX_MESSAGE_CHARS:
@@ -163,10 +200,18 @@ async def _turn(container: Any, connection: Connection, payload: Mapping[str, An
         async def sink(kind: str, data: Mapping[str, Any]) -> None:
             await connection.send("turn.stage" if kind == "stage" else kind, data, corr=turn_id)
 
-        with live_scope(sink):
-            final = await container.brain.run_turn(
-                text, session_id=str(session_id), turn_id=turn_id, correlation_id=turn_id
-            )
+        with live_scope(sink) as handle:
+            running[turn_id] = handle
+            try:
+                final = await container.brain.run_turn(
+                    text,
+                    session_id=str(session_id),
+                    turn_id=turn_id,
+                    correlation_id=turn_id,
+                    client_message_id=str(client_id) if client_id else None,
+                )
+            finally:
+                running.pop(turn_id, None)
 
         try:
             reply = turn_reply(final, session_id=str(session_id))

@@ -367,6 +367,31 @@ describe("ConversationPane streaming (docs/16 §13)", () => {
     expect(api.send).not.toHaveBeenCalled();
   });
 
+  it("stops a reply mid-sentence", async () => {
+    let handlers: StreamHandlers = {};
+    const live = {
+      send: vi.fn((_session: string | null, _text: string, given: StreamHandlers = {}) => {
+        handlers = given;
+        return new Promise<TurnReply>(() => undefined);
+      }),
+      interrupt: vi.fn(),
+    };
+    render(<ConversationPane api={fakeApi()} storage={memoryStorage()} live={live} />);
+    type("tell me a long story");
+    pressEnter();
+    await waitFor(() => {
+      expect(live.send).toHaveBeenCalled();
+    });
+    act(() => {
+      handlers.onStarted?.("sess_live", "turn_9");
+      handlers.onToken?.("Once upon ");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    expect(live.interrupt).toHaveBeenCalledWith("turn_9");
+  });
+
   it("falls back to REST when the live channel cannot open", async () => {
     const live = {
       send: vi.fn().mockRejectedValue(new ApiError(UNREACHABLE, "no socket", 0, null, true)),

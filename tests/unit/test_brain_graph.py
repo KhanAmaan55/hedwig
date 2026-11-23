@@ -501,6 +501,9 @@ async def test_a_fully_wired_brain_reports_ok() -> None:
         async def reply_produced(self, **kwargs: object) -> None:
             return None
 
+        async def replay(self, session_id: str, client_message_id: str) -> None:
+            return None
+
         async def turn_completed(self, summary: object) -> None:
             return None
 

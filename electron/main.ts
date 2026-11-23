@@ -165,6 +165,20 @@ function createWindow(): BrowserWindow {
 
   window.once("ready-to-show", () => window.show());
 
+  // Electron grants every permission by default. HEDWIG's page may use the microphone (speech
+  // input, VOI-02) and nothing else: no camera, location, notifications or screen capture, and
+  // never for any other origin.
+  window.webContents.session.setPermissionRequestHandler((contents, permission, grant, details) => {
+    const audioOnly =
+      permission === "media" &&
+      "mediaTypes" in details &&
+      (details.mediaTypes ?? []).every((type) => type === "audio");
+    grant(audioOnly && isOwnFrame(contents.getURL()));
+  });
+  window.webContents.session.setPermissionCheckHandler(
+    (_contents, permission, origin) => permission === "media" && isOwnFrame(origin),
+  );
+
   // External links open in the user's browser; nothing navigates away from the app.
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);

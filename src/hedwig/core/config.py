@@ -164,6 +164,9 @@ class LlmConfig(BaseModel):
     utility: str = "qwen2.5:3b"
     """Planning, appraisal, extraction, summarisation — high volume, structured."""
     embedding: str = "nomic-embed-text"
+    warm_up: bool = True
+    """Load the conversation and embedding models in the background at start, so the first
+    reply is not the one that waits for a cold model (measured: 75 s on gemma4:e2b, G12)."""
     embedding_query_prefix: str = "search_query: "
     embedding_document_prefix: str = "search_document: "
     """nomic-embed-text is trained with these task prefixes (docs/06 §17.2). Another model may
@@ -267,6 +270,10 @@ class SpeechConfig(BaseModel):
     voices_dir: Path | None = None
     """Defaults to `<data_dir>/voices`."""
     timeout_seconds: Annotated[float, Field(gt=0, le=120)] = 30.0
+    listen_model: str = "base.en"
+    """Speech recognition (VOI-02): a faster-whisper model in `<voices_dir>/whisper`. Local only —
+    audio is transcribed on this machine and never stored."""
+    listen_max_seconds: Annotated[float, Field(gt=1, le=600)] = 120.0
 
 
 class CuriosityConfig(BaseModel):

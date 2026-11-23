@@ -409,3 +409,13 @@ nothing within the reply budget; `think: false` makes it reason inside the reply
 `/no_think` is ignored. The default conversational model is non-reasoning. Every request now
 sends `think` explicitly (§13.3), which is what makes Gemma 4 — reasoning-capable but obedient
 to the switch — usable here.
+
+## 15. Warm-up at start (G12)
+
+Measured: the first `compose.reply` after a start took 75 s on gemma4:e2b while the model
+loaded; later calls took 1–12 s. When the backend is healthy at start, the gateway now sends
+one background request of one token to the conversation tier (`compose.warmup`) and one
+embedding, without delaying startup, so the model is loaded before anyone is waiting. Failures
+are logged and ignored — the worst case is the old cold first reply. Off with
+`llm.warm_up = false`; skipped for the recorded test provider.
+

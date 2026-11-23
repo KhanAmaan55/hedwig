@@ -105,8 +105,12 @@ class HedwigClient:
         timeout. Idempotent on the server."""
         self._request("POST", f"/v1/sessions/{session_id}/end")
 
-    def send(self, session_id: str, text: str) -> Reply:
-        body = self._request("POST", f"/v1/sessions/{session_id}/messages", json={"text": text})
+    def send(self, session_id: str, text: str, *, client_message_id: str | None = None) -> Reply:
+        """Say something. With `client_message_id`, sending again returns the same turn."""
+        payload: dict[str, Any] = {"text": text}
+        if client_message_id:
+            payload["client_message_id"] = client_message_id
+        body = self._request("POST", f"/v1/sessions/{session_id}/messages", json=payload)
         return Reply(
             turn_id=body["turn_id"],
             session_id=body["session_id"],

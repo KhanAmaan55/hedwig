@@ -593,3 +593,38 @@ async def test_embedding_failures_respect_retryability(
 
     with pytest.raises(ModelUnavailableError):
         await gateway.embed(["text"])
+
+
+class _LiveLikeProvider(RecordedProvider):
+    """Answers like the recorded provider, but is not it — so warm-up applies."""
+
+    @property
+    def name(self) -> str:
+        return "live-like"
+
+
+async def test_the_models_are_warmed_in_the_background_at_start(
+    llm_config: LlmConfig, clock: FakeClock
+) -> None:
+    """G12: the first reply after a cold start waited 75 s for the model to load."""
+    provider = _LiveLikeProvider(
+        default=ScriptedResponse(text="."),
+        installed=(llm_config.conversational, llm_config.utility, llm_config.embedding),
+    )
+    gateway = LanguageModelGateway(provider, config=llm_config, clock=clock)
+
+    await gateway.start()
+    assert gateway._warming is not None
+    await gateway._warming
+
+    assert [c.purpose for c in provider.calls] == ["compose.warmup"]
+    await gateway.stop()
+
+
+async def test_no_warm_up_when_switched_off(llm_config: LlmConfig, clock: FakeClock) -> None:
+    provider = _LiveLikeProvider(default=ScriptedResponse(text="."))
+    gateway = LanguageModelGateway(
+        provider, config=llm_config.model_copy(update={"warm_up": False}), clock=clock
+    )
+    await gateway.start()
+    assert gateway._warming is None and provider.calls == []
