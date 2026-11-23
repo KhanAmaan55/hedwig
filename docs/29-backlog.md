@@ -1,6 +1,6 @@
 # 29 — Capability Assessment and Story Backlog
 
-**Status:** Living document · **Last assessed:** 2026-11-20 · **Depends on:** [01](01-vision-and-scope.md), [22](22-roadmap.md)
+**Status:** Living document · **Last assessed:** 2026-11-23 · **Depends on:** [01](01-vision-and-scope.md), [22](22-roadmap.md)
 
 ---
 
@@ -44,6 +44,13 @@ the recorded-provider harness. Traced the composition root (`wiring.py`) to see 
 
 ### 3.1 The headline finding
 
+> **Reassessed 2026-11-23.** The finding below is history: HEDWIG can be talked to (typed or
+> spoken), remembers and recalls by meaning, reflects nightly, evolves within guardrails, reads
+> the user's notes, and gives the user export, correction and verified erasure. Every story in
+> §4 is done or deliberately deferred (COG-03). What remains is listed in §5.
+
+#### As first assessed (2026-11-20)
+
 **Every cognitive subsystem built so far is reachable only from tests.** The brain runs real
 turns against real memory, emotion and personality, and the LLM gateway talks to Ollama — but
 the API exposes `/v1/health` and `/v1/mind/*` only, the CLI has no `chat`, and the desktop UI
@@ -59,9 +66,9 @@ the repository, ahead of any new cognitive capability.
 | 15 | Open HEDWIG and talk to it | **COMPLETE** (was MISSING) | Desktop/browser conversation pane, `hedwig chat` and the REST API, verified live against Ollama (§6). Non-streaming: a slow model shows only "thinking…" until it finishes (FND-05) |
 | 2 | Brain: turn graph, routing, caps, deterministic planner | **COMPLETE** | `brain/graph.py`, `planner.py`; `test_brain_graph.py`, `test_brain_routing.py` |
 | 2 | Brain: safety guard | **COMPLETE** (observing) | `RuleGuard` + `knowledge.injection` (COG-01); allows the user always (ADR-0011), records flags; refuses nothing by design |
-| 2 | Brain: decides external knowledge / tools are needed | **PARTIAL** | Real `ToolRegistry` with audited `get_datetime`, `calculate`, `search_memory` (COG-02); web knowledge next |
+| 2 | Brain: decides external knowledge / tools are needed | **COMPLETE** | Audited tools (COG-02), knowledge-need routing to memory, documents or opt-in web research (COG-04, KNW-01/02) |
 | 2 | Brain: clarification | **PARTIAL** | Rule-based `CLARIFY` for too-short input only |
-| 2 | Brain: decides what to remember / goal updates | **PARTIAL** | Capture subscriber stores the exchange; no goal system |
+| 2 | Brain: decides what to remember / goal updates | **COMPLETE** | Every exchange captured; reflection writes summaries, beliefs, goal proposals, progress and journal notes (REF-01, GOA-02, MEM-06) |
 | 13 | LLM gateway: tiering, streaming, structured output, metrics, replaceable provider | **COMPLETE** | `llm/`; `test_llm_gateway.py`, `test_ollama_provider.py`, `RecordedProvider` |
 | 3 | Episodic memory: capture, novelty gate, decay maths, tombstones | **COMPLETE** | `memory/capture.py`, `store.py`; `test_memory_*` |
 | 3 | Memory decay and forgetting **in the running system** | **COMPLETE** (was BROKEN) | Scheduled nightly (MEM-01), now the last stage of `reflection.nightly` (REF-02); `test_memory_maintenance_scheduled.py` |
@@ -69,8 +76,8 @@ the repository, ahead of any new cognitive capability.
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
 | 3 | Project memory | **COMPLETE** (MEM-06) | Projects are goals with a journal (ADR-0025): system, reflection and user notes; finished projects come back when named (docs/08 §13) |
-| 3 | Consolidation / duplicates / conflicts | **PARTIAL** | Novelty gate reinforces lexical near-duplicates; `supersede_belief` exists but nothing detects conflicts |
-| 3 | User-controlled deletion, searchable, explainable | **PARTIAL** | `/v1/memory` and `hedwig memory`: list, search with score breakdown, pin, forget, restore (MEM-02); no `/explain` yet |
+| 3 | Consolidation / duplicates / conflicts | **COMPLETE** | Nightly merge and promotion; judged conflicts put to the user (REF-02); corrections supersede (MEM-03) |
+| 3 | User-controlled deletion, searchable, explainable | **COMPLETE** | Search, pin, forget/restore, correct (MEM-02/03), *Why?* (SEC-01), export and verified purge (SEC-02) |
 | 3 | Embedding retrieval channel | **COMPLETE** (MEM-04) | nomic-embed-text via the gateway, `sqlite-vec` in hedwig.db; recall@5 0.514 → 0.972 on the eval corpus (docs/06 §17) |
 | 4 | Personality: traits, identity core, guarded drift, reversal | **COMPLETE** | `personality/`; `test_personality_*`, `test_personality_in_the_turn.py` |
 | 4 | Personality: evidence-based drift *proposals* | **COMPLETE** (PER-02) | Reactions read by tested rules (17/17 precise), nightly `drift` stage, the seven guardrails, Recent changes + Revert (docs/10 §13) |
@@ -81,16 +88,16 @@ the repository, ahead of any new cognitive capability.
 | 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
 | 8 | Avatar: VRM renderer, expression from emotion, blink, saccade, breath, head drift | **COMPLETE** | `frontend/src/panes/avatar/`; `idle.test.ts`, `compose.test.ts`, `test_expression.py` |
 | 8 | Avatar: speaking / thinking / attention states | **COMPLETE** | Thinking from `Brain.busy` and the pane; speaking from the voice (AVA-01, docs/15 §13) |
-| 8 | Avatar: lip sync | **PARTIAL** | Mouth follows the voice's live amplitude, or a text-paced fallback (AVA-02); phoneme visemes not built (AVA-03) |
-| 8 | Avatar: frames over WebSocket | **MISSING** | Polls `/v1/mind/expression` (acceptable for now, ADR-0021) |
-| 9 | Voice: TTS, ASR, streaming, interruption | **PARTIAL** | Local Piper TTS with mood-paced delivery, Stop and send-to-interrupt (VOI-01, part of VOI-03); no ASR, no streaming |
-| 10 | Reflection (T1–T4) | **PARTIAL** | T1 session reflection (REF-01); T2–T4 not built |
-| 11 | Goals | **PARTIAL** | Store, lifecycle, API/CLI, goals in the prompt, reflection proposes and progresses (GOA-01/02); no retrieval boost or initiative yet |
+| 8 | Avatar: lip sync | **PARTIAL** | Openness from the voice's loudness (AVA-02), shape from the words' vowels (AVA-03); no phoneme timing (Piper exposes none) |
+| 8 | Avatar: mind state over WebSocket | **COMPLETE** (EMO-02) | `mind.update` pushed on change, woken by turn activity; polling only as fallback |
+| 9 | Voice: TTS, ASR, streaming, interruption | **PARTIAL** | Local Piper TTS (VOI-01), local faster-whisper ASR (VOI-02), Stop mid-reply (VOI-03); speech is not streamed sentence by sentence yet |
+| 10 | Reflection (T1–T4) | **PARTIAL** | T1 per conversation (REF-01) and T2 nightly (REF-02, PER-02 drift stage); weekly T3 and monthly T4 not built |
+| 11 | Goals | **PARTIAL** | Store, lifecycle, journal (MEM-06), in the prompt, from reflection; no retrieval boost or proactive check-ins |
 | 13 | Security: loopback bind, CORS, log redaction | **COMPLETE** | `api/app.py`, `core/logging.py` |
 | 13 | Security: API token | **COMPLETE** (was MISSING) | `core/token.py`, `api/auth.py`; `test_token_file.py`, `test_conversation_api.py` (ADR-0022) |
-| 13 | Security: injection defence | **MISSING** | Not needed until untrusted content enters (knowledge, curiosity) |
+| 13 | Security: injection defence | **COMPLETE** | Guard and quarantine (COG-01), untrusted and curated content labelled as data, trust propagation (docs/13 §3) |
 | 13 | Observability: correlation ids, `llm_call`, `working_set_log`, turn record | **COMPLETE** | `test_turn_memory_loop.py` |
-| 13 | Observability: `/explain`, traces, `/metrics` | **PARTIAL** | `/v1/explain` and *Why?* in the app (SEC-01); `/traces`, `/metrics` not built |
+| 13 | Observability: `/explain`, traces, `/metrics`, doctor | **PARTIAL** | `/v1/explain` and *Why?* (SEC-01), `hedwig doctor` (SEC-03); `/traces` and `/metrics` not built |
 
 ### 3.3 Integration gaps, debt and documentation drift
 
@@ -477,23 +484,21 @@ me whether everything HEDWIG needs is in place and what to do if not.
 
 ## 5. Next up
 
-Done this session: FND-01–04, FND-07, UX-01–03, MEM-01, MEM-02, PER-01, PER-03, REF-01,
-GOA-01/02, COG-01/02/04, KNW-02/03, CUR-01/02/03, AVA-01/02, VOI-01 (and part of VOI-03).
+Every story in §4 is done, except COG-03 (deferred: there is no side-effecting tool to approve).
+What the product still lacks, highest value first — each a story to write before building:
 
-Remaining, in dependency order, highest value first:
-
-1. ~~FND-05~~ — done. Next on it: replay on reconnect, `interrupt`, and pushing `mind.update`
-   instead of polling (EMO-02).
-2. ~~SEC-01~~ — done. Next on it: `/traces/{correlation_id}`, `prompt_version` on `llm_call`.
-3. ~~REF-02~~ — done (a/b/c). Next on it: embedding candidates (after MEM-04), a held-out
-   judgement scenario in the eval harness, REF-02d.
-4. ~~SEC-02~~ — done. Next on it: date-range scope, import of the export format, fixing
-   `auto_vacuum` (it never took effect; see docs/21 §7.4).
-5. ~~MEM-05 → MEM-04~~ — done: recall@5 0.306 → 0.972. Next on it: HyDE, embeddings for REF-02
-   candidates and capture novelty, a held-out half of the corpus.
-6. **KNW-01** — local documents (CURATED tier).
-7. ~~MEM-03~~ (done), **MEM-06**, **PER-02**, **COG-03**, **FND-06**, **EMO-02**, **VOI-02**/**VOI-03**,
-   **AVA-03**, **SEC-03** — as listed above.
+1. **Reflection T3/T4** — a weekly review (themes, stale goals, entity resolution) and the monthly
+   identity report that makes growth legible (docs/12 §6–7).
+2. **Proactive curiosity and goal check-ins over the live channel** — findings and follow-ups
+   arrive today only when the user next speaks; the socket now exists to offer them (docs/11).
+3. **Corrections in conversation** — "no, she lives in Lisbon" proposing a correction the user
+   confirms (docs/06 §18).
+4. **`/traces` and `/metrics`** — the causal trace of a turn, and counters for the doctor to read.
+5. **Retrieval** — HyDE; embeddings for REF-02's judge candidates and capture novelty; a held-out
+   half of the recall corpus; a goal-relevance boost.
+6. **Voice** — speak sentence by sentence as the reply streams; true phoneme timing if a voice
+   with alignments appears; push-to-talk.
+7. **Documents** — PDF and `.docx` (a parser dependency, to be asked for first).
 
 ## 6. Development log
 
