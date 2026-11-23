@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from hedwig.api.routes import (
     conversation,
     curiosity,
+    documents,
     egress,
     explain,
     goals,
@@ -34,5 +35,6 @@ v1.include_router(stream.router)
 v1.include_router(explain.router)
 v1.include_router(reflection.router)
 v1.include_router(privacy.router)
+v1.include_router(documents.router)
 
 __all__ = ["v1"]

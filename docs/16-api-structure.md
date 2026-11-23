@@ -114,7 +114,7 @@ accumulates errors forever, and the user is the highest-trust source available.
 | `POST` | `/curiosity/findings/{id}/dismiss` · `/confirm` | Dismiss (raises the topic threshold) or confirm (promotes to `active`) |
 | `GET`/`POST`/`DELETE` | `/sources` | Allowlist management |
 | `POST` | `/curiosity/explore` | Manual trigger, still budget-bound |
-| `GET`/`POST`/`DELETE` | `/documents` | Ingest, list, remove local documents |
+| `GET`/`POST`/`DELETE` | `/documents` | Ingest, list, remove local documents (built: KNW-01; `DELETE /documents/{id}` sets a file aside, `DELETE /documents?path=` stops reading a folder) |
 | `POST` | `/documents/reindex` | Re-ingest |
 | `GET` | `/reflection/runs?tier=` | Run history and stats (built as `GET /reflection/runs?limit=`, T2 only — REF-02) |
 | `POST` | `/reflection/trigger?tier=` | Manual trigger (dev and impatience) (built as `POST /reflection/run` — REF-02) |

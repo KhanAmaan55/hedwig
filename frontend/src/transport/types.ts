@@ -169,6 +169,27 @@ export interface BeliefDispute {
   second: { id: string; statement: string };
 }
 
+/** The folders HEDWIG reads, and every file in them (docs/13 §14). */
+export interface DocumentListing {
+  roots: { path: string; added_at: string }[];
+  documents: {
+    id: string;
+    root: string;
+    path: string;
+    title: string;
+    chunk_count: number;
+    removed_at: string | null;
+  }[];
+}
+
+export interface IngestReport {
+  added: number;
+  updated: number;
+  unchanged: number;
+  removed: number;
+  skipped: { path: string; reason: string }[];
+}
+
 export type PurgeScope = "memory" | "session" | "phrase";
 
 /** What erasing would remove. Nothing has changed yet (docs/21 §7.4). */

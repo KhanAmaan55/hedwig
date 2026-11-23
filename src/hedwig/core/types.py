@@ -48,7 +48,7 @@ class TrustTier(StrEnum):
     @property
     def retrieval_factor(self) -> float:
         """How much to discount this tier when ranking (docs/06 §5.4)."""
-        return 0.6 if self is TrustTier.UNTRUSTED else 1.0
+        return {TrustTier.UNTRUSTED: 0.6, TrustTier.CURATED: 0.9}.get(self, 1.0)
 
 
 class MemoryKind(StrEnum):
@@ -64,6 +64,9 @@ class MemoryKind(StrEnum):
     """Something held to be true. Currently true, may be superseded."""
     SOCIAL = "social"
     PROCEDURE = "procedure"
+    DOCUMENT = "document"
+    """A passage of the user's own files (docs/13 §4). Retrieved like memory, never stored as
+    one: CURATED, attributed to the file, never reinforced or decayed."""
 
 
 @dataclass(frozen=True, slots=True)

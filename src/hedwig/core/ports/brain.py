@@ -44,6 +44,8 @@ class TrustTier(StrEnum):
     USER = "user"
     SELF = "self"
     TOOL = "tool"
+    CURATED = "curated"
+    """The user's own documents (docs/13 §4): their words, but data — never instructions."""
     UNTRUSTED = "untrusted"
 
 

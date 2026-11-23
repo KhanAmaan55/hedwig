@@ -233,6 +233,21 @@ class HedwigClient:
             raise ClientError("unreachable", f"Could not reach HEDWIG: {error}") from error
         return destination
 
+    def documents(self) -> dict[str, Any]:
+        return self._request("GET", "/v1/documents")
+
+    def add_documents(self, path: str) -> dict[str, Any]:
+        return self._request("POST", "/v1/documents", json={"path": path})
+
+    def reindex_documents(self) -> dict[str, Any]:
+        return self._request("POST", "/v1/documents/reindex")
+
+    def remove_document(self, document_id: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/v1/documents/{document_id}")
+
+    def forget_folder(self, path: str) -> dict[str, Any]:
+        return self._request("DELETE", "/v1/documents", params={"path": path})
+
     def purge_preview(self, scope: str, value: str) -> dict[str, Any]:
         return self._request("POST", "/v1/purge/preview", json={"scope": scope, "value": value})
 

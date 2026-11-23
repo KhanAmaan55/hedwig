@@ -388,6 +388,59 @@ def memory_correct(
     print(f"corrected; now {_line(memory)}")
 
 
+docs_app = typer.Typer(
+    help="Your own notes, which HEDWIG can recall and cite (docs/13 §14).", no_args_is_help=True
+)
+app.add_typer(docs_app, name="docs")
+
+
+def _report(result: object) -> None:
+    assert isinstance(result, dict)
+    counts = ", ".join(f"{k} {result[k]}" for k in ("added", "updated", "unchanged", "removed"))
+    print(counts)
+    for skipped in result.get("skipped", []):
+        print(f"  skipped {skipped['path']}: {skipped['reason']}")
+
+
+@docs_app.command("add")
+def docs_add(path: str) -> None:
+    """Read a folder (or one file) of notes. Text only; secrets are skipped and listed."""
+    _report(_call(lambda c: c.add_documents(str(Path(path).expanduser().resolve()))))
+
+
+@docs_app.command("list")
+def docs_list() -> None:
+    """The folders HEDWIG reads, and every file in them."""
+    listing = _call(lambda c: c.documents())
+    assert isinstance(listing, dict)
+    for root in listing["roots"]:
+        print(f"{root['path']}/")
+    for doc in listing["documents"]:
+        state = "set aside" if doc["removed_at"] else f"{doc['chunk_count']} passages"
+        print(f"  {doc['id']}  {doc['path']}  ({state})")
+
+
+@docs_app.command("reindex")
+def docs_reindex() -> None:
+    """Re-read every folder now: new, changed and deleted files."""
+    _report(_call(lambda c: c.reindex_documents()))
+
+
+@docs_app.command("remove")
+def docs_remove(document_id: str) -> None:
+    """Set one file aside; HEDWIG stops recalling it."""
+    _call(lambda c: c.remove_document(document_id))
+    print("set aside")
+
+
+@docs_app.command("forget-folder")
+def docs_forget_folder(path: str) -> None:
+    """Stop reading a folder; everything from it leaves HEDWIG's index (your files stay)."""
+    result = _call(lambda c: c.forget_folder(str(Path(path).expanduser().resolve())))
+    assert isinstance(result, dict)
+    print(f"removed {result['removed']} files from the index")
+
+
 goals_app = typer.Typer(
     help="What HEDWIG is helping you with over time (docs/08 §6.1).", no_args_is_help=True
 )

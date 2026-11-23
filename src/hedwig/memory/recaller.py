@@ -27,7 +27,7 @@ _TRUST_MAP = {
     TrustTier.USER: BrainTrust.USER,
     TrustTier.SELF: BrainTrust.SELF,
     TrustTier.TOOL: BrainTrust.TOOL,
-    TrustTier.CURATED: BrainTrust.SELF,
+    TrustTier.CURATED: BrainTrust.CURATED,
     TrustTier.UNTRUSTED: BrainTrust.UNTRUSTED,
 }
 

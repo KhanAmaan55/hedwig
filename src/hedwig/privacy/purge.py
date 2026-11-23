@@ -46,6 +46,7 @@ TEXT_COLUMNS: dict[str, tuple[str, ...]] = {
     "goal": ("description", "context", "completion"),
     "gap": ("question",),
     "finding": ("summary",),
+    "document_chunk": ("heading_path", "text"),
 }
 LABELS = {
     "session": "conversations",
@@ -55,6 +56,7 @@ LABELS = {
     "goal": "goals",
     "gap": "open questions",
     "finding": "findings",
+    "document_chunk": "passages of your documents",
 }
 
 
@@ -65,6 +67,9 @@ class Targets:
     linked: set[str] = field(default_factory=set)
     """Ids that are not rows to delete but mark rows to sweep: turns and their correlations."""
     texts: list[str] = field(default_factory=list)
+    documents: set[str] = field(default_factory=set)
+    """Files whose passages are erased: set aside, so reindexing does not read them back in.
+    The files themselves are the user's and are never touched."""
 
     def add(self, table: str, values: Iterable[Any]) -> set[str]:
         new = {str(v) for v in values if v} - self.ids.setdefault(table, set())
@@ -247,6 +252,25 @@ class Purger:
         gaps = self._where("gap", "origin_ref", turns | sessions | targets.ids.get("goal", set()))
         targets.add("gap", gaps)
         targets.add("finding", self._where("finding", "gap_id", targets.ids.get("gap", set())))
+
+        # A file with an erased passage is set aside whole: half a note, with the erased part
+        # missing, would read as something the user never wrote.
+        chunks = targets.ids.get("document_chunk", set())
+        targets.documents = {
+            str(r["document_id"])
+            for chunk in _chunks(chunks)
+            for r in self._db.query(
+                f"SELECT DISTINCT document_id FROM document_chunk WHERE id IN ({_marks(chunk)})",
+                chunk,
+            )
+        }
+        for chunk in _chunks(targets.documents):
+            targets.add(
+                "document_chunk",
+                self._ids(
+                    f"SELECT id FROM document_chunk WHERE document_id IN ({_marks(chunk)})", *chunk
+                ),
+            )
         targets.add("finding", self._where("finding", "promoted_belief_id", beliefs))
 
     def _texts(self, targets: Targets) -> list[str]:
@@ -278,6 +302,12 @@ class Purger:
             for table in of(Kind.RECORD):
                 if table != "event":
                     swept += len(self._sweep(tx, table, ids, phrase))
+            for chunk in _chunks(targets.documents):
+                tx.execute(
+                    f"UPDATE document SET removed_at = ?, chunk_count = 0 "
+                    f"WHERE id IN ({_marks(chunk)})",
+                    (self._clock.now().isoformat(), *chunk),
+                )
             self._unpoint(tx, targets.every_id())
             self._release_dangling(tx)
         return swept
@@ -359,7 +389,7 @@ class Purger:
         — the completeness test found a purged sentence exactly there. Only rebuilding the file
         removes slack, so a purge ends with a full VACUUM, then empties the WAL.
         """
-        for index in ("episode_fts", "belief_fts"):
+        for index in ("episode_fts", "belief_fts", "document_chunk_fts"):
             self._db.execute(f"INSERT INTO {index} ({index}) VALUES ('optimize')")
         connection = self._db.connection
         connection.execute("VACUUM")

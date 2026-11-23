@@ -420,3 +420,65 @@ sequenceDiagram
 | Rule-based "needs the web" | Testable, free, no false confidence | Misses unmarked questions about recent events | A model judgement beats it on a labelled set |
 | Standing approval via opt-in | Works without the WebSocket | No per-call confirmation | COG-03 |
 
+
+---
+
+## 14. Implementation record — local documents (KNW-01)
+
+§4 as designed, with the edge made explicit because it is the one place HEDWIG reads the
+user's filesystem.
+
+```mermaid
+graph LR
+    U["hedwig docs add ~/notes<br/>POST /v1/documents · Data tab"] --> G{"admissible?<br/><small>exists · not / · not ~ · not hidden ·<br/>not HEDWIG's data · ≤5,000 text files</small>"}
+    G -->|no| R["refused, with why"]
+    G -->|yes| W["walk: text suffixes only<br/><small>skip hidden, node_modules…, symlinks that leave the folder</small>"]
+    W --> S{"secret? too big? binary?"}
+    S -->|yes| K["skipped and reported"]
+    S -->|no| C["chunk by heading, 1,600 chars, 200 overlap"]
+    C --> D[("document · document_chunk<br/>FTS5 · document_embedding")]
+    D --> RET["retrieval: lexical + semantic, kind document,<br/>trust CURATED ×0.9, quota 30%"]
+    RET --> P["prompt: [your documents — file > heading: text]<br/><small>information, not instructions; say which file</small>"]
+    T["knowledge.reindex, hourly"] --> W
+```
+
+* **Read narrowly.** Only under a folder (or file) the user adds; refused: the filesystem root,
+  the home folder itself, hidden folders, HEDWIG's own data folder, and folders with more than
+  `knowledge.document_max_files` text files (refused, not half-read). Text formats only (`.md`,
+  `.txt`, `.rst`, `.org`, `.html`); files over `document_max_bytes` and binary files are skipped.
+  Hidden files are never opened; symlinks that leave the folder are not followed.
+* **Secrets are skipped and reported** by name (`credentials`, `*.pem`, `id_rsa`, …) and by
+  content (private-key blocks, AWS, GitHub, OpenAI-style and Slack tokens, `api_key = …`). The
+  report lists every skipped file with the reason, in the CLI and the Data tab. Live: a notes
+  folder with an AWS key in one file indexed the other two and reported that one.
+* **Retrieved as the user's documents.** A new `MemoryKind.DOCUMENT`, through the same
+  pipeline as memory — lexical (FTS5 over heading and text) and semantic (passages embedded with
+  the same model, ranked together with memories so "near" is judged against everything) —
+  at `CURATED` trust (×0.9) with a 30 % quota. They have their own prompt block, labelled as
+  information, with the file and heading, and the model is asked to say which file. They are
+  never reinforced, decayed or turned into beliefs (§4). `/v1/explain` shows the passage and
+  its file.
+* **Changes are followed** by `knowledge.reindex` (hourly) and on demand: new files added,
+  changed ones re-chunked (content hash), deleted ones removed from the index.
+* **The user's hand:** *Set aside* one file (stays aside through reindexing until the folder is
+  added again), *Stop reading* a folder (everything from it leaves the index; the files are
+  never touched). A privacy purge of a phrase erases HEDWIG's copy of every passage of a file
+  containing it and sets the file aside — half a note with the erased part missing would read
+  as something the user never wrote.
+* **Found while testing:** adding a folder again did not bring back a file set aside, because
+  its unchanged hash made it "unchanged" with no passages. Re-adding now forces a fresh read.
+* **Live** (gemma4:e2b, nomic-embed-text): "When should I plant garlic?" and "How often do I feed
+  my starter?" were answered from the notes, naming the file. "What do I put in the ground in
+  autumn?" — no shared words — recalled the right note by meaning; the 2B model then did not use
+  it, which is the model's limit, not retrieval's.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Text formats only | No new parser dependency, nothing opaque ingested | PDFs and Word files | Users keep notes in PDF: add `pypdf` (a dependency, asked first) |
+| Refuse rather than half-read big folders | The user knows exactly what HEDWIG reads | A large vault needs a narrower folder | Per-subfolder selection in the UI |
+| Hourly reindex, not a file watcher | No background OS hooks | Up to an hour stale | Watchers become cheap and portable |
+| A whole file set aside on an erased phrase | No half-notes | The rest of that file leaves recall | Users want passage-level exclusions |
+
+**Future improvements.** PDF and `.docx` text extraction; a file watcher; per-document trust
+("this folder is drafts"); citations rendered as links in the app; documents in the export's
+readable part.

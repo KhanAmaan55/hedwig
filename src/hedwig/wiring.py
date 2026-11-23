@@ -57,6 +57,7 @@ from hedwig.core.store import Database, MigrationRunner
 from hedwig.curiosity import CuriosityStore, Explorer, FindingsMindReader, GapDetector
 from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
 from hedwig.goals import GoalsMindReader, GoalStore
+from hedwig.knowledge.documents import DocumentLibrary
 from hedwig.knowledge.web import WebClient
 from hedwig.llm import LanguageModelGateway, OllamaProvider, RecordedProvider
 from hedwig.llm.responder import GatewayResponder
@@ -133,6 +134,10 @@ class Container:
     nightly: NightlyReflection
     exporter: Exporter
     purger: Purger
+    library: DocumentLibrary
+    embeddings: EmbeddingIndex
+    """Typed so a document ingest can embed its passages at once rather than in ten minutes."""
+    """The user's documents (KNW-01). Retrieval reads its tables; only it writes them."""
     """Export and erase (SEC-02, ADR-0024): the one place that reads and deletes every table."""
     persona_control: PersonaControl | None
     """The same engine as `personality`, typed by the role the inspector needs (PER-01)."""
@@ -527,6 +532,26 @@ def build_container(
             critical=False,
         )
 
+    # Local documents (KNW-01, docs/13 §14): read only under folders the user adds.
+    library = DocumentLibrary(
+        database,
+        clock=clock,
+        data_dir=config.runtime.data_dir,
+        max_bytes=config.knowledge.document_max_bytes,
+        max_files=config.knowledge.document_max_files,
+    )
+    if config.knowledge.documents_enabled:
+        scheduler.register(
+            TaskSpec(
+                name="knowledge.reindex",
+                handler=library.task,
+                trigger=IntervalTrigger(seconds=3600),
+                priority=Priority.MAINTENANCE,
+                description="Re-read the user's document folders: new, changed and deleted files.",
+                max_runtime_seconds=600.0,
+            )
+        )
+
     # The user's control over their data (SEC-02). Purge waits for the bus to drain and refuses
     # while a turn runs, so nothing in flight can re-create what it erases (ADR-0024).
     exporter = Exporter(database=database, config=config, clock=clock, version=__version__)
@@ -578,6 +603,8 @@ def build_container(
         nightly=nightly,
         exporter=exporter,
         purger=purger,
+        library=library,
+        embeddings=embeddings,
         persona_control=personality,
     )
 
