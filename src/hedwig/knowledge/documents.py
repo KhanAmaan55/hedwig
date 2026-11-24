@@ -262,7 +262,7 @@ class DocumentLibrary:
             return
         if binary:
             try:
-                text = extract(path, max_chars=self._max_bytes)
+                text = extract(path, max_chars=self._max_bytes, data=raw)
             except UnreadableError as why:
                 report.skipped.append({"path": str(path), "reason": str(why)})
                 return

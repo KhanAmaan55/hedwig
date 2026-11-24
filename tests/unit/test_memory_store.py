@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 import pytest
 
 from hedwig.core.bus import InProcessBus
 from hedwig.core.clock import FakeClock
+from hedwig.core.errors import ConflictError
 from hedwig.core.ports import Event
 from hedwig.core.ports.memory import (
     Belief,
@@ -434,3 +436,49 @@ async def test_memory_writes_are_announced_on_the_bus(
 
 async def _collect(sink: list[Event], event: Event) -> None:
     sink.append(event)
+
+
+async def test_one_belief_is_replaced_once_even_when_two_replacements_overlap(
+    store: SqliteMemoryStore, clock: FakeClock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Announcing the new belief can wait on a busy subscriber; a second correction of the same
+    belief arriving then must be refused, not make a second current replacement."""
+    await store.add_belief(_belief(clock, status=BeliefStatus.ACTIVE))
+    gate = asyncio.Event()
+    real = store._announce
+
+    async def slow(kind: str, payload: dict[str, object]) -> None:
+        if kind == "memory.belief.formed":
+            await gate.wait()
+        await real(kind, payload)
+
+    monkeypatch.setattr(store, "_announce", slow)
+    first = asyncio.create_task(store.correct(MemoryId("bel_1"), text="The user lives in Porto"))
+    second = asyncio.create_task(store.correct(MemoryId("bel_1"), text="The user lives in Faro"))
+    await asyncio.sleep(0)
+    gate.set()
+
+    results = await asyncio.gather(first, second, return_exceptions=True)
+
+    assert sum(isinstance(r, ConflictError) for r in results) == 1
+    current = store._db.query(
+        "SELECT id FROM belief WHERE status IN ('tentative','active') AND tombstoned_at IS NULL"
+    )
+    assert len(current) == 1
+
+
+async def test_a_derived_episode_is_refused_if_a_source_is_gone(
+    store: SqliteMemoryStore, clock: FakeClock
+) -> None:
+    await store.add_episode(_episode(clock))
+    summary = _episode(
+        clock,
+        id=MemoryId("ep_sum"),
+        provenance=Provenance(
+            tier=TrustTier.SELF, derived_from=(MemoryId("ep_1"), MemoryId("ep_x"))
+        ),
+    )
+
+    with pytest.raises(ConflictError):
+        await store.add_episode(summary)
+    assert await store.get_episode(MemoryId("ep_sum")) is None

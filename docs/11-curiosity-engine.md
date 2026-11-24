@@ -435,8 +435,9 @@ graph TB
   (`Brain.speak_first`) under the session lock, so an offer can never land in the middle of a
   turn; the initiative module decides only what and when.
 * **Delivered without waiting on anyone** (after review). Each open socket has five seconds to
-  take the message; one that stopped reading is dropped from presence, so a stalled tab cannot
-  hold up the check or the other tabs. In the app, a message that arrives while the user's own
+  take the message; one that stopped reading is dropped from presence and its socket closed, so
+  a stalled tab cannot hold up the check or the other tabs, and it reconnects and is heard
+  again rather than staying open and unheard. In the app, a message that arrives while the user's own
   turn is in flight is held until that turn ends — switching conversations mid-turn would drop
   the user's message and the streaming reply.
 * **Not spoken aloud.** Voice is for replies the user asked for; an unprompted voice in the

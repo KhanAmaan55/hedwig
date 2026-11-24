@@ -316,7 +316,8 @@ graph TB
   the records; the gateway's own counters and the bus's queues are since-start, as Prometheus
   expects of a process. Same auth as the rest of the API (§10).
 * **A counter only goes up** (after review). A `_total` counts rows in a state they never leave:
-  finished turns (not `running`), corrections the user settled, offers made and offers dismissed
+  finished turns (not `running`), corrections the user settled (an accept still being applied
+  is counted once it has its replacement), offers made and offers dismissed
   (`hedwig_initiative_dismissed_total`). What is waiting now is a gauge beside it
   (`hedwig_corrections_pending`). Counting rows by a status that later changes made a counter
   fall — which Prometheus reads as a restart.

@@ -528,9 +528,12 @@ graph LR
   is still read.
 * **Text that only looks like a heading stays text.** A PDF line or Word paragraph starting with
   `#` ("# 3 things to pack") is indented by a space, so the chunker does not take it for a
-  heading and every passage on that page keeps "Page N" in its citation.
+  heading and every passage on that page keeps "Page N" in its citation. Only spaces and tabs
+  before the `#` are considered, so a blank line before it is left alone.
 * **Change detection by the file's bytes**, as before, and **before** parsing: an unchanged PDF
-  is "unchanged" without being read again. A file that was skipped is tried again on the next
+  is "unchanged" without being read again. The bytes that were hashed are the bytes parsed (the
+  file is read once), so a file saved again mid-read cannot leave a hash of one version over the
+  text of another. A file that was skipped is tried again on the next
   reindex (a library may have been installed since).
 
 | Tradeoff | Gained | Given up | Revisit if |

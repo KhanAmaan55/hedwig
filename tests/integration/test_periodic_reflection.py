@@ -246,6 +246,72 @@ async def test_two_weeks_summarised_in_the_same_words_each_keep_their_summary(
     assert one["period"] != two["period"] and one["summary_id"] != two["summary_id"]
 
 
+async def test_a_conversation_erased_during_the_model_call_stops_the_summary(
+    container: Container,
+    llm_provider: RecordedProvider,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A summary must not keep words from a conversation erased while it was being written."""
+    from hedwig.reflection import periodic
+
+    erased = await _conversation(container, "the Rust compiler")
+    await _conversation(container, "learning Portuguese")
+    clock.advance(days=4)
+    from hedwig.reflection.common import ask_structured as real
+
+    async def erased_meanwhile(*args: object, **kwargs: object) -> object:
+        container.database.execute("DELETE FROM episode WHERE id = ?", (erased,))  # a purge
+        return {"title": "A week", "summary": "The user worked on Rust and Portuguese."}
+
+    monkeypatch.setattr(periodic, "ask_structured", erased_meanwhile)
+    review = await container.periodic.weekly(force=True)
+
+    assert review["summary"] == "sources_erased" and review["status"] != "completed"
+    assert await container.memory.summary_for(review["period"]) is None
+    monkeypatch.setattr(periodic, "ask_structured", real)
+    llm_provider.script(
+        "reflect.week",
+        json_response({"title": "A week", "summary": "The user learned Portuguese."}),
+    )
+    retried = await container.periodic.weekly(force=True)
+    assert retried["period"] == review["period"] and retried["summary"] == "written"
+
+
+async def test_each_months_report_counts_only_its_own_month_in_the_users_time_zone(
+    container: Container, clock: FakeClock
+) -> None:
+    """Midnight on 1 February in Kolkata is 18:30 UTC on 31 January."""
+    from hedwig.reflection.periodic import PeriodicReflection
+
+    reflection = container.periodic
+    kolkata = PeriodicReflection(
+        database=container.database,
+        store=container.memory,
+        capture=reflection._capture,
+        goals=container.goals,
+        gateway=reflection._gateway,
+        history=reflection._history,
+        clock=clock,
+        timezone="Asia/Kolkata",
+    )
+    clock.advance_to("2026-01-31T18:29:59+00:00")  # 23:59:59 on 31 January in Kolkata
+    await _conversation(container, "the last evening of January")
+    clock.advance(seconds=2)  # 00:00:01 on 1 February in Kolkata
+    await _conversation(container, "the first minute of February")
+    for month in ("2026-01", "2026-02"):
+        container.database.execute(
+            "INSERT INTO identity_report (month, summary_id, created_at) VALUES (?, NULL, ?)",
+            (month, clock.now().isoformat()),
+        )
+
+    january = (await kolkata.report("2026-01"))["memory"]
+    february = (await kolkata.report("2026-02"))["memory"]
+
+    assert january["episodes_formed"] == 2  # the exchange and its summary
+    assert february["episodes_formed"] == 2
+
+
 def test_report_boundaries_compare_as_utc() -> None:
     """Stored timestamps are UTC; a local midnight must be compared as the same instant."""
     from datetime import datetime

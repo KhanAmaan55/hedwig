@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from hedwig.core.errors import NotFoundError
+from hedwig.core.errors import ConflictError, NotFoundError
 from hedwig.core.ids import new_id
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock, ConversationHistory
@@ -44,7 +44,8 @@ CATCH_UP_WEEKS = 4
 CATCH_UP_MONTHS = 3
 """How far back an unfinished period is still caught up; older ones are let go."""
 FINISHED = frozenset({"written", "already_there", "too_little_to_summarise"})
-"""Summary outcomes that close a period; any other (waiting_for_model, not_stored) retries."""
+"""Summary outcomes that close a period; any other (waiting_for_model, not_stored,
+sources_erased) retries."""
 
 Period = tuple[str, date, date]
 """(name, first day, first day after)."""
@@ -409,6 +410,14 @@ class PeriodicReflection:
             if len(notes) < MIN_EXCHANGES:
                 return None, "too_little_to_summarise"
         listing = "\n".join(f"- {e.content}" for e in notes)[:12000]
+        # The conversations it will condense, as they are *before* the model call: a purge during
+        # the wait must stop this summary, not leave one holding erased words with no edge to them.
+        leaves = tuple(
+            leaf.id
+            for leaf in await self._store.episodes_between(
+                start, end, kinds=(EpisodeKind.INTERACTION,)
+            )
+        )
         parsed = await ask_structured(
             self._gateway,
             f"reflect.{label.split()[-1]}",
@@ -418,26 +427,34 @@ class PeriodicReflection:
         )
         if parsed is None:
             return None, "waiting_for_model"
-        report = await self._capture.capture(
-            episodes=(
-                EpisodeCandidate(
-                    title=str(parsed.get("title") or period)[:80],
-                    content=str(parsed.get("summary", "")),
-                    kind=EpisodeKind.PERIOD_SUMMARY,
-                    occurred_at=end - timedelta(minutes=1),
-                    trust=TrustTier.SELF,
-                    source_ref=period,
-                ),
+        try:
+            # Stored with its edges in one transaction, refused if any leaf is gone (docs/12 §16).
+            report = await self._capture.capture(
+                episodes=(
+                    EpisodeCandidate(
+                        title=str(parsed.get("title") or period)[:80],
+                        content=str(parsed.get("summary", "")),
+                        kind=EpisodeKind.PERIOD_SUMMARY,
+                        occurred_at=end - timedelta(minutes=1),
+                        trust=TrustTier.SELF,
+                        source_ref=period,
+                        derived_from=leaves,
+                    ),
+                )
             )
-        )
+        except ConflictError:
+            logger.info(
+                "period summary dropped: a conversation was erased", extra=fields(period=period)
+            )
+            return None, "sources_erased"
         outcome = report.outcomes[0] if report.outcomes else None
         if not (outcome and outcome.verdict is Verdict.STORED and outcome.memory_id):
             return None, "not_stored"
-        await self._link(outcome.memory_id, start, end)
         return str(outcome.memory_id), "written"
 
     async def _link(self, summary_id: MemoryId, start: datetime, end: datetime) -> None:
-        """SUMMARISED_FROM edges to the period's conversations, all of them in one write."""
+        """Edges to the period's conversations for a summary stored before they were written
+        with it (an older run): all of them in one write."""
         leaves = await self._store.episodes_between(start, end, kinds=(EpisodeKind.INTERACTION,))
         await self._store.record_derivations(
             summary_id, [leaf.id for leaf in leaves], DerivationRelation.SUMMARISED_FROM

@@ -717,6 +717,47 @@ describe("ConversationPane when HEDWIG speaks first (docs/11 §14)", () => {
     expect(storage.value).toBe("sess_other");
   });
 
+  it("ignores the old conversation's history arriving after HEDWIG opened another", async () => {
+    const { live, say } = liveWithInitiative();
+    let page: (found: MessagePage) => void = () => undefined;
+    const api = fakeApi({
+      history: vi.fn(
+        () =>
+          new Promise<MessagePage>((resolve) => {
+            page = resolve;
+          }),
+      ),
+    });
+    const storage = memoryStorage("sess_old");
+    render(<ConversationPane api={api} storage={storage} live={live} />);
+    await waitFor(() => {
+      expect(live.watchInitiative).toHaveBeenCalled();
+    });
+
+    act(() => {
+      say(offer({ session_id: "sess_new" }));
+    });
+    await act(async () => {
+      page({
+        messages: [
+          {
+            id: "msg_old",
+            seq: 1,
+            role: "user",
+            text: "something from the old conversation",
+            created_at: "2026-11-24T09:00:00.000+00:00",
+          },
+        ],
+        next_before: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/Why are neap tides weaker/)).toBeInTheDocument();
+    expect(screen.queryByText("something from the old conversation")).not.toBeInTheDocument();
+    expect(storage.value).toBe("sess_new");
+  });
+
   it("marks an unprompted message again after a reload", async () => {
     const api = fakeApi({
       history: vi.fn().mockResolvedValue({
@@ -917,5 +958,36 @@ describe("ConversationPane corrections heard in conversation (docs/06 §19)", ()
 
     expect(await screen.findByText(/memory changed since/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Yes, correct it" })).not.toBeInTheDocument();
+  });
+
+  it("an answered one stays answered when its notice arrives late", async () => {
+    let push: (p: CorrectionProposal) => void = () => undefined;
+    const live = {
+      send: vi.fn(),
+      watchCorrections: vi.fn((handler: (p: CorrectionProposal) => void) => {
+        push = handler;
+        return () => undefined;
+      }),
+    };
+    const correctionsApi = {
+      corrections: vi.fn().mockResolvedValue([proposal()]),
+      settleCorrection: vi.fn().mockResolvedValue(proposal({ status: "declined" })),
+    };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={memoryStorage("sess_1")}
+        live={live}
+        correctionsApi={correctionsApi}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "No" }));
+    expect(await screen.findByText("Left as it was.")).toBeInTheDocument();
+
+    act(() => {
+      push(proposal());
+    });
+
+    expect(screen.queryByRole("button", { name: "No" })).not.toBeInTheDocument();
   });
 });

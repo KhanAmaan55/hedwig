@@ -237,4 +237,10 @@ async def test_counters_never_go_down_when_something_waiting_is_settled(
     assert "hedwig_corrections_pending 2" in before and "hedwig_corrections_pending 1" in after
     assert 'hedwig_corrections_total{status="declined"} 1' in after
     assert 'status="proposed"' not in before + after
+    # An accept under way (claimed, not yet applied) is not counted until it settles.
+    running_container.database.execute(
+        "UPDATE correction_proposal SET status = 'accepted' WHERE id = 'cor_b'"
+    )
+    claimed = (await api.get("/v1/metrics")).text
+    assert 'hedwig_corrections_total{status="accepted"}' not in claimed
     assert 'hedwig_turns_total{status="running"}' not in before

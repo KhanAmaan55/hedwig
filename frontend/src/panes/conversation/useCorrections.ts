@@ -62,7 +62,10 @@ export function useCorrections(
       if (proposal.session_id !== sessionId) return;
       pushed.current.add(proposal.id);
       setWaiting((current) =>
-        current.some((p) => p.id === proposal.id) ? current : [...current, proposal],
+        // An answered one stays answered, however late its own notice arrives.
+        done.current.has(proposal.id) || current.some((p) => p.id === proposal.id)
+          ? current
+          : [...current, proposal],
       );
     });
   }, [live, sessionId]);

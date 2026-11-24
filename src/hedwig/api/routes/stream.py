@@ -34,6 +34,8 @@ router = APIRouter(tags=["stream"])
 PROTOCOL = "hedwig.v1"
 TOKEN_PREFIX = "hedwig.token."
 UNAUTHORISED = 4401
+STALLED = 4408
+"""Closed by the server because the client did not take a message in time; reconnect."""
 """Application close code: the 4xxx range is ours (RFC 6455 §7.4.2); 4401 mirrors HTTP 401."""
 MIND_CHECK_SECONDS = 0.4
 """How often a subscribed socket's expression is recomputed. Frames go out only on change, so
@@ -74,9 +76,17 @@ class Connection:
         async with self._lock:
             try:
                 await self._ws.send_json(envelope)
+            except asyncio.CancelledError:
+                self.open = False  # cut off mid-send (a presence deadline): the frame is suspect
+                raise
             except Exception as error:
                 self.open = False
                 raise ConnectionError("closed") from error
+
+    async def drop(self) -> None:
+        """Presence gave up on this socket: close it, so the app reconnects and joins again."""
+        self.open = False
+        await self._ws.close(code=STALLED, reason="too slow to take a message")
 
 
 @router.websocket("/stream")
@@ -121,7 +131,9 @@ async def stream(websocket: WebSocket) -> None:
                 session = payload.get("session_id")
                 session = str(session) if session else None
                 if present is None:
-                    present = presence.join(connection.send, session_id=session)
+                    present = presence.join(
+                        connection.send, session_id=session, drop=connection.drop
+                    )
                 else:
                     presence.showing(present, session)
             elif kind == "message.send":

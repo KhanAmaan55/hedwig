@@ -484,6 +484,9 @@ sequenceDiagram
   press a fresh start; a second start while the first is still waiting for permission opens no
   second recorder; and a release that comes before the microphone has started is kept and
   applied the moment it starts, so a quick press-and-release never leaves a recorder running.
+  Only the first such stop is kept — it is the held release waiting for its words; a later one
+  gets nothing. A recorder that will not start after the microphone opened closes the
+  microphone again and leaves it idle.
   The button captures its pointer, so letting go outside it still ends the press; a press the
   browser takes over (`pointercancel`) stops and sends nothing. If what was heard could not be
   sent, it is put in the box, as a typed message is.
