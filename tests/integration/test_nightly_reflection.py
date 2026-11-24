@@ -381,3 +381,39 @@ async def test_every_run_is_recorded(running_container: Container) -> None:
 def test_it_is_scheduled_nightly(container: Container) -> None:
     status = container.scheduler.status("reflection.nightly")
     assert status.trigger.startswith("daily at 03:00")
+
+
+async def test_beliefs_that_mean_the_same_in_other_words_reach_the_judge(
+    running_container: Container, llm_provider: RecordedProvider
+) -> None:
+    """docs/06 §20: no shared words, so word overlap never paired them; their vectors do."""
+    prefix = running_container.config.llm.embedding_document_prefix
+    near, close, far = (
+        [1.0, 0, 0, 0, 0, 0, 0, 0],
+        [0.98, 0.2, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1.0, 0, 0, 0, 0, 0],
+    )
+    llm_provider.vectors.update(
+        {
+            prefix + "The user is vegetarian.": near,
+            prefix + "The user does not eat meat.": close,
+            prefix + "The user plays the cello.": far,
+        }
+    )
+    vegetarian = await _belief(running_container, "The user is vegetarian.", session="a")
+    no_meat = await _belief(running_container, "The user does not eat meat.", session="b")
+    await _belief(running_container, "The user plays the cello.", session="c")
+    await running_container.bus.drain()  # the vectors are written by the embedding subscriber
+    llm_provider.script(
+        "reflect.beliefs", json_response({"verdicts": [{"pair": 0, "verdict": "same"}]})
+    )
+
+    run = await running_container.nightly.run(force=True)
+
+    assert run["stats"]["judge"]["same"] == 1
+    (judged,) = [c for c in llm_provider.calls if c.purpose == "reflect.beliefs"]
+    listing = judged.messages[-1].content
+    assert "vegetarian" in listing and "does not eat meat" in listing
+    assert "cello" not in listing, "only pairs close in meaning are asked about"
+    disputes = await running_container.nightly.disputes()
+    assert [(d["first"]["id"], d["second"]["id"]) for d in disputes] == [(vegetarian, no_meat)]

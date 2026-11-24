@@ -55,5 +55,18 @@ def admits_not_knowing(reply: str) -> bool:
     return bool(UNANSWERED_PATTERN.search(reply))
 
 
+AIMS = re.compile(
+    r"\b(?:on track|working (?:towards?|on)|my (?:project|goal|plan|aim|target)s?|progress|"
+    r"practi[cs](?:e|ing)|training|how(?:'s| is| are) (?:it|things) going|update on|"
+    r"where am i (?:with|at))\b",
+    re.I,
+)
+"""A message about the user's aims that may name none of them (docs/06 §20): "Am I on track?"."""
+
+
+def refers_to_aims(text: str) -> bool:
+    return bool(AIMS.search(text))
+
+
 def is_greeting(text: str) -> bool:
     return bool(GREETING.match(text)) and len(text.split()) <= 6

@@ -923,3 +923,80 @@ still there after a reload; *Yes, correct it* superseded the old belief with one
 
 **Future improvements.** Corrections of episodes; "we moved to Berlin" as an update with no
 correction cue; HEDWIG acknowledging the proposal in its reply; undo from the card.
+
+---
+
+## 20. Retrieval, measured on what it was not tuned on (RET-01)
+
+§17's recall@5 of 0.972 was measured on the corpus its fixes were shaped by. A number tuned on
+its own test says little, so the first step was a second corpus — `recall_heldout.json`, a
+different fictional user, 38 memories and 30 queries, written after the tuning and never used to
+tune — with two kinds of question the first one lacked: about the user's **goals** without naming
+them ("Am I on track?") and about what was said **lately** ("What were we talking about
+yesterday?"). On it, the running system scored 0.814: the gap the second corpus exists to show.
+
+```mermaid
+graph LR
+    U["the user's words"] --> P["query planning<br/><small>+ the words without 'remember…'<br/>+ the active goals, when the message is about the user's aims</small>"]
+    P --> L["lexical"] & S["semantic<br/><small>near neighbours</small>"] & T["temporal<br/><small>only for a question about lately</small>"] & E["structural"]
+    L & S & T & E --> F["RRF, k = 10"]
+    F --> R["× salience · confidence · recency · trust"]
+    R --> W["working set"]
+    G["goals mind reader"] -->|"asked about their aims:<br/>'answer about the goals listed'"| D["the reply's directives"]
+    N["nightly judge"] -->|"pairs by word overlap<br/>+ pairs within cosine 0.22"| J["the utility model's verdict, for the user"]
+```
+
+| Change | tuning recall@5 / MRR | held-out recall@5 / MRR |
+|---|---|---|
+| As built in §17 | 0.972 / 0.728 | 0.814 / 0.794 |
+| Temporal channel only for questions about lately | 0.972 / 0.716 | 0.814 / 0.794 |
+| RRF k 60 → 10 | **1.000** / 0.759 | 0.847 / 0.803 |
+| Goal queries for messages about the user's aims | 1.000 / 0.759 | **0.944 / 0.844** (hit@5 1.000) |
+| *HyDE (experiment, not adopted)* | *1.000 / 0.762* | *0.892 / 0.870* |
+
+Held-out by kind, after: lexical 1.000, paraphrase 0.938, question 0.938, goal **1.000** (from
+0.271), temporal 0.667. Words only (no embedding model): tuning 0.486, held-out 0.700.
+
+* **RRF's k was the lever.** With k = 60 — the literature's value, for lists of hundreds — ranks
+  1 and 3 scored within 3 % of each other, so the multipliers after fusion (recency up to ×1.3,
+  a belief's confidence ×0.89) decided the order: a recent chat at semantic rank 3 beat the right
+  belief at rank 1. Channels here nominate at most thirty. k = 10 lifted both corpora; k = 5
+  scored a little higher on both but lets one channel's top hit outweigh several agreeing.
+* **The temporal channel nominates only for a question about lately** (`RECENT` in
+  `memory/retrieval.py`). It moved nothing on its own, but it removes the recent episodes that
+  were being added to every query. On the tuning corpus words-only paraphrase recall fell from
+  0.167 to 0.083: the hit it lost was a recent episode that happened to be the answer.
+* **Messages about the user's aims search the aims.** "Am I on track?" shares no word with the
+  marathon. When a message matches the aims cue (`refers_to_aims`, shared by the planner and the
+  goals mind reader) and goals are active, the planner adds up to three of them as queries.
+  Goal questions went from 0.271 to 1.000.
+* **And the reply is told what the moment is.** Found live on `gemma4:e2b`: with the run
+  recalled, the reply to "Am I on track?" was *"What are you referring to?"*. The goals mind
+  reader now adds a directive — answer about the listed goals, do not ask which — and three of
+  three replies answered about the marathon. (They did not mention the recalled knee pain: on
+  topic, not yet thorough.)
+* **HyDE was measured and not adopted.** Searching a guessed answer too (gemma4 writing "The
+  user …") raised held-out MRR (0.844 → 0.870) but lowered recall@5 (0.944 → 0.892): the guess
+  "the Boston marathon" pulled in the wrong memory, losing a hit. Not worth a model call on
+  every turn; `scripts/eval_recall.py --hyde MODEL` re-measures it with a better model.
+* **The nightly judge sees pairs that mean the same in other words.** It paired beliefs by word
+  overlap, so "vegetarian" and "does not eat meat" never met. `EmbeddingIndex.close_beliefs` adds
+  pairs within cosine distance 0.22, from the stored vectors (no model call). Measured with
+  nomic-embed-text: paraphrased or conflicting beliefs 0.02–0.18, unrelated beliefs 0.265 and up.
+* **Capture novelty stays on words.** Embedding a memory before deciding whether to keep it
+  would put the model on the write path, which §17.2 keeps off it; the nightly merge and judge
+  now catch what word overlap misses, after the fact.
+* **The suite holds both corpora.** `test_recall.py` replays recorded vectors for both — the
+  planned queries included — with floors at the measured numbers.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| k = 10, not 5 | Agreement between channels still counts | ~0.01–0.04 MRR on these corpora | A larger held-out set says otherwise |
+| Goal queries by cue | No model call; goal questions answered | A cue list; "how's the thing going" may miss | Misses show up — let the planner model judge |
+| HyDE off | No model call per turn; better recall@5 | Some MRR | A larger utility model guesses without inventing |
+| Judge pairs by a fixed cosine threshold | Measured, simple | Tied to one embedding model | The model changes: re-measure (the script is in §20) |
+
+**Future improvements.** A larger held-out corpus — 30 queries is small, and every change here
+was judged on it once. Entities for the structural channel (it is empty without entity links).
+A model-backed planner for goal and entity expansion, once its cost is measured against these
+numbers.

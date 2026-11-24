@@ -48,9 +48,12 @@ from hedwig.core.types import MemoryId, MemoryKind, Provenance, TrustTier
 
 logger = get_logger(__name__)
 
-RRF_K = 60.0
-"""The constant from the reciprocal-rank-fusion literature. Large enough that the
-difference between rank 1 and rank 2 does not dwarf everything below it."""
+RRF_K = 10.0
+"""Reciprocal-rank-fusion's constant. The literature's 60 is for lists of hundreds; channels here
+nominate thirty at most, and at 60 ranks 1 and 3 scored within 3 % of each other, so recency and
+confidence (x1.3, x0.89) decided the order instead of relevance. Measured (docs/06 §20): 10 lifts
+recall@5 on both corpora; 5 scored a little higher but lets one channel's top hit outweigh several
+channels agreeing."""
 
 CHARS_PER_TOKEN = 4
 
@@ -62,6 +65,23 @@ KIND_QUOTAS: dict[MemoryKind, float] = {
 }
 
 _WORD = re.compile(r"[0-9A-Za-z_]+")
+
+RECENT = re.compile(
+    r"\b(?:yesterday|today|tonight|this (?:morning|afternoon|evening|week)|last (?:night|time|"
+    r"week)|recent(?:ly)?|lately|earlier|just now|the other day|we (?:were|was) (?:talking|"
+    r"discussing)|(?:talk|spoke|chat)(?:ed)? about|what (?:did|have) (?:i|we) (?:say|said|tell|"
+    r"told|talk|discuss)\w*|where (?:were|did) we (?:leave|get to)|catch me up|"
+    r"what were we (?:just )?(?:doing|up to|on about)|just then)\b",
+    re.I,
+)
+"""A query about what happened lately (docs/06 §20). Only then does the temporal channel
+nominate the most recent episodes: nominated for every query, they outranked the answer to
+paraphrases on the held-out corpus — "Do I like seafood?" ranked five recent chats first."""
+
+
+def about_recent(queries: Sequence[str]) -> bool:
+    return any(RECENT.search(query) for query in queries)
+
 
 STOPWORDS = frozenset(
     [
@@ -184,7 +204,7 @@ class HybridRetrieval:
         channels: dict[str, list[MemoryId]] = {
             "lexical": self._lexical(cleaned, resolved),
             "structural": self._structural(resolved),
-            "temporal": self._temporal(resolved),
+            "temporal": self._temporal(resolved) if about_recent(cleaned) else [],
         }
         weights = {
             "lexical": resolved.lexical_weight,

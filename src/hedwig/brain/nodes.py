@@ -175,7 +175,10 @@ def make_nodes(deps: Collaborators) -> dict[str, Node]:
 
     async def plan_queries(state: TurnState) -> TurnState:
         policy = state.get("policy") or TurnPolicy()
-        queries = await deps.planner.plan_queries(state.get("input", ""), policy=policy)
+        mind = state.get("mind")
+        queries = await deps.planner.plan_queries(
+            state.get("input", ""), policy=policy, goals=mind.goals if mind is not None else ()
+        )
         return TurnState(queries=list(queries), visited=["plan_queries"])
 
     async def recall(state: TurnState) -> TurnState:

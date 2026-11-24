@@ -514,6 +514,7 @@ def build_container(
         timezone=config.runtime.timezone,
         auto_apply=config.reflection.auto_apply_judgements,
         drift=personality,  # evidence in; the guardrails decide (docs/10 §13)
+        neighbours=embeddings,  # pairs that mean the same in other words (docs/06 §20)
     )
     scheduler.register(
         TaskSpec(

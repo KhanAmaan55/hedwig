@@ -27,7 +27,7 @@ from hedwig.core.ports.brain import (
     ToolRequest,
     TurnPolicy,
 )
-from hedwig.knowledge.cues import needs_web
+from hedwig.knowledge.cues import needs_web, refers_to_aims
 
 logger = get_logger(__name__)
 
@@ -38,6 +38,19 @@ RECALL_PATTERN = re.compile(
     r"previously|before)\b",
     re.I,
 )
+MAX_GOAL_QUERIES = 3
+
+
+def goal_subject(goal: str) -> str:
+    """A goal line as the snapshot renders it, reduced to what it is about:
+    "Help the user run the Lisbon half marathon (40% done); lately: …" → "run the Lisbon half
+    marathon"."""
+    subject = goal.split(" (", 1)[0].split(";", 1)[0].strip()
+    for prefix in ("Help the user ", "help the user "):
+        subject = subject.removeprefix(prefix)
+    return subject
+
+
 NO_WEB_DIRECTIVE = (
     "This asks for current information, and web search is switched off. Say plainly that you "
     "cannot look it up right now, answer from what you know, and say it may be out of date."
@@ -174,7 +187,9 @@ class RulePlanner:
 
     # -- query planning ----------------------------------------------------
 
-    async def plan_queries(self, text: str, *, policy: TurnPolicy) -> Sequence[str]:
+    async def plan_queries(
+        self, text: str, *, policy: TurnPolicy, goals: Sequence[str] = ()
+    ) -> Sequence[str]:
         """Expand the input into retrieval queries (docs/06 §5.2).
 
         One query against one index is keyword search, not retrieval. The real expansion —
@@ -189,6 +204,10 @@ class RulePlanner:
         queries = [stripped]
         if RECALL_PATTERN.search(stripped):
             queries.append(RECALL_PATTERN.sub("", stripped).strip() or stripped)
+        if goals and refers_to_aims(stripped):
+            # "Am I on track?" names no goal, so no word of it matches the marathon. The goals
+            # it is about become queries of their own (docs/06 §20).
+            queries += [goal_subject(goal) for goal in goals[:MAX_GOAL_QUERIES]]
 
         logger.debug("queries planned", extra=fields(count=len(queries)))
         return tuple(dict.fromkeys(queries))  # de-duplicated, order preserved
