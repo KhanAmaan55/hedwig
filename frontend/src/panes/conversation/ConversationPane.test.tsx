@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../transport/client";
 import type {
+  CorrectionProposal,
   Explanation,
   InitiativeMessage,
   MessagePage,
@@ -596,5 +597,101 @@ describe("ConversationPane when HEDWIG speaks first (docs/11 §14)", () => {
     });
     render(<ConversationPane api={api} storage={memoryStorage("sess_1")} />);
     expect(await screen.findByText(/HEDWIG started this/)).toBeInTheDocument();
+  });
+});
+
+describe("ConversationPane corrections heard in conversation (docs/06 §19)", () => {
+  function proposal(overrides: Partial<CorrectionProposal> = {}): CorrectionProposal {
+    return {
+      id: "cor_1",
+      memory_id: "bel_porto",
+      current_text: "The user's sister Ana lives in Porto.",
+      proposed_text: "The user's sister Ana lives in Lisbon.",
+      session_id: "sess_1",
+      turn_id: "turn_2",
+      status: "proposed",
+      replacement_id: null,
+      created_at: "2026-11-24T10:00:00.000+00:00",
+      settled_at: null,
+      ...overrides,
+    };
+  }
+
+  it("asks, and a yes corrects the memory", async () => {
+    const correctionsApi = {
+      corrections: vi.fn().mockResolvedValue([proposal()]),
+      settleCorrection: vi
+        .fn()
+        .mockResolvedValue(proposal({ status: "accepted", replacement_id: "bel_lisbon" })),
+    };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={memoryStorage("sess_1")}
+        correctionsApi={correctionsApi}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Remember instead: “The user's sister Ana lives in Lisbon.”/),
+    ).toBeInTheDocument();
+    expect(correctionsApi.corrections).toHaveBeenCalledWith("sess_1");
+    fireEvent.click(screen.getByRole("button", { name: "Yes, correct it" }));
+
+    expect(correctionsApi.settleCorrection).toHaveBeenCalledWith("cor_1", true);
+    expect(
+      await screen.findByText(/Corrected: “The user's sister Ana lives in Lisbon.”/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yes, correct it" })).not.toBeInTheDocument();
+  });
+
+  it("a no leaves it as it was", async () => {
+    const correctionsApi = {
+      corrections: vi.fn().mockResolvedValue([proposal()]),
+      settleCorrection: vi.fn().mockResolvedValue(proposal({ status: "declined" })),
+    };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={memoryStorage("sess_1")}
+        correctionsApi={correctionsApi}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "No" }));
+    expect(correctionsApi.settleCorrection).toHaveBeenCalledWith("cor_1", false);
+    expect(await screen.findByText("Left as it was.")).toBeInTheDocument();
+  });
+
+  it("shows one pushed while the conversation is on screen", async () => {
+    let push: (p: CorrectionProposal) => void = () => undefined;
+    const live = {
+      send: vi.fn(),
+      watchCorrections: vi.fn((handler: (p: CorrectionProposal) => void) => {
+        push = handler;
+        return () => undefined;
+      }),
+    };
+    const correctionsApi = {
+      corrections: vi.fn().mockResolvedValue([]),
+      settleCorrection: vi.fn(),
+    };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={memoryStorage("sess_1")}
+        live={live}
+        correctionsApi={correctionsApi}
+      />,
+    );
+    await waitFor(() => {
+      expect(live.watchCorrections).toHaveBeenCalled();
+    });
+
+    act(() => {
+      push(proposal({ session_id: "sess_other", id: "cor_x" }));
+      push(proposal());
+    });
+
+    expect(screen.getAllByRole("button", { name: "Yes, correct it" })).toHaveLength(1);
   });
 });

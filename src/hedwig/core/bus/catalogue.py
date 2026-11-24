@@ -214,6 +214,12 @@ def platform_catalogue() -> EventCatalogue:
         "Exploration answered a gap; the finding is untrusted and waits in the feed.",
         payload_keys={"finding_id", "gap_id"},
     )
+    # Corrections in conversation (docs/06 §19)
+    catalogue.register(
+        "memory.correction.proposed",
+        "The user seemed to correct a belief; how it should read waits for their yes.",
+        payload_keys={"proposal_id", "memory_id"},
+    )
     # Initiative (docs/11 §14, ADR-0026)
     catalogue.register(
         "initiative.offer.made",

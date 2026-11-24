@@ -76,7 +76,7 @@ the repository, ahead of any new cognitive capability.
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
 | 3 | Project memory | **COMPLETE** (MEM-06) | Projects are goals with a journal (ADR-0025): system, reflection and user notes; finished projects come back when named (docs/08 §13) |
-| 3 | Consolidation / duplicates / conflicts | **COMPLETE** | Nightly merge and promotion; judged conflicts put to the user (REF-02); corrections supersede (MEM-03) |
+| 3 | Consolidation / duplicates / conflicts | **COMPLETE** | Nightly merge and promotion; judged conflicts put to the user (REF-02); corrections supersede (MEM-03), also when said in conversation (MEM-07) |
 | 3 | User-controlled deletion, searchable, explainable | **COMPLETE** | Search, pin, forget/restore, correct (MEM-02/03), *Why?* (SEC-01), export and verified purge (SEC-02) |
 | 3 | Embedding retrieval channel | **COMPLETE** (MEM-04) | nomic-embed-text via the gateway, `sqlite-vec` in hedwig.db; recall@5 0.514 → 0.972 on the eval corpus (docs/06 §17) |
 | 4 | Personality: traits, identity core, guarded drift, reversal | **COMPLETE** | `personality/`; `test_personality_*`, `test_personality_in_the_turn.py` |
@@ -282,6 +282,24 @@ by numbers.
 As the user, I want HEDWIG to track my ongoing projects — decisions, progress, open questions —
 so that "how did that project go?" has a real answer. Design question first: an entity kind plus
 beliefs, or its own table (ADR).
+
+
+#### MEM-07 — Corrections in conversation
+**Status:** Done (2026-11-24) · **P2** · **M** · **Depends on:** MEM-03, MEM-04, INI-01 · **Modules:** `memory/corrections.py`, `api/routes/corrections.py`, CLI, conversation pane, migration 0023
+
+*As the user, I want "No, she lives in Lisbon" in a conversation to fix what HEDWIG believes —
+once I confirm it — so that I never have to open the inspector to correct it.*
+
+- After each turn: a rule gate ("no, …", "actually …", "that's wrong", "not X, Y", "no longer",
+  "anymore", "correction:"), then the utility model over the beliefs recalled this turn and the
+  last; deterministic checks (a real candidate, changed, same subject, no word the user did not
+  say, no bare negation of something the user did not name).
+- A card under the conversation: *Yes, correct it* (§18's correction) or *No*. Pushed live,
+  restored after a reload; `hedwig corrections`, `GET /v1/corrections`.
+- **Measured** (`scripts/eval_corrections.py`, 16 tuning + 8 held-out cases): gemma4:e2b 24/24,
+  gemma3:4b 22/24 (one wrong proposal, one miss). Live in the app on gemma4.
+- **Tests:** `test_memory_corrections.py` (34), `test_conversational_corrections.py` (7), pane and
+  socket tests.
 
 ### 4.4 Personality
 
@@ -522,8 +540,8 @@ What the product still lacks, highest value first — each a story to write befo
 1. ~~**Reflection T3/T4**~~ — done as REF-03 (2026-11-24); entity resolution deferred.
 2. ~~**Proactive curiosity and goal check-ins over the live channel**~~ — done as INI-01
    (2026-11-24); OS notifications when the window is hidden remain.
-3. **Corrections in conversation** — "no, she lives in Lisbon" proposing a correction the user
-   confirms (docs/06 §18).
+3. ~~**Corrections in conversation**~~ — done as MEM-07 (2026-11-24); episodes and cue-less
+   updates ("we moved to Berlin") remain.
 4. **`/traces` and `/metrics`** — the causal trace of a turn, and counters for the doctor to read.
 5. **Retrieval** — HyDE; embeddings for REF-02's judge candidates and capture novelty; a held-out
    half of the recall corpus; a goal-relevance boost.
@@ -797,3 +815,12 @@ tables, or copied rows). Nothing existing was changed or deleted.
   arrived in the open app the moment it was made, and the reply to it continued the topic
   (train tips, then accommodation). Migration 0022; ADR-0026; design in
   [11](11-curiosity-engine.md) §14.
+- **MEM-07** Corrections in conversation — `memory/corrections.py` listens to
+  `conversation.turn.completed`: a rule gate, then the utility model over the beliefs HEDWIG was
+  just using, then deterministic checks; the result is a proposal the user confirms with one
+  click. Found while measuring: told "No, I meant the other book", gemma4 *negated* whichever
+  belief it was shown — 6 wrong proposals in 16 — so a bare negation now needs the user to have
+  named the thing; 16/16 after. Held out: 7/8 (the gate missed "Not London — Manchester";
+  fixed), then 24/24 on gemma4 and 22/24 on gemma3. Live: "No, she lives in Lisbon." → card two
+  seconds after the reply → *Yes* → a new conversation answered "Ana lives in Lisbon."
+  Migration 0023; design in [06](06-memory-architecture.md) §19.

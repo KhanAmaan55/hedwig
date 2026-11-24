@@ -826,7 +826,7 @@ graph LR
 |---|---|---|---|
 | Supersede / tombstone, never edit in place | History and undo, one rule for every change | A corrected memory has a new id | Never |
 | `contradicted_by` edge, not a new `corrected_from` relation | No rebuild of `memory_derivation` (its CHECK lists the relations) | The edge does not say "by the user"; the new memory's `trust = user` and `source_ref = correction:<id>` do | Lineage views need to tell them apart |
-| Corrections are explicit (API, CLI, inspector) | Unambiguous | "No, she lives in Lisbon" in chat is not yet a correction | The brain detects correction intent (future) |
+| Corrections are explicit (API, CLI, inspector) | Unambiguous | "No, she lives in Lisbon" in chat is not yet a correction | Since built: §19 (MEM-07) proposes one for the user to confirm |
 
 **Future improvements.** Corrections in conversation: the turn recognises "no, actually…" and
 proposes a correction the user confirms. Undo a correction in one click (restore the old,
@@ -836,3 +836,90 @@ supersede the new). A belief browser showing each chain of supersessions.
 correction*, active, and was embedded for recall; the old one stayed, marked *no longer true*,
 with no *Correct* button (a superseded belief is corrected through what replaced it).
 
+
+---
+
+## 19. Corrections in conversation (MEM-07)
+
+§18 made correction explicit: the inspector, the CLI, the API. People do not correct like that.
+They say *"No, she lives in Lisbon"* in the middle of a conversation, and a companion that keeps
+repeating "your sister in Porto" afterwards has not listened. This section lets the conversation
+propose a correction — and leaves the decision with the user, because the model that reads the
+sentence is a 2B one and the thing it would change is what HEDWIG believes about them.
+
+```mermaid
+graph TB
+    T["conversation.turn.completed<br/><small>input · recalled ids</small>"] --> C{"sounds like a correction?<br/><small>rules: 'no, …', 'actually …', 'that's wrong',<br/>'not X, Y', 'no longer', 'anymore', 'correction:'</small>"}
+    C -->|no| X["nothing (no model call)"]
+    C -->|yes| K["candidates: active beliefs recalled this turn<br/>and the previous one in this session"]
+    K -->|none| X
+    K --> M["utility model, temperature 0<br/><small>extract.correction: which numbered belief does the user<br/>say is wrong, and how should it read? 0 = none</small>"]
+    M --> V{"checks<br/><small>a real candidate · differs · same subject ·<br/>every new word comes from the user</small>"}
+    V -->|fail| X
+    V --> P[("correction_proposal<br/><small>memory · proposed text · session · status</small>")]
+    P --> PR["presence → memory.correction.proposed<br/><small>card under the conversation</small>"]
+    PR -->|"Yes, correct it"| A["MemoryStore.correct (§18)<br/><small>supersedes; trust user; recalled from now on</small>"]
+    PR -->|"No"| D["declined; nothing changes"]
+```
+
+* **After the turn, not inside it.** Detection subscribes to `conversation.turn.completed`, so a
+  reply is never slowed by it and the turn graph does not change. The user has just said the
+  right thing, so the reply already has it in the window; what changes is every *later*
+  conversation.
+* **Rules first, model second.** A cheap rule decides whether the message sounds like a
+  correction at all, so the model is asked only when it might be one — measured below. The
+  model sees only the candidate beliefs (numbered — a small model copies "2" reliably and a ULID
+  unreliably) and the user's message.
+* **Candidates are what HEDWIG was just using.** Beliefs recalled for this turn and for the
+  previous turn in the same session: "No, she lives in Lisbon" answers a reply built from the
+  Porto belief, and its own recall usually finds the same belief by "she" and "lives". Only
+  active or tentative beliefs; episodes are records of what was said and are corrected from the
+  inspector.
+* **Deterministic checks on the model's answer.** The number must be a candidate; the new text
+  must differ from the old; it must share a telling word with the old (same subject); and every
+  content word it adds must appear in the user's message, allowing negation words ("no longer",
+  "not"). A proposal that brings in a word the user did not say is dropped — the model may
+  rephrase, never add.
+* **The user decides.** The proposal appears under the conversation: *You said this is wrong:
+  "The user's sister Ana lives in Porto." Remember instead: "The user's sister Ana lives in
+  Lisbon."* — *Yes, correct it* / *No*. Yes runs §18's correction (trust user, the old kept as
+  history); no changes nothing. A belief replaced in the meantime makes the proposal `stale`.
+  Pending proposals for the conversation on screen come back after a reload; the CLI has
+  `hedwig corrections`.
+* **Never silent.** Nothing about a belief changes without the user's yes. HEDWIG's guesses go
+  through corroboration (§3.2); this one goes through the user.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Proposed, not applied | A misread sentence cannot rewrite a belief | One click per correction | Measured precision is near-perfect over months |
+| After the turn | No latency; the turn graph unchanged | The card arrives a few seconds after the reply | Users miss it |
+| Rule gate before the model | No model call on most turns | A correction with no cue is missed ("We moved to Berlin") | The miss rate matters — let the model judge every turn that recalled a belief |
+| Beliefs only | The common case; episodes stay records | "We fly in July, not June" about a past exchange needs the inspector | Episodes are corrected often |
+| New words must come from the user | The model cannot invent the correction | A good paraphrase with a new word is dropped | Drops are common in the eval |
+
+**Measured** (`scripts/eval_corrections.py`: each case gives the beliefs HEDWIG was using, what
+the user said, and the belief it corrects with a word the correction must carry — or none).
+
+| Run | gemma4:e2b | gemma3:4b |
+|---|---|---|
+| 16 tuning cases, first checks | 9/16 — **6 wrong**, 1 missed | — |
+| 16 tuning cases, bare-negation check added | 16/16 | — |
+| 8 held-out cases, written after tuning | 7/8 (missed "Not London — Manchester": the gate) | 6/8 (1 wrong, 1 missed) |
+| All 24, dash added to the gate | **24/24** | 22/24 — 1 wrong, 1 missed |
+
+The six wrong proposals were the finding: told *"No, I meant the other book"* with the Porto
+belief in view, the model answered "The user's sister Ana does not live in Porto." A small model
+negates whatever it is shown when the message starts with "no". The fix is the last check — a
+rewrite that only negates needs the user to have named the thing; a replacement needs the user's
+own word. gemma3's wrong proposal ("The user's trip is in June", for "we're going to Faro, not
+Porto") drops a word without adding the user's; it would be put to the user, who would say no.
+
+**Verified live** (`gemma4:e2b`, the app): with "The user's sister Ana lives in Porto." believed,
+"Where does my sister Ana live?" → "Ana lives in Porto." Then "No, she lives in Lisbon." → the
+reply thanked the user, and two seconds later the card: *You said this is wrong: "The user's
+sister Ana lives in Porto." Remember instead: "The user's sister Ana lives in Lisbon."* It was
+still there after a reload; *Yes, correct it* superseded the old belief with one at trust
+`user`; and in a new conversation, "Remind me, where does Ana live?" → "Ana lives in Lisbon."
+
+**Future improvements.** Corrections of episodes; "we moved to Berlin" as an update with no
+correction cue; HEDWIG acknowledging the proposal in its reply; undo from the card.

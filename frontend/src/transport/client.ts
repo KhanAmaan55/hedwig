@@ -9,6 +9,7 @@
 import type {
   ApiErrorBody,
   BeliefDispute,
+  CorrectionProposal,
   DisputeChoice,
   EmotionReading,
   DocumentListing,
@@ -198,6 +199,26 @@ export class HedwigClient {
     return this.request<IdentityReport>(
       "GET",
       `/v1/reflection/reports/${encodeURIComponent(newest.month)}`,
+      { auth: true },
+    );
+  }
+
+  /** Corrections heard in a conversation, waiting for the user (docs/06 §19). */
+  async corrections(sessionId: string): Promise<CorrectionProposal[]> {
+    const query = new URLSearchParams({ session_id: sessionId });
+    const body = await this.request<{ proposals: CorrectionProposal[] }>(
+      "GET",
+      `/v1/corrections?${query.toString()}`,
+      { auth: true },
+    );
+    return body.proposals;
+  }
+
+  /** Yes, correct it — or no. Resolves with the settled proposal. */
+  async settleCorrection(proposalId: string, accept: boolean): Promise<CorrectionProposal> {
+    return this.request<CorrectionProposal>(
+      "POST",
+      `/v1/corrections/${encodeURIComponent(proposalId)}/${accept ? "accept" : "decline"}`,
       { auth: true },
     );
   }

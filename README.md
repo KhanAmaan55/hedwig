@@ -247,6 +247,7 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig chat` | Talk to HEDWIG in the terminal (backend must be running); `--session <id>` resumes |
 | `uv run hedwig token show` / `rotate` | The API token that guards your conversations |
 | `uv run hedwig memory list` / `search` / `correct` / `forget` / `restore` | What HEDWIG remembers, under your control |
+| `uv run hedwig corrections` (`--accept` / `--decline`) | Corrections HEDWIG heard in conversation ("no, she lives in Lisbon"), waiting for your yes |
 | `uv run hedwig goals list` / `add` / `done` / `journal` / `note` | What HEDWIG is helping you with over time, and each project's journal |
 | `uv run hedwig docs add` / `list` / `remove` / `forget-folder` | Your notes, recalled and cited (text files; secrets skipped) |
 | `uv run hedwig egress` | Every request HEDWIG made to the internet, and what it sent |
@@ -257,6 +258,7 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig reflect` / `disputes` / `settle` | Run the nightly consolidation now (`--weekly`, `--monthly` for the reviews); settle the conflicts it found |
 | `uv run hedwig report [MONTH]` | The monthly report: how HEDWIG changed and why, what it learned, how your goals went |
 | `uv run python scripts/eval_honesty.py` | The honesty gate: adversarial probes in extreme moods, zero violations allowed |
+| `uv run python scripts/eval_corrections.py` | Measure corrections heard in conversation against a live model |
 | `uv run python scripts/eval_recall.py` | Measure recall on the fixed corpus, words only and with meaning |
 | `uv run hedwig doctor` | Check everything HEDWIG needs, with what to do about anything wrong |
 | `uv run hedwig restore <backup>` | Put a nightly backup back (HEDWIG stopped; the current database is kept) |

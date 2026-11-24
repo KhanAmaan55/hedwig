@@ -67,6 +67,7 @@ from hedwig.llm.responder import GatewayResponder
 from hedwig.memory import (
     SUBSCRIPTION,
     CaptureService,
+    CorrectionProposer,
     EmbeddingIndex,
     HybridRetrieval,
     MemoryMaintenance,
@@ -138,6 +139,7 @@ class Container:
     nightly: NightlyReflection
     periodic: PeriodicReflection
     presence: Presence
+    corrections: CorrectionProposer
     """Who has the app open, and which conversation it shows (ADR-0026)."""
     initiative: Initiative
     exporter: Exporter
@@ -284,6 +286,9 @@ def build_container(
     memory = SqliteMemoryStore(database, clock=clock, bus=bus)
     # Recall by meaning (docs/06 §17.2): written by events, repaired by a task, and off — with
     # memory's health saying why — when sqlite-vec or the embedding model is missing.
+    # Who has the app open (ADR-0026): initiative and corrections both deliver through it.
+    presence = Presence(clock)
+
     embeddings = EmbeddingIndex(
         database,
         llm,
@@ -527,6 +532,13 @@ def build_container(
     registry.register("memory", memory, depends_on=("bus",))
     registry.register("maintenance", maintenance, depends_on=("memory",), critical=False)
     registry.register("embeddings", embeddings, depends_on=("memory", "llm"), critical=False)
+    # "No, she lives in Lisbon" proposes a correction the user confirms (MEM-07, docs/06 §19).
+    corrections = CorrectionProposer(
+        database, store=memory, gateway=llm, clock=clock, presence=presence, bus=bus
+    )
+    registry.register(
+        "corrections", corrections, depends_on=("bus", "memory", "llm"), critical=False
+    )
     registry.register("relationship", relationship, depends_on=("memory",), critical=False)
     if emotion is not None:
         registry.register("emotion", emotion, depends_on=("bus",), critical=False)
@@ -584,7 +596,6 @@ def build_container(
         )
 
     # Speaking first (INI-01, docs/11 §14, ADR-0026): rare, goal-linked, only with the app open.
-    presence = Presence(clock)
     initiative = Initiative(
         database=database,
         brain=brain,
@@ -697,6 +708,7 @@ def build_container(
         nightly=nightly,
         periodic=periodic,
         presence=presence,
+        corrections=corrections,
         initiative=initiative,
         exporter=exporter,
         purger=purger,

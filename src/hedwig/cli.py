@@ -617,6 +617,30 @@ def reflect(
 
 
 @app.command()
+def corrections(
+    accept: Annotated[str | None, typer.Option(help="Yes, correct it: a proposal's id.")] = None,
+    decline: Annotated[str | None, typer.Option(help="No, leave it: a proposal's id.")] = None,
+    every: Annotated[bool, typer.Option("--all", help="Include settled proposals.")] = False,
+) -> None:
+    """Corrections HEDWIG heard in conversation ("no, she lives in Lisbon"), waiting for you."""
+    if accept or decline:
+        chosen = accept or decline
+        assert chosen is not None
+        done = _call(lambda c: c.settle_correction(chosen, accept=bool(accept)))
+        assert isinstance(done, dict)
+        print(f"{done['status']}: {done['proposed_text']}")
+        return
+    found = _call(lambda c: c.corrections("all" if every else "proposed"))
+    assert isinstance(found, list)
+    if not found:
+        print("nothing waiting")
+    for item in found:
+        print(f"{item['id']}  [{item['status']}]")
+        print(f"    was:     {item['current_text']}")
+        print(f"    becomes: {item['proposed_text']}")
+
+
+@app.command()
 def initiative(
     check: Annotated[
         bool, typer.Option("--check", help="See now whether HEDWIG has something to say.")

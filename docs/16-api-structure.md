@@ -80,6 +80,8 @@ Base: `http://127.0.0.1:8730/v1`
 | `POST` | `/memory/{id}/forget` | Tombstone (reversible) |
 | `POST` | `/memory/{id}/restore` | Undo a tombstone |
 | `PATCH` | `/memory/{id}` | Correct content or confidence — user corrections are `USER` trust and supersede (built: MEM-03, returns the replacement; docs/06 §18) |
+| `GET` | `/corrections?status=&session_id=` | Corrections heard in conversation, waiting for the user (MEM-07, docs/06 §19) |
+| `POST` | `/corrections/{id}/accept`, `/corrections/{id}/decline` | Yes (the belief is corrected as proposed) or no; 409 once settled or if the belief changed since |
 | `GET` | `/memory/timeline?from=&to=` | Episodes over a period, for the timeline view |
 | `GET` | `/entities?q=` · `GET /entities/{id}` | Entities, their memories, relationship state |
 | `GET` | `/beliefs?subject=&status=` | Beliefs, including superseded history |
@@ -198,6 +200,7 @@ accordingly, but clients branch on `code`.
 | `expression.frame` | see [15](15-avatar-controller.md) §4 | yes |
 | `mind.update` | `{emotion?, personality?, goals?}` | yes (snapshots) |
 | `memory.event` | `{kind, memory_id, summary}` | yes |
+| `memory.correction.proposed` | a correction proposal (`GET /corrections` shape) — to present sockets (MEM-07) | no |
 | `initiative.message` | `{offer_id, kind, session_id, message_id, text, created_at}` — HEDWIG spoke first (INI-01) | no |
 | `notice` | `{level, code, message, actions?}` | no |
 | `approval.request` | `{call_id, tool, args, reason}` | no |

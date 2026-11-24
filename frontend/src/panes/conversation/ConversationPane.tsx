@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 
 import { Composer } from "./Composer";
+import { useCorrections, type CorrectionsApi } from "./useCorrections";
 import {
   browserStorage,
   useConversation,
@@ -25,6 +26,8 @@ export interface ConversationPaneProps {
   readonly live?: StreamApi | null;
   /** *Not interested* on what HEDWIG said unprompted (docs/11 §14). */
   readonly initiativeApi?: Pick<HedwigClient, "dismissOffer">;
+  /** Corrections heard in conversation, for the user to confirm (docs/06 §19). */
+  readonly correctionsApi?: CorrectionsApi;
 }
 
 const STAGES: Record<string, string> = {
@@ -48,23 +51,26 @@ export default function ConversationPane({
   explainApi = client,
   live = null,
   initiativeApi = client,
+  correctionsApi = client,
 }: ConversationPaneProps): JSX.Element {
   const voice = useVoice(voiceApi);
   const microphone = useMicrophone(listenApi);
-  const { messages, busy, loading, error, stage, send, stop, startOver } = useConversation(
-    api,
-    storage,
-    (text, streamed) => {
-      voice.say(text, { fallback: !streamed });
-    },
-    live,
-  );
+  const { sessionId, messages, busy, loading, error, stage, send, stop, startOver } =
+    useConversation(
+      api,
+      storage,
+      (text, streamed) => {
+        voice.say(text, { fallback: !streamed });
+      },
+      live,
+    );
   // Speaking over the user is the one interruption that must never happen (VOI-03).
   const sendAndHush = async (text: string) => {
     voice.stop();
     return send(text);
   };
 
+  const corrections = useCorrections(sessionId, live, correctionsApi);
   const [why, setWhy] = useState<string | null>(null);
   const [waved, setWaved] = useState<ReadonlySet<string>>(new Set());
   const notInterested = (offerId: string) => {
@@ -81,7 +87,7 @@ export default function ConversationPane({
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [messages, busy]);
+  }, [messages, busy, corrections.waiting.length]);
 
   return (
     <section className="panel conversation" aria-label="Conversation">
@@ -176,6 +182,45 @@ export default function ConversationPane({
             )}
           </li>
         ))}
+        {corrections.waiting.map((proposal) => (
+          <li key={proposal.id} className="message message--hedwig correction" role="group">
+            <span className="message__speaker">Did I get this wrong?</span>
+            <p className="message__text">
+              You said this is wrong: “{proposal.current_text}”
+              <br />
+              Remember instead: “{proposal.proposed_text}”
+            </p>
+            <p className="message__meta">
+              <button
+                className="button button--small"
+                type="button"
+                onClick={() => {
+                  corrections.settle(proposal, true);
+                }}
+              >
+                Yes, correct it
+              </button>{" "}
+              <button
+                className="button button--small"
+                type="button"
+                onClick={() => {
+                  corrections.settle(proposal, false);
+                }}
+              >
+                No
+              </button>
+            </p>
+          </li>
+        ))}
+        {corrections.settled.map((proposal) => (
+          <li key={proposal.id} className="message message--hedwig correction" role="status">
+            <p className="message__meta">
+              {proposal.status === "accepted"
+                ? `Corrected: “${proposal.proposed_text}”`
+                : "Left as it was."}
+            </p>
+          </li>
+        ))}
         {busy && !messages.some((m) => m.streaming) && (
           <li className="message message--hedwig message--thinking" role="status">
             <span className="message__speaker">HEDWIG</span>
@@ -184,9 +229,9 @@ export default function ConversationPane({
         )}
       </ol>
 
-      {error !== null && (
+      {(error ?? corrections.error) !== null && (
         <p className="conversation__error" role="alert">
-          {error}
+          {error ?? corrections.error}
         </p>
       )}
 

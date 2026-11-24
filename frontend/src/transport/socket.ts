@@ -8,7 +8,7 @@
  */
 
 import { ApiError, resolveBaseUrl, resolveTokenSource, type TokenSource } from "./client";
-import type { ExpressionIntent, InitiativeMessage, TurnReply } from "./types";
+import type { CorrectionProposal, ExpressionIntent, InitiativeMessage, TurnReply } from "./types";
 
 export interface StreamHandlers {
   readonly onStarted?: (sessionId: string, turnId: string) => void;
@@ -17,11 +17,12 @@ export interface StreamHandlers {
 }
 
 export type StreamApi = Pick<HedwigStream, "send"> &
-  Partial<Pick<HedwigStream, "interrupt" | "watchInitiative" | "showing">>;
+  Partial<Pick<HedwigStream, "interrupt" | "watchInitiative" | "showing" | "watchCorrections">>;
 export type MindStream = Pick<HedwigStream, "watchMind">;
 
 type MindHandler = (intent: ExpressionIntent) => void;
 type InitiativeHandler = (message: InitiativeMessage) => void;
+type CorrectionHandler = (proposal: CorrectionProposal) => void;
 
 interface Envelope {
   readonly type: string;
@@ -64,6 +65,7 @@ export class HedwigStream {
   private readonly initiativeHandlers = new Set<InitiativeHandler>();
   private readonly initiativeLost = new Set<() => void>();
   private showingSession: string | null = null;
+  private readonly correctionHandlers = new Set<CorrectionHandler>();
 
   constructor(
     private readonly url: string = streamUrl(),
@@ -140,6 +142,17 @@ export class HedwigStream {
     };
   }
 
+  /**
+   * Corrections heard in conversation (docs/06 §19), pushed to the app that is present —
+   * delivered while `watchInitiative` holds the presence subscription. Returns an unsubscribe.
+   */
+  watchCorrections(handler: CorrectionHandler): () => void {
+    this.correctionHandlers.add(handler);
+    return () => {
+      this.correctionHandlers.delete(handler);
+    };
+  }
+
   /** The conversation on screen changed (or there is none: "New conversation"). */
   showing(sessionId: string | null): void {
     this.showingSession = sessionId;
@@ -208,6 +221,12 @@ export class HedwigStream {
     const { type, payload, corr } = envelope;
     if (type === "mind.update") {
       for (const handler of this.mindHandlers) handler(payload as unknown as ExpressionIntent);
+      return;
+    }
+    if (type === "memory.correction.proposed") {
+      for (const handler of this.correctionHandlers) {
+        handler(payload as unknown as CorrectionProposal);
+      }
       return;
     }
     if (type === "initiative.message") {

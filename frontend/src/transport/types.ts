@@ -346,3 +346,20 @@ export interface InitiativeMessage {
   text: string;
   created_at: string;
 }
+
+// --- corrections in conversation (MEM-07, docs/06 §19) ------------------------------
+
+/** "No, she lives in Lisbon": a belief, and how the user's words say it should read. */
+export interface CorrectionProposal {
+  id: string;
+  memory_id: string;
+  /** The belief as HEDWIG holds it now; null if it has since been erased. */
+  current_text: string | null;
+  proposed_text: string;
+  session_id: string | null;
+  turn_id: string | null;
+  status: "proposed" | "accepted" | "declined" | "stale";
+  replacement_id: string | null;
+  created_at: string;
+  settled_at: string | null;
+}

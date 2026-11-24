@@ -83,6 +83,7 @@ of what exists in code. Update it as each milestone lands.
 | Local documents: notes recalled with the file named, secrets skipped | **Implemented** (KNW-01, [13](13-knowledge-and-tools.md) §14) | `src/hedwig/knowledge/documents.py`, Data tab *Your documents* |
 | Personality drift from the user's reactions, guarded and revertable | **Implemented** (PER-02, [10](10-personality-engine.md) §13) | `src/hedwig/personality/feedback.py`, Mind tab *Recent changes* |
 | Memory correction: the user's word replaces, the old version stays as history | **Implemented** (MEM-03, [06](06-memory-architecture.md) §18) | `src/hedwig/memory/store.py`, inspector *Correct* |
+| Corrections in conversation: "No, she lives in Lisbon" proposes a correction the user confirms | **Implemented** (MEM-07, [06](06-memory-architecture.md) §19) | `src/hedwig/memory/corrections.py`, conversation pane |
 | Retrieval: semantic/embedding channel; recall eval (recall@5 0.306 → 0.972) | **Implemented** (MEM-04, MEM-05, [06](06-memory-architecture.md) §17) | `src/hedwig/memory/embeddings.py`, `tests/evals/`, `scripts/eval_recall.py` |
 | Conversation log: sessions, messages, turns, working-set log | **Implemented** (M6) | `src/hedwig/sessions/` |
 | The turn/memory loop: capture, reinforcement, persistence | **Implemented** (M6) | [26](26-turn-memory-loop.md) |

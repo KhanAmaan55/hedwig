@@ -220,6 +220,13 @@ class HedwigClient:
     def report(self, month: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/reflection/reports/{month}")
 
+    def corrections(self, status: str = "proposed") -> list[dict[str, Any]]:
+        return list(self._request("GET", "/v1/corrections", params={"status": status})["proposals"])
+
+    def settle_correction(self, proposal_id: str, accept: bool) -> dict[str, Any]:
+        verb = "accept" if accept else "decline"
+        return self._request("POST", f"/v1/corrections/{proposal_id}/{verb}")
+
     def initiative(self) -> dict[str, Any]:
         return self._request("GET", "/v1/initiative")
 

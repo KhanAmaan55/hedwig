@@ -84,6 +84,7 @@ def test_construction_does_no_work(container: Container) -> None:
         "memory",
         "maintenance",
         "embeddings",
+        "corrections",
         "relationship",
         "emotion",
         "personality",
