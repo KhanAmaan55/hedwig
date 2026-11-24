@@ -9,7 +9,7 @@
  * decorative — every number is the backend's, and every button is an API call.
  */
 
-import { useCallback, useMemo, useState, type JSX, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type JSX, type KeyboardEvent } from "react";
 
 import { ApiError, client, type HedwigClient } from "../../transport/client";
 import type {
@@ -20,6 +20,7 @@ import type {
   Gap,
   Goal,
   GoalNote,
+  IdentityReport,
   MemoryItem,
   PersonalityChange,
   PurgePreview,
@@ -33,6 +34,8 @@ export type InspectorApi = Pick<
   | "emotion"
   | "personality"
   | "personalityHistory"
+  | "latestReport"
+  | "markReportSeen"
   | "revertChange"
   | "relationship"
   | "memories"
@@ -174,6 +177,7 @@ function MindTab({ api }: { api: InspectorApi }): JSX.Element {
         <p className="panel__hint">{personality.error ?? "Loading…"}</p>
       )}
       <Changes api={api} onChange={personality.reload} />
+      <MonthReport api={api} onChange={personality.reload} />
     </>
   );
 }
@@ -325,6 +329,79 @@ function Documents({ api }: { api: InspectorApi }): JSX.Element {
             </li>
           ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * How HEDWIG changed last month, and why (docs/12 §7, §16). The point where adaptation becomes
+ * legible: every change is listed with its reason and can be undone right here.
+ */
+function MonthReport({ api, onChange }: { api: InspectorApi; onChange: () => void }): JSX.Element {
+  const report = useLoad(useCallback(() => api.latestReport(), [api]));
+  const shown: IdentityReport | null = report.data ?? null;
+  // Unread as loaded: it stays marked "new" for this viewing while the server records the read.
+  const fresh = shown !== null && !shown.seen_at;
+
+  useEffect(() => {
+    if (shown && !shown.seen_at) void api.markReportSeen(shown.month).catch(() => undefined);
+  }, [api, shown]);
+
+  if (!shown) return <></>;
+  const revert = async (id: string) => {
+    await api.revertChange(id);
+    report.reload();
+    onChange();
+  };
+  const { memory, relationship, goals } = shown;
+  return (
+    <section aria-label="This month" className="report">
+      <h3 className="inspector__heading">
+        {shown.month}
+        {fresh && " · new"}
+      </h3>
+      <p className="item__text">{shown.summary ?? "Not enough conversation to summarise."}</p>
+      <p className="item__meta">
+        {relationship.conversations} conversations, {relationship.turns} turns ·{" "}
+        {memory.episodes_formed + memory.beliefs_formed} memories formed, {memory.merged} merged,{" "}
+        {memory.faded} faded, {memory.forgotten_by_you} forgotten by you
+      </p>
+      {shown.personality.length > 0 && (
+        <ul className="items">
+          {shown.personality.map((change) => (
+            <li key={change.id} className={`item${change.reverted_at ? " item--muted" : ""}`}>
+              <p className="item__meta">
+                {change.trait} {change.delta > 0 ? "+" : "−"}
+                {Math.abs(change.delta).toFixed(3)} · {SOURCES[change.source] ?? change.source}
+                {change.rationale ? ` · ${change.rationale}` : ""}
+                {change.reverted_at ? " · undone" : ""}
+              </p>
+              {!change.reverted_at && (
+                <button
+                  className="button button--small"
+                  type="button"
+                  onClick={() => void revert(change.id)}
+                >
+                  Revert
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {[
+        ...goals.finished.map((g) => `finished: ${g}`),
+        ...goals.started.map((g) => `started: ${g}`),
+      ].map((line) => (
+        <p key={line} className="item__meta">
+          {line}
+        </p>
+      ))}
+      {shown.reactions.map((r) => (
+        <p key={`${r.trait}-${r.wanted}`} className="item__meta">
+          you asked for {r.wanted} {r.trait} {r.times}×
+        </p>
+      ))}
     </section>
   );
 }

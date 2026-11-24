@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../transport/client";
@@ -59,6 +59,8 @@ function fakeApi(overrides: Partial<InspectorApi> = {}): InspectorApi {
       version: 1,
     }),
     personalityHistory: vi.fn().mockResolvedValue([]),
+    latestReport: vi.fn().mockResolvedValue(null),
+    markReportSeen: vi.fn().mockResolvedValue(undefined),
     revertChange: vi.fn().mockResolvedValue(undefined),
     relationship: vi.fn().mockResolvedValue({
       familiarity: 0.1,
@@ -166,6 +168,51 @@ describe("InspectorPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Revert" }));
     await waitFor(() => {
       expect(api.revertChange).toHaveBeenCalledWith("hist_1");
+    });
+  });
+
+  it("shows last month's report, marks it read, and undoes a change from it", async () => {
+    const api = fakeApi({
+      latestReport: vi.fn().mockResolvedValue({
+        month: "2026-10",
+        created_at: "",
+        seen_at: null,
+        summary: "A month of compilers and travel plans.",
+        personality: [
+          {
+            id: "hist_2",
+            trait: "verbosity",
+            delta: -0.02,
+            source: "inferred",
+            applied_at: "2026-10-12",
+            reverted_at: null,
+            rationale: 'the user\'s reactions: "wall of text"',
+          },
+        ],
+        relationship: { turns: 40, conversations: 9 },
+        memory: {
+          episodes_formed: 30,
+          beliefs_formed: 6,
+          merged: 2,
+          faded: 1,
+          forgotten_by_you: 0,
+          remembered_now: 120,
+        },
+        goals: { finished: ["Ship the compiler"], dropped: [], started: [] },
+        reactions: [{ trait: "verbosity", wanted: "less", times: 3 }],
+      }),
+    });
+    render(<InspectorPane api={api} />);
+    const report = await screen.findByRole("region", { name: "This month" });
+    expect(report).toHaveTextContent("2026-10 · new");
+    expect(report).toHaveTextContent("compilers and travel plans");
+    expect(report).toHaveTextContent("9 conversations");
+    expect(report).toHaveTextContent("finished: Ship the compiler");
+    expect(report).toHaveTextContent("you asked for less verbosity 3×");
+    expect(api.markReportSeen).toHaveBeenCalledWith("2026-10");
+    fireEvent.click(within(report).getByRole("button", { name: "Revert" }));
+    await waitFor(() => {
+      expect(api.revertChange).toHaveBeenCalledWith("hist_2");
     });
   });
 

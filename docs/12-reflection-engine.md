@@ -387,7 +387,8 @@ third person; the reflection takes 1–3 s after the end.
 REF-02 was split before starting. Built: the nightly run and the stages that act on what HEDWIG
 already records. Deferred, each waiting for something that does not exist yet: procedures (no
 procedural memory), drift analysis (PER-02), FTS/vacuum maintenance, and the weekly and monthly
-tiers T3 and T4. (Drift analysis has since landed as the `drift` stage, PER-02 — docs/10 §13.)
+tiers T3 and T4. (Drift analysis has since landed as the `drift` stage, PER-02 — docs/10 §13; T3 and T4 as
+REF-03 — §16.)
 
 ```mermaid
 graph TB
@@ -489,3 +490,58 @@ minutes, the embedding subscriber two. Re-run: reflection finished 15 s after th
 ended, with a summary and three correct beliefs. Scripted tests could not see this — a recorded
 model answers instantly.
 
+
+---
+
+## 16. Implementation record — T3 weekly and T4 monthly (REF-03)
+
+```mermaid
+graph TB
+    W["reflection.weekly · Mondays, after the nightly run"] --> WS["summarise last week<br/><small>from session + day summaries → period_summary week:YYYY-Www,<br/>edges to the week's conversations</small>"]
+    WS --> WG["goal review<br/><small>active, untouched 4 weeks → blocked, with a journal note</small>"]
+    WG --> WH["health in the run record<br/><small>findings kept/dismissed · recall dropped/turn · failed turns</small>"]
+    M["reflection.monthly · the 1st, after the nightly run"] --> MS["summarise last month<br/><small>→ period_summary month:YYYY-MM</small>"]
+    MS --> R[("identity_report<br/><small>month · summary_id · created · seen</small>")]
+    R --> V["the report, assembled when read<br/><small>summary · trait changes with reasons · relationship ·<br/>memory formed/merged/forgotten · goals · how you reacted</small>"]
+    V --> UI["Mind tab: This month · Revert beside each change<br/>hedwig report · GET /v1/reflection/reports/{month}"]
+```
+
+* **Weekly (T3).** A summary of last week's themes from that week's conversation and day
+  summaries, linked to the conversations themselves (§8: edges to leaves, never to other
+  summaries). A goal review: an active goal untouched for four weeks becomes *blocked*, with a
+  journal note saying why — the user can activate it again with one click, and nothing else
+  about it changes. And the week's health in the run record: findings kept and dismissed, recall
+  candidates dropped per turn, failed or truncated turns. Each part yields to a conversation in
+  progress, like the nightly run, and runs once per week (`reflection_run`, tier `T3`).
+* **Monthly (T4) — the identity report.** Last month summarised the same way, and an
+  `identity_report` row naming the month and its summary. **The report is assembled when it is
+  read**, from the live tables: what the month was about, every personality change with its
+  reason and a *Revert*, where the relationship stands and how many turns there were, memories
+  formed, merged and forgotten, goals finished, dropped and started, and how the user reacted to
+  HEDWIG's manner. Assembling it at read time means an erased memory leaves past reports too,
+  and a change reverted after the fact shows as reverted — a frozen copy would quietly keep
+  both.
+* **When the summaries are thin.** A period summary is written from the period's conversation
+  and day summaries; with fewer than two, from the exchanges themselves (at least three). Found
+  live on `gemma4:e2b`: three conversations in a month, one of which got a session summary (the
+  others failed schema validation) — the month went unsummarised until the fallback. A week or
+  month with fewer than three exchanges is recorded as `too_little_to_summarise`.
+* **Scheduling.** Both are daily tasks one hour after the nightly run that do nothing unless last
+  week's or last month's run is still to do (`reflection_run`): a missed Monday or 1st — laptop
+  closed — is caught up the next day, and a first start never writes a report for a month before
+  HEDWIG knew the user.
+* **Live check** (`gemma4:e2b`, three conversations across a simulated October): the October
+  report held a correct paragraph on the month (the compiler, the sister in Lisbon, the Porto
+  trip, Portuguese lessons, the request to be concise), the verbosity change with its reason, 3
+  conversations and 7 turns, 8 episodes and 1 belief formed, and the goal started.
+* **Deferred, with reasons:** entity resolution (there are almost no entities to resolve yet),
+  relationship trajectory (only the current relation is kept, no history to trace), and a
+  model-written self-assessment (measured repeatedly in this project: a 2B model's judgement of
+  itself would read as authoritative and is not — the report shows the user's own reactions
+  instead).
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Report assembled at read time | Purge and revert stay true in past reports | A report can change after the month | Users want an immutable record (export one) |
+| Stale goals blocked, not abandoned | Nothing is lost; one click undoes it | A long-paused project shows as blocked | Users find it nagging |
+| No model self-assessment | Nothing in the report is invented | Less narrative | A utility model passes a held-out honesty check for it |

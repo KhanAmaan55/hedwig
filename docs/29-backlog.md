@@ -91,7 +91,7 @@ the repository, ahead of any new cognitive capability.
 | 8 | Avatar: lip sync | **PARTIAL** | Openness from the voice's loudness (AVA-02), shape from the words' vowels (AVA-03); no phoneme timing (Piper exposes none) |
 | 8 | Avatar: mind state over WebSocket | **COMPLETE** (EMO-02) | `mind.update` pushed on change, woken by turn activity; polling only as fallback |
 | 9 | Voice: TTS, ASR, streaming, interruption | **PARTIAL** | Local Piper TTS (VOI-01), local faster-whisper ASR (VOI-02), Stop mid-reply (VOI-03); speech is not streamed sentence by sentence yet |
-| 10 | Reflection (T1–T4) | **PARTIAL** | T1 per conversation (REF-01) and T2 nightly (REF-02, PER-02 drift stage); weekly T3 and monthly T4 not built |
+| 10 | Reflection (T1–T4) | **COMPLETE** | T1 per conversation (REF-01), T2 nightly (REF-02, PER-02 drift stage), T3 weekly review and T4 monthly identity report (REF-03) |
 | 11 | Goals | **PARTIAL** | Store, lifecycle, journal (MEM-06), in the prompt, from reflection; no retrieval boost or proactive check-ins |
 | 13 | Security: loopback bind, CORS, log redaction | **COMPLETE** | `api/app.py`, `core/logging.py` |
 | 13 | Security: API token | **COMPLETE** (was MISSING) | `core/token.py`, `api/auth.py`; `test_token_file.py`, `test_conversation_api.py` (ADR-0022) |
@@ -390,6 +390,22 @@ its memory gets better with time rather than only bigger.
 - **Tests:** `test_nightly_reflection.py` (16), inspector tests; live held-out judgement on
   `gemma4:e2b` (docs/12 §15.1).
 
+#### REF-03 — T3 weekly review and T4 monthly identity report
+**Status:** Done (2026-11-24) · **P2** · **L** · **Depends on:** REF-01, REF-02, PER-02, GOA-02 · **Modules:** `reflection/periodic.py`, `reflection/common.py`, `api/routes/reflection.py`, CLI, inspector, migration 0021
+
+*As a user, I want to see once a month how HEDWIG changed and why, so that its growth is something
+I can read, question and undo.*
+
+- **Weekly:** last week summarised (`period_summary week:YYYY-Www`, edges to its conversations);
+  active goals untouched four weeks → blocked with a journal note; the week's health in the run
+  record. Once per week; yields to a conversation.
+- **Monthly:** last month summarised; `identity_report` row; the report assembled at read time —
+  summary, trait changes with reasons and *Revert*, relationship, memory formed/merged/forgotten,
+  goals finished/dropped/started, the user's reactions. *This month* in the Mind tab, marked seen
+  when shown; `hedwig report`; `GET /v1/reflection/reports[/{month}]`.
+- **Deferred:** entity resolution, relationship trajectory, model self-assessment (docs/12 §16).
+- **Tests:** `test_periodic_reflection.py` (11), inspector test; live month on `gemma4:e2b`.
+
 ### 4.9 Goals
 
 #### GOA-01 — Goal store and lifecycle
@@ -487,8 +503,7 @@ me whether everything HEDWIG needs is in place and what to do if not.
 Every story in §4 is done, except COG-03 (deferred: there is no side-effecting tool to approve).
 What the product still lacks, highest value first — each a story to write before building:
 
-1. **Reflection T3/T4** — a weekly review (themes, stale goals, entity resolution) and the monthly
-   identity report that makes growth legible (docs/12 §6–7).
+1. ~~**Reflection T3/T4**~~ — done as REF-03 (2026-11-24); entity resolution deferred.
 2. **Proactive curiosity and goal check-ins over the live channel** — findings and follow-ups
    arrive today only when the user next speaks; the socket now exists to offer them (docs/11).
 3. **Corrections in conversation** — "no, she lives in Lisbon" proposing a correction the user
@@ -749,3 +764,11 @@ tables, or copied rows). Nothing existing was changed or deleted.
   gemma3:4b and gemma4:e2b**. Every early flag was the judge misreading an honest reply; each is
   pinned, beside must-catch cases. Design in [21](21-security-privacy-ethics.md) §6.1.1.
 
+### 2026-11-24 — Session 2: next steps
+
+- **REF-03** Weekly review and monthly identity report — `reflection/periodic.py`, scheduled daily
+  after the nightly run and idempotent per period, so a missed day is caught up. The report is
+  assembled when read, so an erased memory or a reverted change is true in past reports too.
+  Shared model-asking helpers moved to `reflection/common.py`. Found live: session reflection
+  sometimes fails validation, leaving a month with one summary — the period summary now falls
+  back to the exchanges. Migration 0021. Design in [12](12-reflection-engine.md) §16.

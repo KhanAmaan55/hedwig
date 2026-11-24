@@ -214,6 +214,15 @@ class HedwigClient:
     def reflect(self) -> dict[str, Any]:
         return self._request("POST", "/v1/reflection/run")
 
+    def reports(self) -> list[dict[str, Any]]:
+        return list(self._request("GET", "/v1/reflection/reports")["reports"])
+
+    def report(self, month: str) -> dict[str, Any]:
+        return self._request("GET", f"/v1/reflection/reports/{month}")
+
+    def run_periodic(self, which: str) -> dict[str, Any]:
+        return self._request("POST", f"/v1/reflection/{which}/run")
+
     def disputes(self) -> list[dict[str, Any]]:
         return list(self._request("GET", "/v1/reflection/disputes")["disputes"])
 
