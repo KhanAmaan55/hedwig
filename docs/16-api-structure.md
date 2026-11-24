@@ -135,8 +135,8 @@ accumulates errors forever, and the user is the highest-trust source available.
 |---|---|---|
 | `GET` | `/health` | Liveness plus per-subsystem status (models, db, indexes, jobs) |
 | `GET` | `/explain/{message_id}` | **Why HEDWIG said that** — see §6 |
-| `GET` | `/traces/{correlation_id}` | The causal event graph for a turn or job |
-| `GET` | `/metrics` | Prometheus text format |
+| `GET` | `/traces/{correlation_id}` | The causal event graph for a turn or job (built: OBS-01 — stages, handlers, model and tool calls, events on one timeline; `GET /traces` lists recent turns and jobs; docs/19 §13) |
+| `GET` | `/metrics` | Prometheus text format (built: OBS-01, docs/19 §13) |
 | `GET`/`PATCH` | `/config` | Safe config subset; secrets never returned |
 | `GET` | `/jobs` · `POST /jobs/{name}/trigger` · `/pause` | Job control |
 | `GET` | `/notices` | Unresolved system notices (dead letters, degraded subsystems, pending approvals) |
@@ -561,7 +561,7 @@ graph LR
 
 **Not built:** `prompt_version` per call (it is in the request's metadata, which `llm_call` does
 not store; recording it is a column, worth adding when the first regression needs bisecting,
-docs/19 §12). Also the causal event graph of `/traces/{correlation_id}`.
+docs/19 §12). The causal event graph is `/traces/{correlation_id}` (OBS-01, docs/19 §13).
 
 **Verified live** on a streamed `gemma4:e2b` turn ("What time is it right now?"): *Why?* showed
 the search that found nothing, `get_datetime — ok`, the seven directives, the plan, the mood

@@ -97,7 +97,7 @@ the repository, ahead of any new cognitive capability.
 | 13 | Security: API token | **COMPLETE** (was MISSING) | `core/token.py`, `api/auth.py`; `test_token_file.py`, `test_conversation_api.py` (ADR-0022) |
 | 13 | Security: injection defence | **COMPLETE** | Guard and quarantine (COG-01), untrusted and curated content labelled as data, trust propagation (docs/13 §3) |
 | 13 | Observability: correlation ids, `llm_call`, `working_set_log`, turn record | **COMPLETE** | `test_turn_memory_loop.py` |
-| 13 | Observability: `/explain`, traces, `/metrics`, doctor | **PARTIAL** | `/v1/explain` and *Why?* (SEC-01), `hedwig doctor` (SEC-03); `/traces` and `/metrics` not built |
+| 13 | Observability: `/explain`, traces, `/metrics`, doctor | **COMPLETE** | `/v1/explain` and *Why?* (SEC-01), `hedwig doctor` (SEC-03), spans, `/v1/traces`, `/v1/metrics`, the doctor's last week (OBS-01) |
 
 ### 3.3 Integration gaps, debt and documentation drift
 
@@ -503,8 +503,24 @@ to it. Token delivered by the Electron preload and, in browser dev, injected by 
 
 ### 4.13 Security and reliability
 
+#### OBS-01 — Traces and metrics
+**Status:** Done (2026-11-24) · **P2** · **M** · **Depends on:** SEC-01 · **Modules:** `core/tracing.py`, `telemetry/`, `brain/graph.py`, `core/bus/in_process.py`, `api/routes/telemetry.py`, CLI, doctor, migration 0024
+
+*As the developer, I want to see where a turn's time went and what it set off, and whether
+HEDWIG is healthy over time, without writing SQL.*
+
+- A `span` per turn stage and per bus handler delivery, under the work's correlation id; names
+  and timings only. A turn now binds its own correlation id, so direct calls trace too.
+- `GET /v1/traces`, `GET /v1/traces/{id}`: one timeline of stages, handlers, model and tool
+  calls and events. `hedwig trace [--recent | ID]`.
+- `GET /v1/metrics`: Prometheus text — the records (turns, memory, drift, reflection lag,
+  curiosity, initiative, corrections, dead letters), the gateway's counters and the bus queues.
+  `hedwig metrics`. `hedwig doctor` reports the last week's turns, failures and dead letters.
+- **Tests:** `test_telemetry.py` (8: correlation, redaction, failures, jobs, pruning, every
+  designed metric exposed once), a doctor test.
+
 #### SEC-01 — `/explain/{message_id}`
-**Status:** Done (2026-11-20; `/traces` not yet) · **P2** · **M** · **Depends on:** FND-02 · Assembly of existing records (docs/16 §6).
+**Status:** Done (2026-11-20; `/traces` since, as OBS-01) · **P2** · **M** · **Depends on:** FND-02 · Assembly of existing records (docs/16 §6).
 
 #### SEC-02 — Export and purge
 **Status:** Done (2026-11-20) · **P2** · **L** · **Depends on:** MEM-02 · **Modules:** `privacy/`, `api/routes/privacy.py`, CLI, inspector *Data* tab, migration 0016
@@ -542,7 +558,7 @@ What the product still lacks, highest value first — each a story to write befo
    (2026-11-24); OS notifications when the window is hidden remain.
 3. ~~**Corrections in conversation**~~ — done as MEM-07 (2026-11-24); episodes and cue-less
    updates ("we moved to Berlin") remain.
-4. **`/traces` and `/metrics`** — the causal trace of a turn, and counters for the doctor to read.
+4. ~~**`/traces` and `/metrics`**~~ — done as OBS-01 (2026-11-24).
 5. **Retrieval** — HyDE; embeddings for REF-02's judge candidates and capture novelty; a held-out
    half of the recall corpus; a goal-relevance boost.
 6. **Voice** — speak sentence by sentence as the reply streams; true phoneme timing if a voice
@@ -824,3 +840,10 @@ tables, or copied rows). Nothing existing was changed or deleted.
   fixed), then 24/24 on gemma4 and 22/24 on gemma3. Live: "No, she lives in Lisbon." → card two
   seconds after the reply → *Yes* → a new conversation answered "Ana lives in Lisbon."
   Migration 0023; design in [06](06-memory-architecture.md) §19.
+- **OBS-01** Traces and metrics — spans for every turn stage and bus handler (`core/tracing.py`,
+  0.025 ms a write, ~0.6 ms a turn), assembled with model calls, tools and events into
+  `/v1/traces/{id}` by `hedwig.telemetry`; `/v1/metrics` computed from the records at scrape.
+  Found while testing: a turn called directly (tests, eval scripts) wrote model calls with no
+  correlation id, because only the API set one; `Brain.run_turn` now binds its own. Live on
+  gemma4: a 896 ms turn, 845 of it the reply's model call, and the twelve handlers it set off.
+  Migration 0024; design in [19](19-observability.md) §13.

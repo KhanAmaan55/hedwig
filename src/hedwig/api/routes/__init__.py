@@ -21,6 +21,7 @@ from hedwig.api.routes import (
     reflection,
     speech,
     stream,
+    telemetry,
 )
 
 v1 = APIRouter(prefix="/v1")
@@ -37,6 +38,7 @@ v1.include_router(initiative.router)
 v1.include_router(speech.router)
 v1.include_router(stream.router)
 v1.include_router(explain.router)
+v1.include_router(telemetry.router)
 v1.include_router(reflection.router)
 v1.include_router(privacy.router)
 v1.include_router(documents.router)

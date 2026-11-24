@@ -100,7 +100,8 @@ of what exists in code. Update it as each milestone lands.
 | API: session end; one turn at a time per session | **Implemented** (FND-03, FND-04; [07](07-brain-langgraph-workflow.md) §16) | `src/hedwig/brain/graph.py`, `src/hedwig/api/routes/conversation.py` |
 | API: WebSocket stream (tokens, stages, completion), REST fallback in the app | **Implemented** (FND-05, [16](16-api-structure.md) §13, [ADR-0023](adr/0023-live-turn-output-through-a-scoped-sink.md)) | `src/hedwig/api/routes/stream.py`, `src/hedwig/core/live.py`, `frontend/src/transport/socket.ts` |
 | API: `/v1/explain` and *Why?* in the app | **Implemented** (SEC-01, [16](16-api-structure.md) §14) | `src/hedwig/explain.py` |
-| API: feedback, replay on reconnect, interrupt, `/traces` | Not started | — |
+| API: traces and metrics; the doctor's last week | **Implemented** (OBS-01, [19](19-observability.md) §13) | `src/hedwig/core/tracing.py`, `src/hedwig/telemetry/` |
+| API: feedback, replay on reconnect | Not started | — |
 | CLI: `serve`, `chat`, `token`, `config`, `models`, `version` | **Implemented** (M1, M3, UX-01) | `src/hedwig/cli.py`, `src/hedwig/client.py` |
 | Frontend shell + transport + health view | **Implemented** (M1) | `frontend/` |
 | Electron desktop shell | **Implemented** (M1, [ADR-0015](adr/0015-electron-desktop-shell.md)) | `electron/` |

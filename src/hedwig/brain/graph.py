@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -34,10 +35,12 @@ from hedwig.brain.routing import (
     after_guard,
 )
 from hedwig.brain.state import TurnState, new_turn, summarise
+from hedwig.core.context import correlation_scope
 from hedwig.core.ids import new_id
 from hedwig.core.live import emit_live
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports.sessions import MessageRole
+from hedwig.core.tracing import SpanRecorder
 from hedwig.core.types import TrustTier
 
 logger = get_logger(__name__)
@@ -51,7 +54,10 @@ def build_turn_graph(deps: Collaborators, *, checkpointer: Any | None = None) ->
     that calls no model and touches no memory is cheaper to re-run than to restore, and
     the swap is one argument.
     """
-    nodes = {name: _staged(name, node) for name, node in make_nodes(deps).items()}
+    nodes = {
+        name: _traced(name, _staged(name, node), deps.spans)
+        for name, node in make_nodes(deps).items()
+    }
     # Typed loosely on purpose: LangGraph's generics describe its own machinery, and
     # pinning them here would couple us to a signature that changes between releases.
     builder: Any = StateGraph(TurnState)
@@ -117,6 +123,31 @@ def _staged(name: str, node: Any) -> Any:
         await emit_live("stage", {"stage": stage, "detail": detail})
         result: TurnState = await node(state)
         return result
+
+    return run
+
+
+def _traced(name: str, node: Any, spans: SpanRecorder | None) -> Any:
+    """Record the stage's time as a span (docs/19 §13). Content never: a name and a duration."""
+    if spans is None:
+        return node
+
+    async def run(state: TurnState) -> TurnState:
+        started_at, began = spans.now(), time.monotonic()
+        ok = False
+        try:
+            result: TurnState = await node(state)
+            ok = True
+            return result
+        finally:
+            spans.record(
+                name,
+                kind="stage",
+                started_at=started_at,
+                duration_ms=(time.monotonic() - began) * 1000,
+                ok=ok,
+                correlation_id=state.get("correlation_id"),
+            )
 
     return run
 
@@ -226,17 +257,20 @@ class Brain:
 
         # One turn at a time per session: a second message waits, then sees the first's reply
         # in its window (docs/07 §16).
-        async with self._session_turn(session_id):
-            if client_message_id:
-                earlier = await self.collaborators.conversation.replay(
-                    session_id, client_message_id
-                )
-                if earlier is not None:
-                    logger.info("turn replayed", extra=fields(turn=earlier.get("turn_id")))
-                    replayed: TurnState = TurnState(**earlier)  # type: ignore[typeddict-item]
-                    return replayed
-            final: TurnState = await self._graph.ainvoke(state, config=config)
-        logger.info("turn completed", extra=fields(**summarise(final)))
+        # The turn binds its own correlation id, so every row it writes — model calls, tools,
+        # events, spans — joins up whoever called it: the API, the CLI or a test (docs/19 §3).
+        with correlation_scope(state["correlation_id"]):
+            async with self._session_turn(session_id):
+                if client_message_id:
+                    earlier = await self.collaborators.conversation.replay(
+                        session_id, client_message_id
+                    )
+                    if earlier is not None:
+                        logger.info("turn replayed", extra=fields(turn=earlier.get("turn_id")))
+                        replayed: TurnState = TurnState(**earlier)  # type: ignore[typeddict-item]
+                        return replayed
+                final: TurnState = await self._graph.ainvoke(state, config=config)
+            logger.info("turn completed", extra=fields(**summarise(final)))
         return final
 
     @property

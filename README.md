@@ -261,6 +261,8 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run python scripts/eval_corrections.py` | Measure corrections heard in conversation against a live model |
 | `uv run python scripts/eval_recall.py` | Measure recall on the fixed corpus, words only and with meaning |
 | `uv run hedwig doctor` | Check everything HEDWIG needs, with what to do about anything wrong |
+| `uv run hedwig trace` (`--recent`, or an id) | Where the time went in the latest turn: stages, what it set off, model calls |
+| `uv run hedwig metrics` | Health and cognitive metrics in Prometheus text (also `GET /v1/metrics`) |
 | `uv run hedwig restore <backup>` | Put a nightly backup back (HEDWIG stopped; the current database is kept) |
 | `uv run hedwig config` | The effective configuration after all layers resolve |
 
