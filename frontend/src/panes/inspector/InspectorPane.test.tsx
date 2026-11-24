@@ -219,6 +219,64 @@ describe("InspectorPane", () => {
     });
   });
 
+  it("reverting from the report refreshes Recent changes too, and says when it fails", async () => {
+    const change = {
+      id: "hist_2",
+      trait: "verbosity",
+      delta: -0.02,
+      source: "inferred",
+      applied_at: "2026-10-12",
+      reverted_at: null as string | null,
+      rationale: null,
+    };
+    const undone = { ...change, reverted_at: "2026-11-24" };
+    const month = (personality: (typeof change)[]) => ({
+      month: "2026-10",
+      created_at: "",
+      seen_at: "2026-11-01",
+      summary: null,
+      personality,
+      relationship: { turns: 1, conversations: 1 },
+      memory: {
+        episodes_formed: 0,
+        beliefs_formed: 0,
+        merged: 0,
+        faded: 0,
+        forgotten_by_you: 0,
+        remembered_now: 0,
+      },
+      goals: { finished: [], dropped: [], started: [] },
+      reactions: [],
+    });
+    const api = fakeApi({
+      personalityHistory: vi.fn().mockResolvedValueOnce([change]).mockResolvedValue([undone]),
+      latestReport: vi
+        .fn()
+        .mockResolvedValueOnce(month([change]))
+        .mockResolvedValue(month([undone])),
+      revertChange: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new ApiError("unreachable", "HEDWIG is not reachable.", 0, null, true),
+        )
+        .mockResolvedValue(undefined),
+    });
+    render(<InspectorPane api={api} />);
+    const report = await screen.findByRole("region", { name: "This month" });
+    const changes = await screen.findByRole("region", { name: "Recent changes" });
+
+    fireEvent.click(within(report).getByRole("button", { name: "Revert" }));
+    expect(await within(report).findByRole("alert")).toHaveTextContent("not reachable");
+    fireEvent.click(within(report).getByRole("button", { name: "Revert" }));
+
+    await waitFor(() => {
+      expect(within(changes).queryByRole("button", { name: "Revert" })).not.toBeInTheDocument();
+    });
+    expect(changes).toHaveTextContent("undone");
+    expect(within(report).queryByRole("button", { name: "Revert" })).not.toBeInTheDocument();
+    expect(within(report).queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("forgets a memory on the user's word", async () => {
     const api = fakeApi();
     render(<InspectorPane api={api} />);

@@ -220,8 +220,9 @@ class HedwigClient:
     def report(self, month: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/reflection/reports/{month}")
 
-    def traces(self, limit: int = 20) -> list[dict[str, Any]]:
-        return list(self._request("GET", "/v1/traces", params={"limit": limit})["traces"])
+    def traces(self, limit: int = 20, *, kind: str | None = None) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"limit": limit, **({"kind": kind} if kind else {})}
+        return list(self._request("GET", "/v1/traces", params=params)["traces"])
 
     def trace(self, correlation_id: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/traces/{correlation_id}")

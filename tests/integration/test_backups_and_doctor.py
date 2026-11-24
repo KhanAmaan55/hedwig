@@ -174,3 +174,27 @@ def test_the_doctor_reads_the_last_week(tmp_path: Path) -> None:
     week = findings["last 7 days"]
     assert week.status == "warn" and week.detail.startswith("2 turns, 1 failed")
     assert "hedwig trace" in week.fix
+
+
+def test_dead_letters_warn_even_in_a_week_with_no_conversations(tmp_path: Path) -> None:
+    config = load_config(runtime={"data_dir": str(tmp_path)}, api={"port": 9})
+    database = Database(config.database_path)
+    from hedwig.core.store import MigrationRunner
+
+    MigrationRunner(database, MIGRATIONS_DIR, clock=FakeClock("2026-11-20T09:00:00+00:00")).run()
+    database.execute(
+        "INSERT INTO event (id, type, occurred_at, source, correlation_id, payload) "
+        "VALUES ('evt_1', 'memory.episode.stored', '2026-11-20', 'memory', 'c', '{}')"
+    )
+    database.execute(
+        "INSERT INTO event_dead_letter (id, subscription, event_id, attempts, error, created_at) "
+        "VALUES ('dl_1', 'memory.embed', 'evt_1', 5, 'boom', '2026-11-21')"
+    )
+    database.close()
+
+    findings = {
+        f.name: f for f in run_checks(config, migrations=MIGRATIONS_DIR, today=date(2026, 11, 23))
+    }
+
+    week = findings["last 7 days"]
+    assert week.status == "warn" and week.detail == "0 turns, 0 failed, p95 0.0 s, 1 dead letters"

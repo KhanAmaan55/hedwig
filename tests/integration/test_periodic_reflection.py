@@ -81,8 +81,9 @@ async def test_a_goal_untouched_for_four_weeks_is_blocked_with_a_note(
 async def test_the_review_steps_aside_while_the_user_is_talking(
     running_container: Container, clock: FakeClock
 ) -> None:
-    clock.advance(days=7)  # a new week; last week's review is still to do
     await running_container.brain.run_turn("Hello.", session_id="s")
+    clock.advance(days=7)  # a new week; last week's review is still to do
+    await running_container.brain.run_turn("Hello again.", session_id="s")
     assert (await running_container.periodic.weekly())["status"] == "yielded"
 
 
@@ -141,7 +142,10 @@ async def test_without_a_model_the_report_waits_and_comes_later(
     assert running_container.periodic.reports() == []
 
     llm_provider.available = True
-    llm_provider.script("reflect.month", json_response({"title": "t", "summary": "A month."}))
+    llm_provider.script(
+        "reflect.month",
+        json_response({"title": "January", "summary": "The user worked on the compiler."}),
+    )
     assert (await running_container.periodic.monthly(force=True))["status"] == "completed"
 
 
@@ -174,6 +178,83 @@ async def test_a_quiet_month_still_gets_a_report(
     made = await running_container.periodic.monthly(force=True)
     assert made["status"] == "completed"
     assert (await running_container.periodic.report("2026-01"))["summary"] is None
+
+
+async def test_a_month_left_waiting_is_caught_up_after_the_calendar_moves_on(
+    container: Container, llm_provider: RecordedProvider, clock: FakeClock
+) -> None:
+    """January waits for the model into March: January is still reported, then February."""
+    await _conversation(container, "the compiler")
+    await _conversation(container, "Porto")
+    clock.advance(days=32)  # 2 February
+    llm_provider.available = False
+    assert (await container.periodic.monthly(force=True))["status"] == "waiting_for_model"
+
+    clock.advance(days=28)  # 2 March: last month is February now
+    llm_provider.available = True
+    llm_provider.script(
+        "reflect.month",
+        json_response({"title": "January", "summary": "The user worked on the compiler."}),
+    )
+    january = await container.periodic.monthly(force=True)
+    february = await container.periodic.monthly(force=True)
+
+    assert (january["period"], january["status"]) == ("month:2026-01", "completed")
+    assert (february["period"], february["status"]) == ("month:2026-02", "completed")
+    assert [r["month"] for r in container.periodic.reports()] == ["2026-02", "2026-01"]
+    assert (await container.periodic.monthly(force=True))["status"] == "already_done"
+
+
+async def test_a_summary_stored_without_its_links_is_linked_when_the_run_is_retried(
+    container: Container, llm_provider: RecordedProvider, clock: FakeClock
+) -> None:
+    first = await _conversation(container, "the Rust compiler")
+    second = await _conversation(container, "learning Portuguese")
+    clock.advance(days=4)
+    llm_provider.script(
+        "reflect.week", json_response({"title": "A week", "summary": "Rust and Portuguese."})
+    )
+    review = await container.periodic.weekly(force=True)
+    summary = await container.memory.summary_for(review["period"])
+    assert summary is not None
+    # The process stopped after the summary was stored, before its links and its run record.
+    container.database.execute("DELETE FROM memory_derivation WHERE derived_id = ?", (summary.id,))
+    container.database.execute("DELETE FROM reflection_run WHERE tier = 'T3'")
+
+    retried = await container.periodic.weekly(force=True)
+
+    assert retried["summary"] == "already_there" and retried["status"] == "completed"
+    assert set(await container.memory.sources_of(summary.id)) == {first, second}
+
+
+async def test_two_weeks_summarised_in_the_same_words_each_keep_their_summary(
+    container: Container, llm_provider: RecordedProvider, clock: FakeClock
+) -> None:
+    same = {"title": "A quiet week", "summary": "The user practised Portuguese with HEDWIG."}
+    await _conversation(container, "Portuguese verbs")
+    await _conversation(container, "Portuguese nouns")
+    clock.advance(days=4)
+    llm_provider.script("reflect.week", json_response(same))
+    one = await container.periodic.weekly(force=True)
+    await _conversation(container, "Portuguese verbs again")
+    await _conversation(container, "Portuguese nouns again")
+    clock.advance(days=7)
+    llm_provider.script("reflect.week", json_response(same))
+    two = await container.periodic.weekly(force=True)
+
+    assert one["summary"] == two["summary"] == "written"
+    assert one["period"] != two["period"] and one["summary_id"] != two["summary_id"]
+
+
+def test_report_boundaries_compare_as_utc() -> None:
+    """Stored timestamps are UTC; a local midnight must be compared as the same instant."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from hedwig.reflection.periodic import PeriodicReflection
+
+    local_midnight = datetime(2026, 2, 1, tzinfo=ZoneInfo("Asia/Kolkata"))
+    assert PeriodicReflection._iso(local_midnight) == "2026-01-31T18:30:00.000+00:00"
 
 
 @pytest.fixture

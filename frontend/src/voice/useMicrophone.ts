@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type HedwigClient } from "../transport/client";
 
 export type ListenApi = Pick<HedwigClient, "speechStatus" | "transcribe">;
-export type MicState = "idle" | "recording" | "transcribing";
+export type MicState = "idle" | "starting" | "recording" | "transcribing";
 
 export interface Microphone {
   readonly available: boolean;
@@ -20,6 +20,13 @@ export interface Microphone {
   readonly error: string | null;
   /** Start recording, or stop and transcribe. Resolves with the text when stopping. */
   readonly toggle: () => Promise<string | null>;
+  /** Start recording, unless already recording or starting. Resolves whether it is recording. */
+  readonly start: () => Promise<boolean>;
+  /**
+   * Stop and transcribe. A stop that arrives while the microphone is still starting is kept and
+   * applied the moment it starts, so a quick press-and-release never leaves one recording.
+   */
+  readonly stop: () => Promise<string | null>;
 }
 
 export function useMicrophone(api: ListenApi): Microphone {
@@ -27,8 +34,11 @@ export function useMicrophone(api: ListenApi): Microphone {
   const [reason, setReason] = useState("");
   const [state, setState] = useState<MicState>("idle");
   const [error, setError] = useState<string | null>(null);
+  // The truth for decisions: refs change at once, React state on the next render.
+  const phase = useRef<MicState>("idle");
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const stopWhenStarted = useRef<((heard: string | null) => void) | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,10 +55,8 @@ export function useMicrophone(api: ListenApi): Microphone {
     };
   }, [api]);
 
-  const toggle = useCallback(async (): Promise<string | null> => {
-    setError(null);
-    if (state === "recording" && recorder.current) {
-      const active = recorder.current;
+  const finish = useCallback(
+    async (active: MediaRecorder): Promise<string | null> => {
       const stopped = new Promise<Blob>((resolve) => {
         active.onstop = () => {
           resolve(new Blob(chunks.current, { type: active.mimeType || "audio/webm" }));
@@ -57,6 +65,7 @@ export function useMicrophone(api: ListenApi): Microphone {
       active.stop();
       for (const track of active.stream.getTracks()) track.stop();
       recorder.current = null;
+      phase.current = "transcribing";
       setState("transcribing");
       try {
         const heard = await api.transcribe(await stopped);
@@ -65,24 +74,62 @@ export function useMicrophone(api: ListenApi): Microphone {
         setError(caught instanceof ApiError ? caught.message : "HEDWIG could not hear that.");
         return null;
       } finally {
+        phase.current = "idle";
         setState("idle");
       }
-    }
+    },
+    [api],
+  );
+
+  const start = useCallback(async (): Promise<boolean> => {
+    if (phase.current !== "idle") return phase.current === "recording";
+    phase.current = "starting";
+    setState("starting");
+    setError(null);
+    let started: MediaRecorder;
     try {
       const media = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const started = new MediaRecorder(media);
-      chunks.current = [];
-      started.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.current.push(event.data);
-      };
-      started.start();
-      recorder.current = started;
-      setState("recording");
+      started = new MediaRecorder(media);
     } catch {
+      phase.current = "idle";
+      setState("idle");
       setError("The microphone is not available.");
+      const waiting = stopWhenStarted.current;
+      stopWhenStarted.current = null;
+      waiting?.(null);
+      return false;
     }
-    return null;
-  }, [api, state]);
+    chunks.current = [];
+    started.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.current.push(event.data);
+    };
+    started.start();
+    recorder.current = started;
+    phase.current = "recording";
+    setState("recording");
+    const waiting = stopWhenStarted.current;
+    if (waiting) {
+      stopWhenStarted.current = null;
+      void finish(started).then(waiting);
+    }
+    return true;
+  }, [finish]);
 
-  return { available, reason, state, error, toggle };
+  const stop = useCallback(async (): Promise<string | null> => {
+    if (phase.current === "starting") {
+      return new Promise((resolve) => {
+        stopWhenStarted.current = resolve;
+      });
+    }
+    if (phase.current !== "recording" || !recorder.current) return null;
+    return finish(recorder.current);
+  }, [finish]);
+
+  const toggle = useCallback(async (): Promise<string | null> => {
+    if (phase.current === "starting" || phase.current === "recording") return stop();
+    if (phase.current === "idle") await start();
+    return null;
+  }, [start, stop]);
+
+  return { available, reason, state, error, toggle, start, stop };
 }

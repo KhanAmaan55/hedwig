@@ -146,7 +146,7 @@ def _recent(path: Path, today: date) -> Finding:
             connection.close()
     except sqlite3.Error:
         return Finding("last 7 days", "ok", "not recorded by this version yet")
-    if not rows:
+    if not rows and not dead:  # dead letters with no turns are background work failing
         return Finding("last 7 days", "ok", "no conversations")
     failed = sum(status == "failed" for status, _ in rows)
     latencies = sorted(ms for _, ms in rows if ms is not None)

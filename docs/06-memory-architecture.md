@@ -888,6 +888,15 @@ graph TB
   `hedwig corrections`.
 * **Never silent.** Nothing about a belief changes without the user's yes. HEDWIG's guesses go
   through corroboration (§3.2); this one goes through the user.
+* **Settled once** (after review). A yes claims the proposal (`proposed` → `accepted`, only if
+  still `proposed`) *before* the correction is awaited, so a second yes, or a no, arriving while
+  the correction waits on a busy subscriber is refused (`409`) — never two corrections, never a
+  "declined" proposal whose correction was applied. If the correction fails for a reason other
+  than the belief having changed, the claim is released and the user can answer again; in the
+  app the card stays, saying the answer did not reach HEDWIG.
+* **Once per conversation.** The same correction heard in two conversations is proposed in each:
+  the card belongs to the conversation on screen. Within one conversation it is proposed once.
+  An empty rewrite is refused like any other bad one (`empty`).
 
 | Tradeoff | Gained | Given up | Revisit if |
 |---|---|---|---|
@@ -969,7 +978,11 @@ Held-out by kind, after: lexical 1.000, paraphrase 0.938, question 0.938, goal *
 * **Messages about the user's aims search the aims.** "Am I on track?" shares no word with the
   marathon. When a message matches the aims cue (`refers_to_aims`, shared by the planner and the
   goals mind reader) and goals are active, the planner adds up to three of them as queries.
-  Goal questions went from 0.271 to 1.000.
+  Goal questions went from 0.271 to 1.000. Words that are about aims only when the user is in
+  the sentence — *progress, practice, training, update on* — count only then: "How's my
+  training going?" is about the marathon, "Explain neural network training." is not. A goal's
+  query is its description with only what the renderer appended removed, so "Learn (Rust)" keeps
+  its parentheses.
 * **And the reply is told what the moment is.** Found live on `gemma4:e2b`: with the run
   recalled, the reply to "Am I on track?" was *"What are you referring to?"*. The goals mind
   reader now adds a directive — answer about the listed goals, do not ask which — and three of
@@ -983,6 +996,11 @@ Held-out by kind, after: lexical 1.000, paraphrase 0.938, question 0.938, goal *
   overlap, so "vegetarian" and "does not eat meat" never met. `EmbeddingIndex.close_beliefs` adds
   pairs within cosine distance 0.22, from the stored vectors (no model call). Measured with
   nomic-embed-text: paraphrased or conflicting beliefs 0.02–0.18, unrelated beliefs 0.265 and up.
+  Pairs are read closest first, one at a time; pairs already judged (or merged by rule) are
+  passed over *before* the night's limit of twenty counts, so each night's batch is new pairs
+  and later ones are reached once earlier ones settle. The distance is still computed for every
+  pair of beliefs (thousands of beliefs is millions of pairs, each a few microseconds); a
+  nearest-neighbour index is the fix when that shows up.
 * **Capture novelty stays on words.** Embedding a memory before deciding whether to keep it
   would put the model on the write path, which §17.2 keeps off it; the nightly merge and judge
   now catch what word overlap misses, after the fact.
@@ -995,6 +1013,7 @@ Held-out by kind, after: lexical 1.000, paraphrase 0.938, question 0.938, goal *
 | Goal queries by cue | No model call; goal questions answered | A cue list; "how's the thing going" may miss | Misses show up — let the planner model judge |
 | HyDE off | No model call per turn; better recall@5 | Some MRR | A larger utility model guesses without inventing |
 | Judge pairs by a fixed cosine threshold | Measured, simple | Tied to one embedding model | The model changes: re-measure (the script is in §20) |
+| All-pairs distance in SQL | No index to keep in sync | Quadratic in the number of beliefs | The nightly judge stage takes seconds: a vec0 KNN index per belief |
 
 **Future improvements.** A larger held-out corpus — 30 queries is small, and every change here
 was judged on it once. Entities for the structural channel (it is empty without entity links).

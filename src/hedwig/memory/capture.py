@@ -226,6 +226,8 @@ class CaptureService:
         # Novelty: reinforce rather than duplicate.
         recent = await self._store.recent_episodes(limit=40)
         for existing in recent:
+            if not _same_kind_of_record(candidate, existing):
+                continue
             if similarity(text, f"{existing.title} {existing.content}") >= DUPLICATE_THRESHOLD:
                 await self._store.reinforce(
                     [existing.id], reinforcement(corroborated=True), cause="duplicate capture"
@@ -333,3 +335,17 @@ def novelty_against(text: str, existing: Sequence[Episode]) -> float:
         return 1.0
     closest = max(similarity(text, f"{episode.title} {episode.content}") for episode in existing)
     return max(0.0, 1.0 - closest)
+
+
+def _same_kind_of_record(candidate: EpisodeCandidate, existing: Episode) -> bool:
+    """A period summary duplicates only a summary of the same period.
+
+    Two quiet weeks can be summarised in near-identical words; folding the second into the first
+    would leave that week with no summary and keep its review from ever finishing (docs/12 §16).
+    """
+    if candidate.kind is not EpisodeKind.PERIOD_SUMMARY:
+        return True
+    return (
+        existing.kind is EpisodeKind.PERIOD_SUMMARY
+        and existing.provenance.source_ref == candidate.source_ref
+    )

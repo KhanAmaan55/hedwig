@@ -71,7 +71,12 @@ STYLE_FIRST_LOOK = timedelta(days=7)
 
 
 class BeliefNeighbours(Protocol):
-    def close_beliefs(self) -> list[tuple[MemoryId, MemoryId, float]]: ...
+    def close_beliefs(
+        self,
+        *,
+        limit: int | None = None,
+        skip: Callable[[MemoryId, MemoryId], bool] | None = None,
+    ) -> list[tuple[MemoryId, MemoryId, float]]: ...
 
 
 class Generator(Protocol):
@@ -359,14 +364,28 @@ class NightlyReflection:
         if self._neighbours is None:
             return []
         live = {belief.id: belief for belief in await self._store.live_beliefs()}
-        found = []
-        for first, second, _ in self._neighbours.close_beliefs():
+
+        def ordered(first: MemoryId, second: MemoryId) -> tuple[Belief, Belief] | None:
             a, b = live.get(first), live.get(second)
             if a is None or b is None or a.provenance.tier != b.provenance.tier:
-                continue
-            older, newer = (a, b) if a.valid_from <= b.valid_from else (b, a)
-            if similarity(older.statement, newer.statement) < SAME:  # SAME merges by rule
-                found.append((older, newer))
+                return None
+            return (a, b) if a.valid_from <= b.valid_from else (b, a)
+
+        def settled_or_not_for_us(first: MemoryId, second: MemoryId) -> bool:
+            pair = ordered(first, second)
+            return (
+                pair is None
+                or similarity(pair[0].statement, pair[1].statement) >= SAME  # merged by rule
+                or self._verdict(*pair) is not None  # judged on an earlier night
+            )
+
+        found = []
+        for first, second, _ in self._neighbours.close_beliefs(
+            limit=MAX_PAIRS, skip=settled_or_not_for_us
+        ):
+            pair = ordered(first, second)
+            if pair is not None:
+                found.append(pair)
         return found
 
     async def _absorb(self, winner: Belief, loser: Belief) -> bool:

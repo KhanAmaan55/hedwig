@@ -23,6 +23,9 @@ from hedwig.core.ports import Clock
 logger = get_logger(__name__)
 
 Deliver = Callable[[str, Mapping[str, Any]], Awaitable[None]]
+DELIVERY_TIMEOUT = 5.0
+"""Seconds one listener may take to accept a message. A client that stopped reading would
+otherwise hold up whoever broadcast — an initiative check, a correction — indefinitely."""
 
 
 @dataclass(slots=True)
@@ -34,8 +37,9 @@ class Listener:
 
 
 class Presence:
-    def __init__(self, clock: Clock) -> None:
+    def __init__(self, clock: Clock, *, delivery_timeout: float = DELIVERY_TIMEOUT) -> None:
         self._clock = clock
+        self._timeout = delivery_timeout
         self._listeners: dict[str, Listener] = {}
 
     def join(self, deliver: Deliver, *, session_id: str | None = None) -> str:
@@ -63,10 +67,15 @@ class Presence:
         return latest.session_id if latest else None
 
     async def broadcast(self, kind: str, payload: Mapping[str, Any]) -> int:
-        """Deliver to every listener; one that fails is dropped. Returns how many received it."""
+        """Deliver to every listener; one that fails or is too slow is dropped.
+
+        Returns how many received it. Each delivery has its own deadline, so one stalled client
+        cannot keep the others, or the caller, waiting.
+        """
         listeners = list(self._listeners.values())
         results = await asyncio.gather(
-            *(item.deliver(kind, payload) for item in listeners), return_exceptions=True
+            *(asyncio.wait_for(item.deliver(kind, payload), self._timeout) for item in listeners),
+            return_exceptions=True,
         )
         delivered = 0
         for item, result in zip(listeners, results, strict=True):

@@ -199,6 +199,8 @@ def content_words(text: str) -> set[str]:
 
 def acceptable(old: str, new: str, said: str) -> str | None:
     """Why a proposed rewrite is refused, or None when it may be put to the user."""
+    if not new.strip():
+        return "empty"
     if " ".join(new.split()).lower() == " ".join(old.split()).lower():
         return "unchanged"
     before, after, spoken = content_words(old), content_words(new), content_words(said)
@@ -368,10 +370,11 @@ class CorrectionProposer:
     async def _propose(
         self, old: Belief, corrected: str, *, session_id: str, turn_id: str
     ) -> dict[str, Any] | None:
+        # Once per conversation: another conversation's card is not on this one's screen.
         duplicate = self._db.query_one(
             "SELECT id FROM correction_proposal WHERE memory_id = ? AND proposed_text = ? "
-            "AND status = 'proposed'",
-            (old.id, corrected),
+            "AND status = 'proposed' AND COALESCE(session_id, '') = ?",
+            (old.id, corrected, session_id or ""),
         )
         if duplicate is not None:
             return None
@@ -416,39 +419,62 @@ class CorrectionProposer:
         return dict(row) if row else None
 
     async def accept(self, proposal_id: str) -> dict[str, Any]:
-        """Yes: §18's correction, in the words the user agreed to."""
-        proposal = self._pending(proposal_id)
+        """Yes: §18's correction, in the words the user agreed to.
+
+        The proposal is claimed before the correction is awaited, so a second yes or a no that
+        arrives meanwhile is refused instead of settling it twice (or correcting twice).
+        """
+        proposal = self._claim(proposal_id, "accepted")
         try:
             replacement = await self._store.correct(
                 MemoryId(proposal["memory_id"]), text=proposal["proposed_text"]
             )
         except (ConflictError, NotFoundError):
             # Replaced, forgotten or erased since: the proposal is about something gone.
-            self._settle(proposal_id, "stale")
+            self._settle_claimed(proposal_id, "stale")
             raise
-        self._settle(proposal_id, "accepted", replacement=str(replacement))
+        except BaseException:
+            self._release(proposal_id)  # nothing changed: the user can answer again
+            raise
+        self._settle_claimed(proposal_id, "accepted", replacement=str(replacement))
         return self.proposal(proposal_id) or {}
 
     async def decline(self, proposal_id: str) -> dict[str, Any]:
-        self._pending(proposal_id)
-        self._settle(proposal_id, "declined")
+        self._claim(proposal_id, "declined")
         return self.proposal(proposal_id) or {}
 
-    def _pending(self, proposal_id: str) -> dict[str, Any]:
+    def _claim(self, proposal_id: str, status: str) -> dict[str, Any]:
+        """proposed → `status`, only if it is still proposed; the one place a proposal settles."""
         proposal = self.proposal(proposal_id)
         if proposal is None:
             raise NotFoundError("No such proposal.", proposal_id=proposal_id)
-        if proposal["status"] != "proposed":
+        claimed = self._db.execute(
+            "UPDATE correction_proposal SET status = ?, settled_at = ? "
+            "WHERE id = ? AND status = 'proposed'",
+            (status, self._now(), proposal_id),
+        )
+        if not claimed:
+            now = self.proposal(proposal_id) or proposal
             raise ConflictError(
-                f"That proposal was already {proposal['status']}.", proposal_id=proposal_id
+                f"That proposal was already {now['status']}.", proposal_id=proposal_id
             )
         return proposal
 
-    def _settle(self, proposal_id: str, status: str, *, replacement: str | None = None) -> None:
+    def _settle_claimed(
+        self, proposal_id: str, status: str, *, replacement: str | None = None
+    ) -> None:
+        """Finish an accept this call claimed (accepted, no replacement yet)."""
         self._db.execute(
             "UPDATE correction_proposal SET status = ?, settled_at = ?, replacement_id = ? "
-            "WHERE id = ?",
+            "WHERE id = ? AND status = 'accepted' AND replacement_id IS NULL",
             (status, self._now(), replacement, proposal_id),
+        )
+
+    def _release(self, proposal_id: str) -> None:
+        self._db.execute(
+            "UPDATE correction_proposal SET status = 'proposed', settled_at = NULL "
+            "WHERE id = ? AND status = 'accepted' AND replacement_id IS NULL",
+            (proposal_id,),
         )
 
     def _now(self) -> str:

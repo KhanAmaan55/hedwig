@@ -1,4 +1,11 @@
-import { useRef, useState, type JSX, type KeyboardEvent, type SyntheticEvent } from "react";
+import {
+  useRef,
+  useState,
+  type JSX,
+  type KeyboardEvent,
+  type PointerEvent,
+  type SyntheticEvent,
+} from "react";
 
 import type { Microphone } from "../../voice/useMicrophone";
 
@@ -19,19 +26,50 @@ export interface ComposerProps {
 /** Enter sends, Shift+Enter is a new line. Text is cleared at once and restored on failure. */
 export function Composer({ onSend, disabled, microphone = null }: ComposerProps): JSX.Element {
   const [text, setText] = useState("");
-  // Push-to-talk: when the press began, and whether that press started the recording.
+  // Push-to-talk: when the press began, and whether that press started the recording. Whether
+  // the microphone is recording is the microphone's to say, never assumed from a press: a start
+  // that failed (permission refused) must not turn the next press into a stop.
   const press = useRef<{ at: number; started: boolean } | null>(null);
-  const recording = useRef(false);
 
   const addHeard = (heard: string | null) => {
     if (heard) setText((current) => (current ? `${current} ${heard}` : heard));
   };
 
-  const toggleMic = async (): Promise<string | null> => {
-    if (!microphone) return null;
-    const wasRecording = recording.current;
-    recording.current = !wasRecording;
-    return microphone.toggle();
+  /** Held and released: send what was heard; if it could not be sent, keep it in the box. */
+  const sendHeard = async (heard: string) => {
+    if (disabled || !(await onSend(heard))) addHeard(heard);
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!microphone) return;
+    try {
+      // Released outside the button, the release still comes here (docs/15 §14).
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // No pointer capture (an old browser, a test DOM): the release over the button still works.
+    }
+    const idle = microphone.state === "idle";
+    press.current = { at: performance.now(), started: idle };
+    if (idle) void microphone.start();
+  };
+
+  const onPointerUp = () => {
+    const pressed = press.current;
+    press.current = null;
+    if (!pressed || !microphone) return;
+    const held = performance.now() - pressed.at >= HOLD_MS;
+    if (pressed.started && !held) return; // a click: keep listening until the next one
+    void microphone.stop().then((heard) => {
+      if (pressed.started && heard) void sendHeard(heard);
+      else addHeard(heard);
+    });
+  };
+
+  const onPointerCancel = () => {
+    // The browser took the gesture (a scroll, a system dialog): stop, and send nothing.
+    const pressed = press.current;
+    press.current = null;
+    if (pressed?.started) void microphone?.stop();
   };
 
   const submit = async () => {
@@ -75,31 +113,19 @@ export function Composer({ onSend, disabled, microphone = null }: ComposerProps)
         <button
           className="button"
           type="button"
-          aria-pressed={microphone.state === "recording"}
+          aria-pressed={microphone.state === "recording" || microphone.state === "starting"}
           disabled={microphone.state === "transcribing"}
           title="Click to talk and see what you said before sending; hold to talk and send on release"
-          onPointerDown={() => {
-            press.current = { at: performance.now(), started: !recording.current };
-            if (!recording.current) void toggleMic();
-          }}
-          onPointerUp={() => {
-            const pressed = press.current;
-            press.current = null;
-            if (!pressed) return;
-            const held = performance.now() - pressed.at >= HOLD_MS;
-            if (pressed.started && !held) return; // a click: keep listening until the next one
-            void toggleMic().then((heard) => {
-              if (pressed.started && held && heard && !disabled) void onSend(heard);
-              else addHeard(heard);
-            });
-          }}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
           onClick={(event) => {
             // The keyboard (Enter or Space on the button) has no pointer: toggle as before.
             if (event.detail !== 0) return;
-            void toggleMic().then(addHeard);
+            void microphone.toggle().then(addHeard);
           }}
         >
-          {microphone.state === "recording"
+          {microphone.state === "recording" || microphone.state === "starting"
             ? "Stop"
             : microphone.state === "transcribing"
               ? "Hearing…"

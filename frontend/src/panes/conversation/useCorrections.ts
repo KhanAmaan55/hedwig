@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { client as defaultClient, type HedwigClient } from "../../transport/client";
+import { ApiError, client as defaultClient, type HedwigClient } from "../../transport/client";
 import type { StreamApi } from "../../transport/socket";
 import type { CorrectionProposal } from "../../transport/types";
 
@@ -30,14 +30,24 @@ export function useCorrections(
   const [waiting, setWaiting] = useState<readonly CorrectionProposal[]>([]);
   const [settled, setSettled] = useState<readonly CorrectionProposal[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Pushed while a load was in flight, and settled here: what a load's snapshot may not know.
+  const pushed = useRef(new Set<string>());
+  const done = useRef(new Set<string>());
 
   useEffect(() => {
     if (sessionId === null) return;
     let cancelled = false;
+    pushed.current = new Set();
     api
       .corrections(sessionId)
       .then((found) => {
-        if (!cancelled) setWaiting(found);
+        if (cancelled) return;
+        // The snapshot may predate a proposal pushed meanwhile, or one settled meanwhile.
+        setWaiting((current) => {
+          const listed = new Set(found.map((p) => p.id));
+          const newer = current.filter((p) => pushed.current.has(p.id) && !listed.has(p.id));
+          return [...found, ...newer].filter((p) => !done.current.has(p.id));
+        });
       })
       .catch(() => undefined); // a convenience: the CLI and the next reload still have them
     return () => {
@@ -50,6 +60,7 @@ export function useCorrections(
     if (!watch) return;
     return watch((proposal) => {
       if (proposal.session_id !== sessionId) return;
+      pushed.current.add(proposal.id);
       setWaiting((current) =>
         current.some((p) => p.id === proposal.id) ? current : [...current, proposal],
       );
@@ -59,16 +70,28 @@ export function useCorrections(
   const settle = useCallback(
     (proposal: CorrectionProposal, accept: boolean) => {
       setError(null);
+      const gone = () => {
+        done.current.add(proposal.id);
+        setWaiting((current) => current.filter((p) => p.id !== proposal.id));
+      };
       api
         .settleCorrection(proposal.id, accept)
-        .then((done) => {
-          setWaiting((current) => current.filter((p) => p.id !== proposal.id));
-          setSettled((current) => [...current, done]);
+        .then((result) => {
+          gone();
+          setSettled((current) => [...current, result]);
         })
-        .catch(() => {
-          // Replaced or erased in the meantime: the proposal is about something gone.
-          setWaiting((current) => current.filter((p) => p.id !== proposal.id));
-          setError("That memory changed since; correct it from the Memory tab if needed.");
+        .catch((caught: unknown) => {
+          if (
+            caught instanceof ApiError &&
+            (caught.code === "conflict" || caught.code === "not_found")
+          ) {
+            // Replaced, erased or already answered: the proposal is about something gone.
+            gone();
+            setError("That memory changed since; correct it from the Memory tab if needed.");
+            return;
+          }
+          // Not reached, or not answered: nothing changed, so the question stays to answer.
+          setError("HEDWIG did not get that answer. Try again.");
         });
     },
     [api],

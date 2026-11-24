@@ -14,13 +14,16 @@ from typing import Any
 from hedwig.core.errors import NotFoundError
 from hedwig.core.store import Database
 
+FAILED = frozenset({"failed", "error", "timeout", "invalid"})
+"""Statuses that ended badly. A tool call that was `denied` did what the user asked."""
+
 
 class Traces:
     def __init__(self, database: Database) -> None:
         self._db = database
 
-    def recent(self, *, limit: int = 20) -> list[dict[str, Any]]:
-        """Recent turns and scheduled runs, newest first."""
+    def recent(self, *, limit: int = 20, kind: str | None = None) -> list[dict[str, Any]]:
+        """Recent turns and scheduled runs, newest first; `kind` keeps only turns or only jobs."""
         rows = self._db.query(
             "SELECT * FROM ("
             "  SELECT correlation_id, 'turn' AS kind, id AS name, status, started_at, latency_ms "
@@ -29,8 +32,8 @@ class Traces:
             "  SELECT correlation_id, 'job' AS kind, task_name AS name, status, started_at, "
             "  (julianday(finished_at) - julianday(started_at)) * 86400000.0 AS latency_ms "
             "  FROM task_run WHERE started_at IS NOT NULL"
-            ") ORDER BY started_at DESC LIMIT ?",
-            (limit,),
+            ") WHERE ? IS NULL OR kind = ? ORDER BY started_at DESC LIMIT ?",
+            (kind, kind, limit),
         )
         return [
             {**dict(r), "latency_ms": round(r["latency_ms"], 1) if r["latency_ms"] else None}
@@ -67,7 +70,7 @@ class Traces:
                 "model_ms": round(sum(e["duration_ms"] or 0 for e in models), 1),
                 "handlers": sum(e["type"] == "handler" for e in entries),
                 "events": sum(e["type"] == "event" for e in entries),
-                "failures": sum(e.get("status") in ("failed", "error") for e in entries),
+                "failures": sum(e.get("status") in FAILED for e in entries),
             },
             "timeline": entries,
         }
@@ -83,7 +86,8 @@ class Traces:
         if turn is not None:
             return {"kind": "turn", **dict(turn)}
         run = self._db.query_one(
-            "SELECT id, task_name, trigger, status, started_at, finished_at, error FROM task_run "
+            # Not `error`: a task's exception text can quote what it was working on.
+            "SELECT id, task_name, trigger, status, started_at, finished_at FROM task_run "
             "WHERE correlation_id = ? AND started_at IS NOT NULL LIMIT 1",
             (correlation_id,),
         )

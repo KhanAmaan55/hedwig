@@ -526,10 +526,27 @@ graph TB
   live on `gemma4:e2b`: three conversations in a month, one of which got a session summary (the
   others failed schema validation) — the month went unsummarised until the fallback. A week or
   month with fewer than three exchanges is recorded as `too_little_to_summarise`.
-* **Scheduling.** Both are daily tasks one hour after the nightly run that do nothing unless last
-  week's or last month's run is still to do (`reflection_run`): a missed Monday or 1st — laptop
-  closed — is caught up the next day, and a first start never writes a report for a month before
-  HEDWIG knew the user.
+* **Scheduling — the oldest unfinished period first.** Both are daily tasks one hour after the
+  nightly run. Each looks at a catch-up window (the last four weeks, the last three months) and
+  takes the **oldest period not completed yet**; the `reflection_run` records are the cursor. So
+  a period that yielded, waited for the model, or found the laptop closed is still done after
+  the calendar moves on: January's report that waited into March is written on the first March
+  run, February's on the next. One period per run keeps each run's model cost to one call.
+  Periods that ended before HEDWIG knew the user (no conversation, memory or goal yet) are closed
+  without a report, so a first start never writes one for a month before it existed. Periods
+  older than the window are let go.
+* **A period is complete only when its summary is stored** (or there was too little to
+  summarise). A summary the capture gate did not store (`not_stored`) or one waiting for the
+  model leaves the period open for the next day. A period summary is never folded into another
+  memory as a near-duplicate unless it is the same period's: two quiet weeks summarised in the
+  same words each keep their own summary.
+* **Edges with the summary, or on the retry.** The summary's `SUMMARISED_FROM` edges are written
+  in one transaction (`record_derivations`). If a run stops between storing the summary and
+  linking it, the next run finds the summary and writes the edges before going on — a summary
+  without its edges would survive erasing the conversations it condenses (§8).
+* **Boundaries in UTC.** Periods are calendar weeks and months in the user's time zone; their
+  boundaries are converted to UTC before they are compared with stored timestamps (all UTC), so
+  a memory made near local midnight is counted in the right month.
 * **Live check** (`gemma4:e2b`, three conversations across a simulated October): the October
   report held a correct paragraph on the month (the compiler, the sister in Lisbon, the Porto
   trip, Portuguese lessons, the request to be concise), the verbosity change with its reason, 3
@@ -545,3 +562,5 @@ graph TB
 | Report assembled at read time | Purge and revert stay true in past reports | A report can change after the month | Users want an immutable record (export one) |
 | Stale goals blocked, not abandoned | Nothing is lost; one click undoes it | A long-paused project shows as blocked | Users find it nagging |
 | No model self-assessment | Nothing in the report is invented | Less narrative | A utility model passes a held-out honesty check for it |
+| Catch-up window, one period per run | Missed periods are not lost; one model call a day | A long backlog takes a day per period; past the window, let go | Users are away for months and want every report |
+| A period stays open until its summary is stored | No period silently "done" without a summary | A summary the gate keeps refusing is retried daily within the window | The retries show up as cost |

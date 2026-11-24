@@ -23,7 +23,8 @@ make it a nuisance.
    turn.
 4. **Templated text, with the content's trust tier.** No model composes the opening.
 5. **Delivered through presence**, an in-process registry of subscribed sockets — ephemeral, not
-   the bus. The message is in the conversation either way; the push only makes it appear now.
+   the bus. The message is in the conversation either way; the push only makes it appear now. Each
+   delivery has its own deadline, so one stalled socket delays no one.
 6. **On by default**, with `initiative.enabled` to turn it off and *Not interested* on every
    message.
 

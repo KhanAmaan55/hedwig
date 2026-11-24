@@ -56,16 +56,22 @@ def admits_not_knowing(reply: str) -> bool:
 
 
 AIMS = re.compile(
-    r"\b(?:on track|working (?:towards?|on)|my (?:project|goal|plan|aim|target)s?|progress|"
-    r"practi[cs](?:e|ing)|training|how(?:'s| is| are) (?:it|things) going|update on|"
-    r"where am i (?:with|at))\b",
+    r"\b(?:on track|working (?:towards?|on)|my (?:project|goal|plan|aim|target)s?|"
+    r"how(?:'s| is| are) (?:it|things) going|where am i (?:with|at))\b",
     re.I,
 )
 """A message about the user's aims that may name none of them (docs/06 §20): "Am I on track?"."""
+AIM_WORDS = re.compile(r"\b(?:progress|practi[cs](?:e|ing)|training|update on)\b", re.I)
+"""Words that are about the user's aims only when the user is in the sentence: "How's my
+training going?" is; "Explain neural network training." is not."""
+ABOUT_THE_USER = re.compile(
+    r"\b(?:i|i'm|i've|me|my|mine|we|we're|our)\b|\bhow(?:'s| is| are) \w+(?: \w+)? going\b",
+    re.I,
+)
 
 
 def refers_to_aims(text: str) -> bool:
-    return bool(AIMS.search(text))
+    return bool(AIMS.search(text)) or bool(AIM_WORDS.search(text) and ABOUT_THE_USER.search(text))
 
 
 def is_greeting(text: str) -> bool:

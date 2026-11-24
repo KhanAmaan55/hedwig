@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import PlainTextResponse
@@ -18,9 +18,11 @@ PROMETHEUS = "text/plain; version=0.0.4; charset=utf-8"
 
 @router.get("/traces", summary="Recent turns and scheduled runs, to trace")
 async def recent(
-    container: ContainerDep, limit: Annotated[int, Query(ge=1, le=200)] = 20
+    container: ContainerDep,
+    limit: Annotated[int, Query(ge=1, le=200)] = 20,
+    kind: Annotated[Literal["turn", "job"] | None, Query()] = None,
 ) -> dict[str, Any]:
-    return {"traces": container.traces.recent(limit=limit)}
+    return {"traces": container.traces.recent(limit=limit, kind=kind)}
 
 
 @router.get("/traces/{correlation_id}", summary="Where the time went in one turn or job")

@@ -369,6 +369,54 @@ describe("ConversationPane voice (docs/15 §13)", () => {
     }
   });
 
+  it("stops speaking when the turn fails after it began streaming", async () => {
+    window.localStorage.setItem("hedwig.voice.enabled", "1");
+    const voice = voiceApi(true);
+    voice.speak.mockResolvedValue(new ArrayBuffer(8));
+    let handlers: StreamHandlers = {};
+    let fail: (error: unknown) => void = () => undefined;
+    const live = {
+      send: vi.fn((_session: string | null, _text: string, given: StreamHandlers = {}) => {
+        handlers = given;
+        return new Promise<TurnReply>((_resolve, reject) => {
+          fail = reject;
+        });
+      }),
+    };
+    try {
+      render(
+        <ConversationPane api={fakeApi()} storage={memoryStorage()} voiceApi={voice} live={live} />,
+      );
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Voice on" })).not.toBeDisabled();
+      });
+      type("tell me about Porto");
+      pressEnter();
+      await waitFor(() => {
+        expect(live.send).toHaveBeenCalled();
+      });
+      act(() => {
+        handlers.onStarted?.("sess_live", "t1");
+        handlers.onToken?.("Porto is lovely in June. The trai");
+      });
+      await waitFor(() => {
+        expect(voice.speak).toHaveBeenCalledTimes(1);
+      });
+
+      await act(async () => {
+        fail(apiError("model_unavailable", 503));
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+      });
+      expect(activityStore.voiced()).toBe(false);
+    } finally {
+      window.localStorage.removeItem("hedwig.voice.enabled");
+    }
+  });
+
   it("explains why the voice cannot be switched on", async () => {
     render(
       <ConversationPane api={fakeApi()} storage={memoryStorage()} voiceApi={voiceApi(false)} />,
@@ -632,6 +680,43 @@ describe("ConversationPane when HEDWIG speaks first (docs/11 §14)", () => {
     });
   });
 
+  it("waits for the user's turn in flight before switching conversations", async () => {
+    const { live, say } = liveWithInitiative();
+    let finish: (reply: TurnReply) => void = () => undefined;
+    live.send.mockImplementation(
+      () =>
+        new Promise<TurnReply>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const storage = memoryStorage("sess_1");
+    render(<ConversationPane api={fakeApi()} storage={storage} live={live} />);
+    await waitFor(() => {
+      expect(live.watchInitiative).toHaveBeenCalled();
+    });
+    type("what is a neap tide?");
+    pressEnter();
+    await waitFor(() => {
+      expect(live.send).toHaveBeenCalled();
+    });
+
+    act(() => {
+      say(offer({ session_id: "sess_other" }));
+    });
+
+    expect(screen.getByText("what is a neap tide?")).toBeInTheDocument();
+    expect(screen.queryByText(/Why are neap tides weaker/)).not.toBeInTheDocument();
+    expect(storage.value).toBe("sess_1");
+
+    await act(async () => {
+      finish({ ...reply("The smaller tide."), message_id: "msg_r" });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText(/Why are neap tides weaker/)).toBeInTheDocument();
+    expect(storage.value).toBe("sess_other");
+  });
+
   it("marks an unprompted message again after a reload", async () => {
     const api = fakeApi({
       history: vi.fn().mockResolvedValue({
@@ -746,5 +831,91 @@ describe("ConversationPane corrections heard in conversation (docs/06 §19)", ()
     });
 
     expect(screen.getAllByRole("button", { name: "Yes, correct it" })).toHaveLength(1);
+  });
+
+  it("keeps one pushed while the list was loading", async () => {
+    let push: (p: CorrectionProposal) => void = () => undefined;
+    let listed: (found: CorrectionProposal[]) => void = () => undefined;
+    const live = {
+      send: vi.fn(),
+      watchCorrections: vi.fn((handler: (p: CorrectionProposal) => void) => {
+        push = handler;
+        return () => undefined;
+      }),
+    };
+    const correctionsApi = {
+      corrections: vi.fn(
+        () =>
+          new Promise<CorrectionProposal[]>((resolve) => {
+            listed = resolve;
+          }),
+      ),
+      settleCorrection: vi.fn(),
+    };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={memoryStorage("sess_1")}
+        live={live}
+        correctionsApi={correctionsApi}
+      />,
+    );
+    await waitFor(() => {
+      expect(live.watchCorrections).toHaveBeenCalled();
+    });
+
+    act(() => {
+      push(proposal({ id: "cor_new" }));
+    });
+    await act(async () => {
+      listed([]); // a snapshot taken before cor_new was made
+      await Promise.resolve();
+    });
+
+    expect(screen.getAllByRole("button", { name: "Yes, correct it" })).toHaveLength(1);
+  });
+
+  it("keeps the question when the answer did not reach HEDWIG", async () => {
+    const correctionsApi = {
+      corrections: vi.fn().mockResolvedValue([proposal()]),
+      settleCorrection: vi
+        .fn()
+        .mockRejectedValueOnce(new ApiError("unreachable", "offline", 0, null, true))
+        .mockResolvedValueOnce(proposal({ status: "accepted", replacement_id: "bel_lisbon" })),
+    };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={memoryStorage("sess_1")}
+        correctionsApi={correctionsApi}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, correct it" }));
+    expect(await screen.findByText(/did not get that answer/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Yes, correct it" }));
+
+    expect(
+      await screen.findByText(/Corrected: “The user's sister Ana lives in Lisbon.”/),
+    ).toBeInTheDocument();
+  });
+
+  it("drops the question when HEDWIG says the memory changed", async () => {
+    const correctionsApi = {
+      corrections: vi.fn().mockResolvedValue([proposal()]),
+      settleCorrection: vi.fn().mockRejectedValue(apiError("conflict", 409)),
+    };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={memoryStorage("sess_1")}
+        correctionsApi={correctionsApi}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Yes, correct it" }));
+
+    expect(await screen.findByText(/memory changed since/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yes, correct it" })).not.toBeInTheDocument();
   });
 });

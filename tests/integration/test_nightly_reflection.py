@@ -417,3 +417,30 @@ async def test_beliefs_that_mean_the_same_in_other_words_reach_the_judge(
     assert "cello" not in listing, "only pairs close in meaning are asked about"
     disputes = await running_container.nightly.disputes()
     assert [(d["first"]["id"], d["second"]["id"]) for d in disputes] == [(vegetarian, no_meat)]
+
+
+async def test_pairs_already_settled_are_passed_over_before_the_nightly_limit(
+    running_container: Container, llm_provider: RecordedProvider
+) -> None:
+    """A night's batch is always new pairs: settled ones never fill it (docs/06 §20)."""
+    prefix = running_container.config.llm.embedding_document_prefix
+    llm_provider.vectors.update(
+        {
+            prefix + "The user is vegetarian.": [1.0, 0, 0, 0, 0, 0, 0, 0],
+            prefix + "The user does not eat meat.": [0.99, 0.1, 0, 0, 0, 0, 0, 0],
+            prefix + "The user avoids meat.": [0.97, 0.25, 0, 0, 0, 0, 0, 0],
+        }
+    )
+    for session, text in enumerate(
+        ("The user is vegetarian.", "The user does not eat meat.", "The user avoids meat.")
+    ):
+        await _belief(running_container, text, session=str(session))
+    await running_container.bus.drain()
+    neighbours = running_container.embeddings
+    everything = neighbours.close_beliefs()
+    closest = everything[0][:2]
+
+    (first,) = neighbours.close_beliefs(limit=1, skip=lambda a, b: (a, b) == closest)
+
+    assert len(everything) == 3
+    assert first == everything[1], "the next pair, not nothing"

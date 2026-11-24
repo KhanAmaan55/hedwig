@@ -147,6 +147,18 @@ function MindTab({ api }: { api: InspectorApi }): JSX.Element {
   const emotion = useLoad(useCallback(() => api.emotion(), [api]));
   const relationship = useLoad(useCallback(() => api.relationship(), [api]));
   const personality = useLoad(useCallback(() => api.personality(), [api]));
+  // One change can be listed twice — under Recent changes and in the month's report. Reverting
+  // it from either reloads both, and the bars.
+  const [history, setHistory] = useState(0);
+  const reloadPersonality = personality.reload;
+  const revert = useCallback(
+    async (id: string) => {
+      await api.revertChange(id);
+      setHistory((value) => value + 1);
+      reloadPersonality();
+    },
+    [api, reloadPersonality],
+  );
   return (
     <>
       <h3 className="inspector__heading">Mood</h3>
@@ -176,8 +188,8 @@ function MindTab({ api }: { api: InspectorApi }): JSX.Element {
       ) : (
         <p className="panel__hint">{personality.error ?? "Loading…"}</p>
       )}
-      <Changes api={api} onChange={personality.reload} />
-      <MonthReport api={api} onChange={personality.reload} />
+      <Changes api={api} version={history} revert={revert} />
+      <MonthReport api={api} version={history} revert={revert} />
     </>
   );
 }
@@ -186,18 +198,46 @@ function MindTab({ api }: { api: InspectorApi }): JSX.Element {
  * How HEDWIG has changed, and why — each change undoable (docs/10 §5.5, §13). Drift that cannot be
  * seen or undone would be a one-way risk; this is where the user sees it.
  */
-function Changes({ api, onChange }: { api: InspectorApi; onChange: () => void }): JSX.Element {
-  const changes = useLoad(useCallback(() => api.personalityHistory(), [api]));
-  const shown: PersonalityChange[] = Array.isArray(changes.data) ? changes.data : [];
-  const revert = async (change: PersonalityChange) => {
-    await api.revertChange(change.id);
-    changes.reload();
-    onChange();
+interface HistoryProps {
+  readonly api: InspectorApi;
+  /** Bumped after any revert, so every view of the history reloads. */
+  readonly version: number;
+  readonly revert: (id: string) => Promise<void>;
+}
+
+/** Reload when `version` moves past its first value. */
+function useReloadOn(version: number, reload: () => void): void {
+  useEffect(() => {
+    if (version > 0) reload();
+  }, [version, reload]);
+}
+
+/** A revert that says when it failed, and leaves the button there to try again. */
+function useRevert(revert: (id: string) => Promise<void>) {
+  const [problem, setProblem] = useState<string | null>(null);
+  const run = (id: string) => {
+    setProblem(null);
+    revert(id).catch((caught: unknown) => {
+      setProblem(caught instanceof ApiError ? caught.message : "Could not undo that. Try again.");
+    });
   };
+  return { problem, run };
+}
+
+function Changes({ api, version, revert }: HistoryProps): JSX.Element {
+  const changes = useLoad(useCallback(() => api.personalityHistory(), [api]));
+  useReloadOn(version, changes.reload);
+  const shown: PersonalityChange[] = Array.isArray(changes.data) ? changes.data : [];
+  const undo = useRevert(revert);
   if (shown.length === 0) return <></>;
   return (
     <section aria-label="Recent changes">
       <h3 className="inspector__heading">Recent changes</h3>
+      {undo.problem && (
+        <p className="panel__hint" role="alert">
+          {undo.problem}
+        </p>
+      )}
       <ul className="items">
         {shown.map((change) => (
           <li key={change.id} className={`item${change.reverted_at ? " item--muted" : ""}`}>
@@ -215,7 +255,9 @@ function Changes({ api, onChange }: { api: InspectorApi; onChange: () => void })
                 <button
                   className="button button--small"
                   type="button"
-                  onClick={() => void revert(change)}
+                  onClick={() => {
+                    undo.run(change.id);
+                  }}
                 >
                   Revert
                 </button>
@@ -337,8 +379,10 @@ function Documents({ api }: { api: InspectorApi }): JSX.Element {
  * How HEDWIG changed last month, and why (docs/12 §7, §16). The point where adaptation becomes
  * legible: every change is listed with its reason and can be undone right here.
  */
-function MonthReport({ api, onChange }: { api: InspectorApi; onChange: () => void }): JSX.Element {
+function MonthReport({ api, version, revert }: HistoryProps): JSX.Element {
   const report = useLoad(useCallback(() => api.latestReport(), [api]));
+  useReloadOn(version, report.reload);
+  const undo = useRevert(revert);
   const shown: IdentityReport | null = report.data ?? null;
   // Unread as loaded: it stays marked "new" for this viewing while the server records the read.
   const fresh = shown !== null && !shown.seen_at;
@@ -348,11 +392,6 @@ function MonthReport({ api, onChange }: { api: InspectorApi; onChange: () => voi
   }, [api, shown]);
 
   if (!shown) return <></>;
-  const revert = async (id: string) => {
-    await api.revertChange(id);
-    report.reload();
-    onChange();
-  };
   const { memory, relationship, goals } = shown;
   return (
     <section aria-label="This month" className="report">
@@ -361,6 +400,11 @@ function MonthReport({ api, onChange }: { api: InspectorApi; onChange: () => voi
         {fresh && " · new"}
       </h3>
       <p className="item__text">{shown.summary ?? "Not enough conversation to summarise."}</p>
+      {undo.problem && (
+        <p className="panel__hint" role="alert">
+          {undo.problem}
+        </p>
+      )}
       <p className="item__meta">
         {relationship.conversations} conversations, {relationship.turns} turns ·{" "}
         {memory.episodes_formed + memory.beliefs_formed} memories formed, {memory.merged} merged,{" "}
@@ -380,7 +424,9 @@ function MonthReport({ api, onChange }: { api: InspectorApi; onChange: () => voi
                 <button
                   className="button button--small"
                   type="button"
-                  onClick={() => void revert(change.id)}
+                  onClick={() => {
+                    undo.run(change.id);
+                  }}
                 >
                   Revert
                 </button>

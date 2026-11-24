@@ -3,6 +3,9 @@
 Counters and histograms over the records survive restarts because they *are* the records; the
 gateway's counters and the bus's queues are since this process started, as Prometheus expects
 of a process. Names follow docs/19 §6.2, so a dashboard needs no translation.
+
+A `_total` counter only ever goes up, so it counts rows in a state they never leave (a finished
+turn, a settled correction, a dismissed offer). What is waiting now is a gauge beside it.
 """
 
 from __future__ import annotations
@@ -63,7 +66,11 @@ def render_metrics(
         "hedwig_turns_total",
         "counter",
         "Turns by how they ended.",
-        _grouped(db, "SELECT status AS k, COUNT(*) AS n FROM turn GROUP BY status", "status"),
+        _grouped(
+            db,
+            "SELECT status AS k, COUNT(*) AS n FROM turn WHERE status != 'running' GROUP BY status",
+            "status",
+        ),
     )
     latencies = [
         float(r["ms"]) / 1000
@@ -242,23 +249,39 @@ def render_metrics(
     out.metric(
         "hedwig_initiative_offers_total",
         "counter",
-        "Unprompted messages by kind and outcome.",
-        [
-            ({"kind": str(r["kind"]), "status": str(r["status"])}, float(r["n"]))
-            for r in db.query(
-                "SELECT kind, status, COUNT(*) AS n FROM initiative_offer GROUP BY kind, status"
-            )
-        ],
+        "Unprompted messages, by kind.",
+        _grouped(db, "SELECT kind AS k, COUNT(*) AS n FROM initiative_offer GROUP BY kind", "kind"),
+    )
+    out.metric(
+        "hedwig_initiative_dismissed_total",
+        "counter",
+        "Unprompted messages the user waved away, by kind.",
+        _grouped(
+            db,
+            "SELECT kind AS k, COUNT(*) AS n FROM initiative_offer WHERE status = 'dismissed' "
+            "GROUP BY kind",
+            "kind",
+        ),
     )
     out.metric(
         "hedwig_corrections_total",
         "counter",
-        "Corrections heard in conversation, by what the user decided.",
+        "Corrections heard in conversation and settled, by what the user decided.",
         _grouped(
             db,
-            "SELECT status AS k, COUNT(*) AS n FROM correction_proposal GROUP BY status",
+            "SELECT status AS k, COUNT(*) AS n FROM correction_proposal "
+            "WHERE status != 'proposed' GROUP BY status",
             "status",
         ),
+    )
+    waiting = db.query_one(
+        "SELECT COUNT(*) AS n FROM correction_proposal WHERE status = 'proposed'"
+    )
+    out.metric(
+        "hedwig_corrections_pending",
+        "gauge",
+        "Corrections waiting for the user's yes or no.",
+        [({}, float(waiting["n"]) if waiting else 0.0)],
     )
 
     # -- the bus (since start) and its dead letters (on record) --------------------------------
