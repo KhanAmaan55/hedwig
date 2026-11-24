@@ -1,9 +1,12 @@
-import { useState, type JSX, type KeyboardEvent, type SyntheticEvent } from "react";
+import { useRef, useState, type JSX, type KeyboardEvent, type SyntheticEvent } from "react";
 
 import type { Microphone } from "../../voice/useMicrophone";
 
 /** docs/16 §7: message text caps at 32 KB. */
 export const MAX_MESSAGE_CHARS = 32_768;
+
+/** Held this long, the Mic button is push-to-talk: release sends what was said (docs/15 §14). */
+export const HOLD_MS = 400;
 
 export interface ComposerProps {
   /** Resolves false when nothing was sent; the text is then given back. */
@@ -16,6 +19,20 @@ export interface ComposerProps {
 /** Enter sends, Shift+Enter is a new line. Text is cleared at once and restored on failure. */
 export function Composer({ onSend, disabled, microphone = null }: ComposerProps): JSX.Element {
   const [text, setText] = useState("");
+  // Push-to-talk: when the press began, and whether that press started the recording.
+  const press = useRef<{ at: number; started: boolean } | null>(null);
+  const recording = useRef(false);
+
+  const addHeard = (heard: string | null) => {
+    if (heard) setText((current) => (current ? `${current} ${heard}` : heard));
+  };
+
+  const toggleMic = async (): Promise<string | null> => {
+    if (!microphone) return null;
+    const wasRecording = recording.current;
+    recording.current = !wasRecording;
+    return microphone.toggle();
+  };
 
   const submit = async () => {
     if (disabled || !text.trim()) return;
@@ -60,11 +77,26 @@ export function Composer({ onSend, disabled, microphone = null }: ComposerProps)
           type="button"
           aria-pressed={microphone.state === "recording"}
           disabled={microphone.state === "transcribing"}
-          title="Talk instead of typing; what you say appears here to send"
-          onClick={() => {
-            void microphone.toggle().then((heard) => {
-              if (heard) setText((current) => (current ? `${current} ${heard}` : heard));
+          title="Click to talk and see what you said before sending; hold to talk and send on release"
+          onPointerDown={() => {
+            press.current = { at: performance.now(), started: !recording.current };
+            if (!recording.current) void toggleMic();
+          }}
+          onPointerUp={() => {
+            const pressed = press.current;
+            press.current = null;
+            if (!pressed) return;
+            const held = performance.now() - pressed.at >= HOLD_MS;
+            if (pressed.started && !held) return; // a click: keep listening until the next one
+            void toggleMic().then((heard) => {
+              if (pressed.started && held && heard && !disabled) void onSend(heard);
+              else addHeard(heard);
             });
+          }}
+          onClick={(event) => {
+            // The keyboard (Enter or Space on the button) has no pointer: toggle as before.
+            if (event.detail !== 0) return;
+            void toggleMic().then(addHeard);
           }}
         >
           {microphone.state === "recording"

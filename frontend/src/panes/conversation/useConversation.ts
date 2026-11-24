@@ -103,6 +103,7 @@ export function useConversation(
   storage: SessionStorage = browserStorage,
   onReply?: (text: string, streamed: boolean) => void,
   live: StreamApi | null = null,
+  onToken?: (piece: string) => void,
 ): Conversation {
   const [sessionId, setSessionId] = useState<string | null>(() => storage.get());
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
@@ -250,12 +251,16 @@ export function useConversation(
               setMessages((current) =>
                 current.map((m) => (m.key === key ? { ...m, text: m.text + piece } : m)),
               );
-              // The mouth moves with the words as they arrive, and rests between them.
-              activityStore.setMouth(0.65);
-              window.clearTimeout(quiet);
-              quiet = window.setTimeout(() => {
-                activityStore.setMouth(0.1);
-              }, 90);
+              onToken?.(piece);
+              // The mouth moves with the words as they arrive, and rests between them — unless
+              // a voice is already saying them (docs/15 §14).
+              if (!activityStore.voiced()) {
+                activityStore.setMouth(0.65);
+                window.clearTimeout(quiet);
+                quiet = window.setTimeout(() => {
+                  activityStore.setMouth(0.1);
+                }, 90);
+              }
             },
           });
         } catch (caught) {
@@ -334,7 +339,7 @@ export function useConversation(
         }
       }
     },
-    [api, busy, sessionId, storage, onReply, live],
+    [api, busy, sessionId, storage, onReply, live, onToken],
   );
 
   const startOver = useCallback(() => {

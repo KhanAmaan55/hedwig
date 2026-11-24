@@ -209,7 +209,10 @@ describe("InspectorPane", () => {
     expect(report).toHaveTextContent("9 conversations");
     expect(report).toHaveTextContent("finished: Ship the compiler");
     expect(report).toHaveTextContent("you asked for less verbosity 3×");
-    expect(api.markReportSeen).toHaveBeenCalledWith("2026-10");
+    // Marked read by an effect after the report renders: on a loaded machine, a beat later.
+    await waitFor(() => {
+      expect(api.markReportSeen).toHaveBeenCalledWith("2026-10");
+    });
     fireEvent.click(within(report).getByRole("button", { name: "Revert" }));
     await waitFor(() => {
       expect(api.revertChange).toHaveBeenCalledWith("hist_2");

@@ -17,6 +17,7 @@ export type Activity = "idle" | "thinking" | "speaking";
 let activity: Activity = "idle";
 let mouth = 0;
 let shape: Viseme = "aa";
+let voiced = false;
 const listeners = new Set<() => void>();
 
 export const activityStore = {
@@ -39,6 +40,16 @@ export const activityStore = {
   },
   setMouth(level: number): void {
     mouth = Math.max(0, Math.min(1, level));
+  },
+  /**
+   * A voice is speaking this reply sentence by sentence (docs/15 §14): the audio owns the mouth,
+   * arriving words do not move it, and the face stays speaking between sentences.
+   */
+  voiced(): boolean {
+    return voiced;
+  },
+  setVoiced(next: boolean): void {
+    voiced = next;
   },
   /** Which of the five mouth shapes, from the words being said (AVA-03). */
   shape(): Viseme {

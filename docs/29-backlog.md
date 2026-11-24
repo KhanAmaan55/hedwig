@@ -495,6 +495,19 @@ As the user, I want HEDWIG to speak replies locally with a configurable voice an
 #### VOI-03 — Interruptions
 **Status:** Done (2026-11-23) · **P3** · **M** · **Depends on:** VOI-01, FND-05 · Speaking stops when you send (VOI-01); *Stop* ends the reply itself mid-sentence over the stream, saved as truncated (docs/16 §13.1)
 
+#### VOI-04 — Speaking as the reply streams; push-to-talk
+**Status:** Done (2026-11-24) · **P2** · **M** · **Depends on:** VOI-01, FND-05, VOI-02 · **Modules:** `frontend/src/voice/sentences.ts`, `queue.ts`, `useVoice.ts`, conversation pane, composer
+
+*As the user, I want to hear HEDWIG's first sentence while it is still writing the rest, and to
+hold a button to talk.*
+
+- Sentences split deterministically as tokens arrive; synthesised one at a time ahead of
+  playback; played in order; the final reply settles the rest; *Stop* clears all of it. The
+  audio owns the mouth while it speaks.
+- Holding *Mic* is push-to-talk (sends on release); a click still lets the user check the words.
+- **Measured live:** first audio +0.81 s on a reply that finished at +1.81 s (was ~+2.9 s).
+- **Tests:** `sentences.test.ts`, `queue.test.ts`, pane and composer tests.
+
 ### 4.12 User experience
 
 #### UX-01 — `hedwig chat`
@@ -577,8 +590,8 @@ What the product still lacks, highest value first — each a story to write befo
 4. ~~**`/traces` and `/metrics`**~~ — done as OBS-01 (2026-11-24).
 5. ~~**Retrieval**~~ — done as RET-01 (2026-11-24); HyDE measured and not adopted, capture
    novelty kept on words (docs/06 §20).
-6. **Voice** — speak sentence by sentence as the reply streams; true phoneme timing if a voice
-   with alignments appears; push-to-talk.
+6. ~~**Voice**~~ — done as VOI-04 (2026-11-24); phoneme timing still waits for a voice with
+   alignments.
 7. **Documents** — PDF and `.docx` (a parser dependency, to be asked for first).
 
 ## 6. Development log
@@ -870,3 +883,11 @@ tables, or copied rows). Nothing existing was changed or deleted.
   live reply that still asked "What are you referring to?". HyDE helped MRR but hurt recall and
   costs a model call per turn: not adopted. Held-out overall 0.944 / MRR 0.844. Design in
   [06](06-memory-architecture.md) §20.
+
+- **VOI-04** Speaking as the reply streams — the app splits the streaming reply into sentences
+  and speaks each as soon as it is complete; push-to-talk on a held *Mic*. Measured: sent all
+  at once, three syntheses slowed each other (0.84 s for the first instead of 0.3 s), so they run
+  one at a time, ahead of playback. Live: first audio at +0.81 s on a ten-sentence reply that
+  finished at +1.81 s, against ~+2.9 s before. Also fixed a REF-03 inspector test that raced an
+  effect on a loaded machine (the one intermittent frontend failure seen earlier). Design in
+  [15](15-avatar-controller.md) §14.
