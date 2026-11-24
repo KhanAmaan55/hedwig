@@ -11,6 +11,7 @@ import { activityStore } from "../stores/activity";
 import { client as defaultClient, type HedwigClient } from "../transport/client";
 
 import { speakAudio, speakSilently, type Utterance } from "./player";
+import { SentenceQueue } from "./queue";
 
 export type VoiceApi = Pick<HedwigClient, "speechStatus" | "speak">;
 
@@ -23,7 +24,17 @@ export interface Voice {
   readonly toggle: () => void;
   /** `fallback: false` when the words already moved the mouth as they streamed. */
   readonly say: (text: string, options?: { fallback?: boolean }) => void;
+  /**
+   * Speak a reply sentence by sentence as it streams (docs/15 §14). Null when the voice is off
+   * or unavailable — the words then move the mouth as before.
+   */
+  readonly streamReply: () => SpokenReply | null;
   readonly stop: () => void;
+}
+
+export interface SpokenReply {
+  readonly feed: (piece: string) => void;
+  readonly finish: (reply: string) => void;
 }
 
 const KEY = "hedwig.voice.enabled";
@@ -42,6 +53,7 @@ export function useVoice(api: VoiceApi = defaultClient): Voice {
   const [reason, setReason] = useState("");
   const [speaking, setSpeaking] = useState(false);
   const current = useRef<Utterance | null>(null);
+  const queue = useRef<SentenceQueue | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,10 +73,36 @@ export function useVoice(api: VoiceApi = defaultClient): Voice {
   }, [api]);
 
   const stop = useCallback(() => {
+    queue.current?.stop();
+    queue.current = null;
     current.current?.stop();
     current.current = null;
     setSpeaking(false);
   }, []);
+
+  const streamReply = useCallback((): SpokenReply | null => {
+    if (!(enabled && available)) return null;
+    stop();
+    const spoken = new SentenceQueue(
+      (text, signal) => api.speak(text, signal),
+      (audio, text) => speakAudio(audio, undefined, text),
+    );
+    queue.current = spoken;
+    setSpeaking(true);
+    return {
+      feed: (piece) => {
+        spoken.feed(piece);
+      },
+      finish: (reply) => {
+        void spoken.finish(reply).then(() => {
+          if (queue.current === spoken) {
+            queue.current = null;
+            setSpeaking(false);
+          }
+        });
+      },
+    };
+  }, [api, available, enabled, stop]);
 
   const say = useCallback(
     (text: string, options: { fallback?: boolean } = {}) => {
@@ -112,5 +150,5 @@ export function useVoice(api: VoiceApi = defaultClient): Voice {
     if (!speaking && activityStore.get() === "speaking") activityStore.set("idle");
   }, [speaking]);
 
-  return { enabled, available, reason, speaking, toggle, say, stop };
+  return { enabled, available, reason, speaking, toggle, say, streamReply, stop };
 }

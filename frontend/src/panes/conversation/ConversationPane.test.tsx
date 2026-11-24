@@ -316,6 +316,59 @@ describe("ConversationPane voice (docs/15 §13)", () => {
     window.localStorage.removeItem("hedwig.voice.enabled");
   });
 
+  it("speaks each sentence while the reply is still streaming (docs/15 §14)", async () => {
+    window.localStorage.setItem("hedwig.voice.enabled", "1");
+    const voice = voiceApi(true);
+    voice.speak.mockResolvedValue(new ArrayBuffer(8));
+    let handlers: StreamHandlers = {};
+    let finish: (reply: TurnReply) => void = () => undefined;
+    const live = {
+      send: vi.fn((_session: string | null, _text: string, given: StreamHandlers = {}) => {
+        handlers = given;
+        return new Promise<TurnReply>((resolve) => {
+          finish = resolve;
+        });
+      }),
+    };
+    try {
+      render(
+        <ConversationPane api={fakeApi()} storage={memoryStorage()} voiceApi={voice} live={live} />,
+      );
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Voice on" })).not.toBeDisabled();
+      });
+      type("tell me about Porto");
+      pressEnter();
+      await waitFor(() => {
+        expect(live.send).toHaveBeenCalled();
+      });
+
+      act(() => {
+        handlers.onStarted?.("sess_live", "t1");
+        handlers.onToken?.("Porto is lovely in June. The trai");
+      });
+      await waitFor(() => {
+        expect(voice.speak).toHaveBeenCalledTimes(1);
+      });
+      expect(voice.speak.mock.calls[0]?.[0]).toBe("Porto is lovely in June.");
+
+      await act(async () => {
+        handlers.onToken?.("n is the better choice.");
+        finish({
+          ...reply("Porto is lovely in June. The train is the better choice."),
+          message_id: "msg_v",
+        });
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(voice.speak).toHaveBeenCalledTimes(2);
+      });
+      expect(voice.speak.mock.calls[1]?.[0]).toBe("The train is the better choice.");
+    } finally {
+      window.localStorage.removeItem("hedwig.voice.enabled");
+    }
+  });
+
   it("explains why the voice cannot be switched on", async () => {
     render(
       <ConversationPane api={fakeApi()} storage={memoryStorage()} voiceApi={voiceApi(false)} />,

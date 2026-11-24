@@ -40,7 +40,8 @@ export function speakAudio(
   const end = () => {
     cancelAnimationFrame(frame);
     activityStore.setMouth(0);
-    activityStore.set("idle");
+    // Between sentences of one reply the face keeps speaking (docs/15 §14).
+    if (!activityStore.voiced()) activityStore.set("idle");
     void context.close().catch(() => undefined);
     finish();
   };

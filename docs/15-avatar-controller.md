@@ -425,3 +425,73 @@ never stored and never leaves the machine; the transcript becomes a message only
 speaking; a larger model as an option; speaking the reply automatically when the message was
 spoken.
 
+
+---
+
+## 14. Speaking as the reply streams (VOI-04)
+
+§13 spoke a reply once it was complete: on a laptop CPU the first word was heard after the whole
+reply had been generated *and* synthesised. The words already arrive token by token (FND-05), and
+Piper synthesises a sentence in about 0.6 s, so the first sentence can be heard while the rest is
+still being written.
+
+```mermaid
+sequenceDiagram
+    participant S as stream (tokens)
+    participant Q as SentenceQueue (app)
+    participant P as POST /v1/speech (Piper)
+    participant A as speaker
+    S->>Q: "Porto is lovely in June. The trai"
+    Q->>P: "Porto is lovely in June."
+    S->>Q: "n from Lisbon takes three hours. "
+    Q->>P: "The train from Lisbon takes three hours."
+    P-->>Q: wav 1
+    Q->>A: play 1 (while the model is still writing)
+    P-->>Q: wav 2
+    A-->>Q: ended
+    Q->>A: play 2
+    S->>Q: message.complete (the authoritative reply)
+    Q->>P: whatever is left after the last full sentence
+```
+
+* **In the app, not the server.** The server already streams tokens and synthesises any text on
+  request; the queue is a client concern — which sentences, in what order, stopped when — so
+  nothing on the server changes and REST clients keep the whole-reply behaviour.
+* **Sentences, deterministically.** A sentence ends at `.`, `!`, `?` or `…` (with closing quotes
+  or brackets) followed by whitespace, or at a blank line — not after a common abbreviation
+  ("Dr.", "e.g.") and not until it has a dozen characters, so "Hi." does not cost a synthesis
+  of its own. `voice/sentences.ts`, tested on its own.
+* **Synthesis runs ahead, one at a time; playback runs in order.** Each sentence goes to Piper
+  once it is complete *and* the sentence before it has been synthesised; playback waits for its
+  turn. Measured live: sent all at once, three sentences synthesised side by side took 0.5–0.84 s
+  each against 0.3 s alone — the first sentence, the one that matters, got slower. One at a time,
+  each takes ~0.25 s, far ahead of the seconds it takes to say.
+* **The final reply settles the rest.** `message.complete` is authoritative (ADR-0023): what it
+  has beyond the sentences already spoken is spoken. If it differs from what streamed (a turn cut
+  short adds its note), only the part after the spoken prefix is said; nothing is said twice.
+* **One owner of the mouth.** While audio plays, the player moves the mouth from its amplitude;
+  arriving tokens stop moving it (they did before, when nothing was spoken yet). The face stays
+  *speaking* between sentences instead of flickering to idle.
+* **Stop stops everything** — the sentence playing, the ones queued and the requests in flight
+  (VOI-03). A new message stops the last reply's voice before anything else. A sentence whose
+  playback fails (no audio device) is skipped; the rest still get their turn.
+* **Push-to-talk.** Holding *Mic* records while held and sends what was heard on release; a
+  click still records until the next click and puts the words in the box to check first. The
+  keyboard keeps the click behaviour.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Sentence granularity | Natural pauses; one Piper call each | The first sentence waits for its full stop | Long first sentences: split at commas past ~80 characters |
+| Client-side queue | No server change; REST unaffected | Each client implements it | A second voice client appears |
+| One Piper process per sentence | Unchanged adapter (§13) | ~0.1 s process start each | A long-lived Piper worker |
+| One synthesis at a time | The first sentence is never slowed by the others | Less parallelism on a many-core machine | Piper runs as a worker with its own threads |
+
+**Measured live** (`gemma4:e2b`, Piper `en_US-lessac-medium`, the app in the browser pane): a
+ten-sentence story, 571 characters. The reply finished streaming at +1.81 s; the first sentence
+was synthesised and ready at **+0.81 s**, and the next nine followed at ~0.25 s each. Speaking the
+whole reply as before would have started at +1.81 s plus 1.05 s of synthesis — about **+2.9 s**.
+On a two-sentence reply that a warm model writes in 0.7 s the difference is negligible; the
+gain grows with the reply.
+
+**Still not built:** phoneme-accurate timing (§13: Piper's command line gives no alignment, and
+its Python API would bring GPL code into HEDWIG's process).

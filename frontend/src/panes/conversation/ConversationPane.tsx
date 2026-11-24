@@ -11,7 +11,7 @@ import {
 import { client, type HedwigClient } from "../../transport/client";
 import type { StreamApi } from "../../transport/socket";
 import { useMicrophone, type ListenApi } from "../../voice/useMicrophone";
-import { useVoice, type VoiceApi } from "../../voice/useVoice";
+import { useVoice, type SpokenReply, type VoiceApi } from "../../voice/useVoice";
 
 import { WhyPanel, type ExplainApi } from "./WhyPanel";
 
@@ -55,18 +55,33 @@ export default function ConversationPane({
 }: ConversationPaneProps): JSX.Element {
   const voice = useVoice(voiceApi);
   const microphone = useMicrophone(listenApi);
+  // The reply being spoken sentence by sentence as it streams (docs/15 §14), if the voice is on.
+  const spoken = useRef<SpokenReply | null>(null);
+  const opened = useRef(false);
   const { sessionId, messages, busy, loading, error, stage, send, stop, startOver } =
     useConversation(
       api,
       storage,
       (text, streamed) => {
-        voice.say(text, { fallback: !streamed });
+        const reply = spoken.current;
+        spoken.current = null;
+        if (reply) reply.finish(text);
+        else voice.say(text, { fallback: !streamed });
       },
       live,
+      (piece) => {
+        if (!opened.current) {
+          opened.current = true;
+          spoken.current = voice.streamReply();
+        }
+        spoken.current?.feed(piece);
+      },
     );
   // Speaking over the user is the one interruption that must never happen (VOI-03).
   const sendAndHush = async (text: string) => {
     voice.stop();
+    spoken.current = null;
+    opened.current = false;
     return send(text);
   };
 
