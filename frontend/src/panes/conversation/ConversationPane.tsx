@@ -76,6 +76,12 @@ export default function ConversationPane({
         }
         spoken.current?.feed(piece);
       },
+      () => {
+        // No reply will finish what was being spoken: stop it, or the face keeps talking.
+        if (spoken.current || opened.current) voice.stop();
+        spoken.current = null;
+        opened.current = false;
+      },
     );
   // Speaking over the user is the one interruption that must never happen (VOI-03).
   const sendAndHush = async (text: string) => {

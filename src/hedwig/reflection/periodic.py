@@ -1,8 +1,9 @@
 """T3 weekly review and T4 monthly identity report (docs/12 §6-7, §16; REF-03).
 
-Both run daily and do their work only when last week's or last month's is not done yet, so a
-review that yielded to a conversation, or a laptop that was asleep, is caught up the next day
-rather than a week or a month later.
+Both run daily and take the oldest period in a short catch-up window that is not done yet, so a
+review that yielded to a conversation, waited for the model, or found the laptop asleep is caught
+up the next day — even when the calendar has moved on to the next week or month meanwhile.
+Periods that ended before HEDWIG knew the user are closed without a report.
 
 The monthly report is assembled when it is read, from the live tables: an erased memory leaves
 past reports, and a change reverted afterwards shows as reverted (§16).
@@ -12,7 +13,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -24,7 +25,7 @@ from hedwig.core.ports.goals import GoalStatus, NoteKind
 from hedwig.core.ports.memory import DerivationRelation, Episode, EpisodeKind
 from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.core.store import Database
-from hedwig.core.types import TrustTier
+from hedwig.core.types import MemoryId, TrustTier
 from hedwig.goals.store import GoalStore
 from hedwig.memory.capture import CaptureService, EpisodeCandidate, Verdict
 from hedwig.memory.relationship import USER_ENTITY_ID
@@ -39,6 +40,14 @@ MIN_SUMMARIES = 2
 """Fewer summaries than this: summarise from the exchanges instead."""
 MIN_EXCHANGES = 3
 """Fewer exchanges than this in a period: nothing worth summarising."""
+CATCH_UP_WEEKS = 4
+CATCH_UP_MONTHS = 3
+"""How far back an unfinished period is still caught up; older ones are let go."""
+FINISHED = frozenset({"written", "already_there", "too_little_to_summarise"})
+"""Summary outcomes that close a period; any other (waiting_for_model, not_stored) retries."""
+
+Period = tuple[str, date, date]
+"""(name, first day, first day after)."""
 
 PERIOD_SCHEMA: Mapping[str, Any] = {
     "type": "object",
@@ -87,18 +96,16 @@ class PeriodicReflection:
     # -- T3: the weekly review -----------------------------------------------------------
 
     async def weekly(self, *, force: bool = False) -> dict[str, Any]:
-        """Review last week (Monday to Sunday), once."""
-        today = self._today()
-        start_day = today - timedelta(days=today.weekday() + 7)
-        year, week, _ = start_day.isocalendar()
-        period = f"week:{year}-W{week:02d}"
-        if self._done("T3", period):
-            return {"period": period, "status": "already_done"}
+        """Review the oldest unfinished week (Monday to Sunday), once."""
+        weeks = self._weeks()
+        pending, _ = self._next_period("T3", weeks)
+        if pending is None:
+            return {"period": weeks[-1][0], "status": "already_done"}
+        period, first, following = pending
         if not force and await user_is_talking(self._history, self._clock):
             return {"period": period, "status": "yielded"}
 
-        start = self._midnight(start_day)
-        end = start + timedelta(days=7)
+        start, end = self._midnight(first), self._midnight(following)
         summary_id, summary_state = await self._summarise(period, start, end, "one week")
         stats: dict[str, Any] = {
             "period": period,
@@ -106,7 +113,7 @@ class PeriodicReflection:
             "goals_blocked": await self._review_goals(),
             "health": self._health(start, end),
         }
-        status = "waiting_for_model" if summary_state == "waiting_for_model" else "completed"
+        status = "completed" if summary_state in FINISHED else summary_state
         self._record("T3", status, stats)
         logger.info(
             "weekly review", extra=fields(**{k: v for k, v in stats.items() if k != "health"})
@@ -163,25 +170,23 @@ class PeriodicReflection:
     # -- T4: the monthly identity report ----------------------------------------------------
 
     async def monthly(self, *, force: bool = False) -> dict[str, Any]:
-        """Last month's summary and report, once."""
-        first_this_month = self._today().replace(day=1)
-        last_month = (first_this_month - timedelta(days=1)).replace(day=1)
-        month = last_month.strftime("%Y-%m")
-        period = f"month:{month}"
-        if self._done("T4", period):
-            return {"period": period, "status": "already_done"}
+        """The oldest unfinished month's summary and report, once."""
+        months = self._months()
+        pending, closed = self._next_period("T4", months)
+        if pending is None:
+            # A new install's first start closes the months before HEDWIG knew the user.
+            status = "completed" if closed else "already_done"
+            return {"period": months[-1][0], "status": status, "report": False}
+        period, first, following = pending
+        month = first.strftime("%Y-%m")
         if not force and await user_is_talking(self._history, self._clock):
             return {"period": period, "status": "yielded"}
 
-        start, end = self._midnight(last_month), self._midnight(first_this_month)
-        if not self._existed_before(end):
-            # A new install's first start: no report for a month before HEDWIG knew the user.
-            self._record("T4", "completed", {"period": period, "summary": "before_hedwig"})
-            return {"period": period, "status": "completed", "report": False}
+        start, end = self._midnight(first), self._midnight(following)
         summary_id, summary_state = await self._summarise(period, start, end, "one month")
-        if summary_state == "waiting_for_model":
-            self._record("T4", "waiting_for_model", {"period": period})
-            return {"period": period, "status": "waiting_for_model"}
+        if summary_state not in FINISHED:
+            self._record("T4", summary_state, {"period": period, "summary": summary_state})
+            return {"period": period, "status": summary_state}
         self._db.execute(
             "INSERT OR REPLACE INTO identity_report (month, summary_id, created_at, seen_at) "
             "VALUES (?, ?, ?, NULL)",
@@ -332,6 +337,47 @@ class PeriodicReflection:
             )
         ]
 
+    # -- which period ------------------------------------------------------------------------
+
+    def _weeks(self) -> list[Period]:
+        """The catch-up window of finished weeks, oldest first."""
+        today = self._today()
+        last = today - timedelta(days=today.weekday() + 7)
+        weeks = []
+        for back in range(CATCH_UP_WEEKS - 1, -1, -1):
+            first = last - timedelta(weeks=back)
+            year, week, _ = first.isocalendar()
+            weeks.append((f"week:{year}-W{week:02d}", first, first + timedelta(days=7)))
+        return weeks
+
+    def _months(self) -> list[Period]:
+        """The catch-up window of finished months, oldest first."""
+        following = self._today().replace(day=1)
+        months: list[Period] = []
+        for _ in range(CATCH_UP_MONTHS):
+            first = (following - timedelta(days=1)).replace(day=1)
+            months.insert(0, (f"month:{first:%Y-%m}", first, following))
+            following = first
+        return months
+
+    def _next_period(self, tier: str, periods: Sequence[Period]) -> tuple[Period | None, int]:
+        """The oldest period not done yet, and how many before-HEDWIG periods were closed.
+
+        The record of completed runs is the cursor: a period stays pending until a run for it
+        completes, however far the calendar has moved, within the catch-up window.
+        """
+        closed = 0
+        for period in periods:
+            name, _, following = period
+            if self._done(tier, name):
+                continue
+            if not self._existed_before(self._midnight(following)):
+                self._record(tier, "completed", {"period": name, "summary": "before_hedwig"})
+                closed += 1
+                continue
+            return period, closed
+        return None, closed
+
     # -- shared ----------------------------------------------------------------------------
 
     async def _summarise(
@@ -341,6 +387,9 @@ class PeriodicReflection:
         conversations themselves (§8: leaves, never other summaries)."""
         existing = await self._store.summary_for(period)
         if existing is not None:
+            # A run that stopped between storing the summary and linking it is finished here:
+            # without its edges, erasing a conversation would leave its summary behind (§8).
+            await self._link(existing.id, start, end)
             return existing.id, "already_there"
         notes = [
             e
@@ -384,21 +433,25 @@ class PeriodicReflection:
         outcome = report.outcomes[0] if report.outcomes else None
         if not (outcome and outcome.verdict is Verdict.STORED and outcome.memory_id):
             return None, "not_stored"
-        for leaf in await self._store.episodes_between(
-            start, end, kinds=(EpisodeKind.INTERACTION,)
-        ):
-            await self._store.record_derivation(
-                outcome.memory_id, leaf.id, DerivationRelation.SUMMARISED_FROM
-            )
+        await self._link(outcome.memory_id, start, end)
         return str(outcome.memory_id), "written"
 
+    async def _link(self, summary_id: MemoryId, start: datetime, end: datetime) -> None:
+        """SUMMARISED_FROM edges to the period's conversations, all of them in one write."""
+        leaves = await self._store.episodes_between(start, end, kinds=(EpisodeKind.INTERACTION,))
+        await self._store.record_derivations(
+            summary_id, [leaf.id for leaf in leaves], DerivationRelation.SUMMARISED_FROM
+        )
+
     def _existed_before(self, moment: datetime) -> bool:
-        """Whether HEDWIG had any conversation or memory before `moment`."""
+        """Whether HEDWIG had any conversation, memory or goal before `moment`."""
+        at = self._iso(moment)
         return (
             self._count(
                 "SELECT (SELECT COUNT(*) FROM session WHERE started_at < ?) + "
-                "(SELECT COUNT(*) FROM episode WHERE created_at < ?) AS n",
-                (self._iso(moment), self._iso(moment)),
+                "(SELECT COUNT(*) FROM episode WHERE created_at < ?) + "
+                "(SELECT COUNT(*) FROM goal WHERE created_at < ?) AS n",
+                (at, at, at),
             )
             > 0
         )
@@ -414,6 +467,7 @@ class PeriodicReflection:
         )
 
     def _record(self, tier: str, status: str, stats: Mapping[str, Any]) -> None:
+        """A run: `completed` closes its period; anything else (yielded, waiting) leaves it open."""
         now = self._iso(self._clock.now())
         self._db.execute(
             "INSERT INTO reflection_run (id, tier, status, started_at, finished_at, stats) "
@@ -443,4 +497,5 @@ class PeriodicReflection:
 
     @staticmethod
     def _iso(moment: datetime) -> str:
-        return moment.isoformat(timespec="milliseconds")
+        """In UTC, as every stored timestamp is: string comparison then compares instants."""
+        return moment.astimezone(UTC).isoformat(timespec="milliseconds")

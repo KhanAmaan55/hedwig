@@ -104,6 +104,8 @@ export function useConversation(
   onReply?: (text: string, streamed: boolean) => void,
   live: StreamApi | null = null,
   onToken?: (piece: string) => void,
+  /** A turn ended without a reply to finish (failed, refused, unreachable). */
+  onFailed?: () => void,
 ): Conversation {
   const [sessionId, setSessionId] = useState<string | null>(() => storage.get());
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
@@ -167,14 +169,12 @@ export function useConversation(
     live?.showing?.(sessionId);
   }, [live, sessionId]);
 
-  useEffect(() => {
-    const watch = live?.watchInitiative?.bind(live);
-    if (!watch) return;
-    let cancelled = false;
-    let stop: (() => void) | null = null;
-    let retry = 0;
-
-    const arrive = (offer: InitiativeMessage) => {
+  // An unprompted message that arrives while the user's own turn is in flight waits for it to
+  // end: switching conversations then would drop the user's message and the streaming reply.
+  const inTurn = useRef(false);
+  const deferred = useRef<InitiativeMessage[]>([]);
+  const showOffer = useCallback(
+    (offer: InitiativeMessage) => {
       const previous = shown.current;
       const elsewhere = previous !== null && previous !== offer.session_id;
       if (previous !== offer.session_id) {
@@ -191,6 +191,20 @@ export function useConversation(
       setMessages((current) =>
         elsewhere ? [said] : current.some((m) => m.key === said.key) ? current : [...current, said],
       );
+    },
+    [storage],
+  );
+
+  useEffect(() => {
+    const watch = live?.watchInitiative?.bind(live);
+    if (!watch) return;
+    let cancelled = false;
+    let stop: (() => void) | null = null;
+    let retry = 0;
+
+    const arrive = (offer: InitiativeMessage) => {
+      if (inTurn.current) deferred.current.push(offer);
+      else showOffer(offer);
     };
 
     const subscribe = () => {
@@ -214,7 +228,7 @@ export function useConversation(
       window.clearTimeout(retry);
       stop?.();
     };
-  }, [live, storage]);
+  }, [live, showOffer]);
 
   const send = useCallback(
     async (text: string): Promise<boolean> => {
@@ -277,6 +291,7 @@ export function useConversation(
 
       const userKey = nextKey();
       setMessages((current) => [...current, { key: userKey, role: "user", text: trimmed }]);
+      inTurn.current = true;
       setBusy(true);
       setError(null);
       // The face reacts on the click, not on the next poll (docs/15 §13).
@@ -312,6 +327,7 @@ export function useConversation(
       } catch (caught) {
         setMessages((current) => current.filter((m) => !m.streaming));
         setError(describeError(caught));
+        onFailed?.();
         const honest =
           caught instanceof ApiError && typeof caught.detail.reply === "string"
             ? caught.detail.reply
@@ -337,9 +353,13 @@ export function useConversation(
         if (activityStore.get() !== "idle" && activityStore.get() !== "speaking") {
           activityStore.set("idle");
         }
+        inTurn.current = false;
+        const waiting = deferred.current;
+        deferred.current = [];
+        for (const offer of waiting) showOffer(offer);
       }
     },
-    [api, busy, sessionId, storage, onReply, live, onToken],
+    [api, busy, sessionId, storage, onReply, live, onToken, onFailed, showOffer],
   );
 
   const startOver = useCallback(() => {

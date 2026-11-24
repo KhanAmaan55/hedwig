@@ -256,6 +256,10 @@ class DocumentLibrary:
             report.skipped.append({"path": str(path), "reason": "looks like a secrets file"})
             return
         raw = path.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        if existing is not None and existing["content_hash"] == digest:
+            report.unchanged += 1  # already read, screened and indexed: no parser runs again
+            return
         if binary:
             try:
                 text = extract(path, max_chars=self._max_bytes)
@@ -270,11 +274,6 @@ class DocumentLibrary:
         if SECRET_CONTENT.search(text):
             report.skipped.append({"path": str(path), "reason": "contains what looks like a key"})
             return
-        digest = hashlib.sha256(raw).hexdigest()
-        if existing is not None and existing["content_hash"] == digest:
-            report.unchanged += 1
-            return
-
         if path.suffix.lower() in {".html", ".htm"}:
             text = _html_text(text)
         chunks = chunk(text, title=path.stem)

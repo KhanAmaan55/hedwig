@@ -516,8 +516,22 @@ graph LR
   parts would unzip to more than 50 MB is refused before parsing (a zip bomb); encrypted files
   and files the parser cannot read are skipped and reported; a PDF with no text layer is reported
   as "no text in it (a scanned PDF?)" — no OCR. The secret scan runs on the extracted text.
-* **Change detection by the file's bytes**, as before, so re-saving a PDF without changes is
-  "unchanged".
+* **Every parse inside budgets** (after review). Each PDF stream may decode to at most 20 MB
+  (pypdf's own default is 75 MB, and text extraction costs many times the decoded size in
+  memory); one PDF may take at most 60 s, checked between pages; and extraction stops as soon as
+  the text passes the cap instead of after the last page. A budget reached is a skip reason
+  ("too large inside to read safely", "took too long to read").
+* **Whatever a parser raises becomes a skip reason, never a stopped folder.** A PDF needing a
+  crypto library just to open (AES-256) is "encrypted"; malformed XML inside a `.docx` (lxml's
+  error, not one python-docx declares) is "could not be read as a Word document". Both libraries
+  parse untrusted input, so each parse is a boundary that catches everything, and the next file
+  is still read.
+* **Text that only looks like a heading stays text.** A PDF line or Word paragraph starting with
+  `#` ("# 3 things to pack") is indented by a space, so the chunker does not take it for a
+  heading and every passage on that page keeps "Page N" in its citation.
+* **Change detection by the file's bytes**, as before, and **before** parsing: an unchanged PDF
+  is "unchanged" without being read again. A file that was skipped is tried again on the next
+  reindex (a library may have been installed since).
 
 | Tradeoff | Gained | Given up | Revisit if |
 |---|---|---|---|
@@ -525,6 +539,7 @@ graph LR
 | Pages as headings for PDFs | Citations a person can check | No real section structure | A PDF outline (bookmarks) is worth reading |
 | No OCR | No large model or binary | Scanned PDFs are skipped | Users ask; a local OCR is a separate decision |
 | Skip on too much text | Never half-read | A huge PDF is not indexed | A per-file page range in the UI |
+| Budgets inside the process, not a sandbox | No subprocess, no new dependency | Time is checked between pages, not within one; memory is bounded per stream, not in total | A real PDF exhausts memory or time within one page: parse in a subprocess with resource limits |
 
 **Measured and verified.** A real 1.5 MB, multi-language licence PDF: 393,641 characters, 337
 passages, 0.86 s; three image-only PDFs reported as having no text. pypdf narrates repairs and

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
@@ -147,6 +148,73 @@ async def test_declined_changes_nothing_and_a_replaced_belief_goes_stale(
     with pytest.raises(ConflictError):
         await running_container.corrections.accept(second["id"])
     assert running_container.corrections.proposal(second["id"])["status"] == "stale"  # type: ignore[index]
+
+
+async def test_the_same_correction_in_another_conversation_is_proposed_there_too(
+    running_container: Container, llm_provider: RecordedProvider
+) -> None:
+    await _believe(running_container, PORTO)
+    for session in ("a", "b"):
+        await _say(running_container, "Where does my sister Ana live?", session)
+        _model_says(llm_provider, 1, LISBON)
+        await _say(running_container, "No, she lives in Lisbon.", session)
+    _model_says(llm_provider, 1, LISBON)
+    await _say(running_container, "No, she lives in Lisbon!", "b")  # same one, same place
+
+    assert len(running_container.corrections.proposals(session_id="a")) == 1
+    assert len(running_container.corrections.proposals(session_id="b")) == 1
+
+
+async def test_a_proposal_settles_once_even_while_the_correction_is_under_way(
+    running_container: Container, llm_provider: RecordedProvider, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    porto = await _believe(running_container, PORTO)
+    await _say(running_container, "Where does my sister Ana live?")
+    _model_says(llm_provider, 1, LISBON)
+    await _say(running_container, "No, she lives in Lisbon.")
+    (proposal,) = running_container.corrections.proposals()
+    corrections = running_container.corrections
+    gate = asyncio.Event()
+    real = running_container.memory.correct
+    applied: list[MemoryId] = []
+
+    async def slow(memory_id: MemoryId, **kwargs: Any) -> MemoryId:
+        await gate.wait()  # e.g. a full subscriber queue makes publishing wait
+        applied.append(memory_id)
+        return await real(memory_id, **kwargs)
+
+    monkeypatch.setattr(running_container.memory, "correct", slow)
+    first = asyncio.create_task(corrections.accept(proposal["id"]))
+    await asyncio.sleep(0)
+
+    with pytest.raises(ConflictError):
+        await corrections.decline(proposal["id"])
+    with pytest.raises(ConflictError):
+        await corrections.accept(proposal["id"])
+    gate.set()
+    settled = await first
+
+    assert settled["status"] == "accepted" and settled["replacement_id"]
+    assert applied == [porto], "corrected once"
+
+
+async def test_a_correction_that_fails_for_another_reason_can_be_answered_again(
+    running_container: Container, llm_provider: RecordedProvider, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _believe(running_container, PORTO)
+    await _say(running_container, "Where does my sister Ana live?")
+    _model_says(llm_provider, 1, LISBON)
+    await _say(running_container, "No, she lives in Lisbon.")
+    (proposal,) = running_container.corrections.proposals()
+
+    async def broken(memory_id: MemoryId, **kwargs: Any) -> MemoryId:
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(running_container.memory, "correct", broken)
+    with pytest.raises(RuntimeError):
+        await running_container.corrections.accept(proposal["id"])
+
+    assert running_container.corrections.proposal(proposal["id"])["status"] == "proposed"  # type: ignore[index]
 
 
 @pytest.fixture

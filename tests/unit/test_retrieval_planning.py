@@ -17,6 +17,9 @@ GOALS = (
 def test_a_goal_line_is_reduced_to_what_it_is_about() -> None:
     assert goal_subject(GOALS[0]) == "run the Lisbon half marathon in October"
     assert goal_subject("Learn Portuguese; done when: a conversation") == "Learn Portuguese"
+    assert goal_subject("Learn (Rust) (40% done)") == "Learn (Rust)"
+    assert goal_subject("Learn (Rust)") == "Learn (Rust)"
+    assert goal_subject("Ship v2 (finished 2026-02-01); lately: done: shipped") == "Ship v2"
 
 
 @pytest.mark.parametrize(
@@ -26,6 +29,8 @@ def test_a_goal_line_is_reduced_to_what_it_is_about() -> None:
         "Any update on my project?",
         "How's practice going?",
         "What am I working towards?",
+        "How's my training going?",
+        "Am I making progress?",
     ],
 )
 async def test_a_message_about_the_users_aims_searches_their_goals(text: str) -> None:
@@ -35,7 +40,15 @@ async def test_a_message_about_the_users_aims_searches_their_goals(text: str) ->
     assert "learn the Bach minuet on the cello" in queries
 
 
-@pytest.mark.parametrize("text", ["Do I like seafood?", "Tell me about tides."])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Do I like seafood?",
+        "Tell me about tides.",
+        "Explain neural network training.",  # a topic, not the user's marathon training
+        "What is progress in philosophy?",
+    ],
+)
 async def test_other_messages_do_not(text: str) -> None:
     assert await RulePlanner().plan_queries(text, policy=TurnPolicy(), goals=GOALS) == (text,)
 
@@ -46,6 +59,8 @@ async def test_other_messages_do_not(text: str) -> None:
         ("What were we talking about yesterday?", True),
         ("What did I tell you recently?", True),
         ("Catch me up", True),
+        ("What did we just do?", True),
+        ("What have we done today?", True),
         ("Do I like seafood?", False),
         ("Where does Ana live?", False),
     ],

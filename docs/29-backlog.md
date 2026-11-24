@@ -912,3 +912,39 @@ tables, or copied rows). Nothing existing was changed or deleted.
   did not name the file, as with text notes. Design in [13](13-knowledge-and-tools.md) §15.
 
 With this, every item of §5 "Next up" is done.
+
+### 2026-11-24 — Session 2, continued: review of PR 2
+
+An automated review of the consolidated branch raised 34 points (8 major, 25 minor, 1 nitpick).
+Each was checked against the code; all held up, and all are fixed, with a test each. The ones
+that changed a design are written into the design documents:
+
+- **Reflection** ([12](12-reflection-engine.md) §16). A period that waited for the model was lost
+  once the calendar moved on; each run now takes the oldest unfinished period in a catch-up
+  window. A summary the capture gate did not store no longer marks its period done, and a period
+  summary is never folded into another period's. A run that stopped between storing a summary
+  and linking it repairs the edges on the retry. Period boundaries compare in UTC. The tests
+  that passed before had been relying on the unstored-summary bug ("A month." was refused by the
+  gate and the period still "completed").
+- **Documents** ([13](13-knowledge-and-tools.md) §15). PDF parsing runs inside budgets (20 MB per
+  decoded stream, 60 s, stop at the text cap); every parser error — an AES PDF needing a crypto
+  library, malformed XML in a `.docx` — is a skip reason, not a stopped folder; unchanged files
+  are not parsed again; a `#` line inside a page no longer replaces "Page N" in citations. pypdf
+  ≥ 7.1 is now required (its limits API).
+- **Corrections** ([06](06-memory-architecture.md) §19). Accept claims the proposal before
+  awaiting the correction, so two answers cannot both apply; duplicates are per conversation; an
+  empty rewrite is refused. In the app a failed answer keeps the card, and a proposal pushed
+  while the list loads is kept.
+- **Retrieval** ([06](06-memory-architecture.md) §20). Aim words like *training* count only with
+  the user in the sentence; goal names keep their parentheses; "What did we just do?" asks about
+  lately; the nightly pair search skips settled pairs before its limit.
+- **Voice and push-to-talk** ([15](15-avatar-controller.md) §14). The microphone owns its
+  recording state, so a refused permission or a release during startup cannot leave a second
+  recorder running; pointer capture; a failed turn stops the voice; a stopped queue releases the
+  voice once.
+- **Initiative, telemetry** ([11](11-curiosity-engine.md) §14, [19](19-observability.md) §13).
+  Each presence delivery has a deadline; an offer waits for the turn in flight; counters only go
+  up (pending items are gauges); a job's trace omits its error text; timeouts count as failures;
+  `hedwig trace` finds the latest turn however many jobs ran; the doctor warns on dead letters
+  in a quiet week. The inspector refreshes both history views after a revert and says when one
+  fails.

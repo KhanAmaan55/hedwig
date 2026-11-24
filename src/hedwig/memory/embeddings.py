@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import struct
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Any, Protocol
 
 from hedwig.core.errors import HedwigError
@@ -247,16 +247,22 @@ class EmbeddingIndex:
         return sorted(best, key=lambda key: best[key])[:limit]
 
     def close_beliefs(
-        self, *, max_distance: float = SAME_SUBJECT
+        self,
+        *,
+        max_distance: float = SAME_SUBJECT,
+        limit: int | None = None,
+        skip: Callable[[MemoryId, MemoryId], bool] | None = None,
     ) -> list[tuple[MemoryId, MemoryId, float]]:
         """Pairs of live beliefs close in meaning, closest first (docs/06 §20).
 
         From the stored vectors, no model call: what the nightly judge should look at when two
-        beliefs share no words — "vegetarian" and "does not eat meat".
+        beliefs share no words — "vegetarian" and "does not eat meat". Rows are read one at a
+        time; pairs the caller has settled (`skip`) are passed over *before* `limit` counts, so
+        a night's batch is always new pairs and later ones are reached once earlier ones settle.
         """
         if not self.available:
             return []
-        rows = self._db.query(
+        cursor = self._db.connection.execute(
             "SELECT a.memory_id AS first, b.memory_id AS second, "
             "vec_distance_cosine(a.vector, b.vector) AS distance "
             "FROM memory_embedding a JOIN memory_embedding b "
@@ -269,10 +275,18 @@ class EmbeddingIndex:
             "ORDER BY distance",
             (self._model, max_distance),
         )
-        return [
-            (MemoryId(str(r["first"])), MemoryId(str(r["second"])), float(r["distance"]))
-            for r in rows
-        ]
+        found: list[tuple[MemoryId, MemoryId, float]] = []
+        try:
+            for row in cursor:
+                first, second = MemoryId(str(row["first"])), MemoryId(str(row["second"]))
+                if skip is not None and skip(first, second):
+                    continue
+                found.append((first, second, float(row["distance"])))
+                if limit is not None and len(found) >= limit:
+                    break
+        finally:
+            cursor.close()
+        return found
 
     async def _vectors(self, texts: list[str]) -> Sequence[Sequence[float]] | None:
         try:

@@ -294,9 +294,9 @@ async def test_the_temporal_channel_surfaces_the_recent(
         )
     )
 
-    result = await retrieval.search(["What were we just doing?"])
-
-    assert [item.memory_id for item in result.items] == ["ep_recent"]
+    for question in ("What were we just doing?", "What did we just do?"):
+        result = await retrieval.search([question])
+        assert [item.memory_id for item in result.items] == ["ep_recent"], question
     # Only for a question about lately (docs/06 §20): nominated for every query, the latest
     # episodes outranked the answers to paraphrases.
     assert (await retrieval.search(["zzzz nonmatching"])).items == ()

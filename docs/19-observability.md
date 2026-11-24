@@ -315,6 +315,18 @@ graph TB
   runs and lag, curiosity, initiative, corrections, drift) survive restarts because they are
   the records; the gateway's own counters and the bus's queues are since-start, as Prometheus
   expects of a process. Same auth as the rest of the API (§10).
+* **A counter only goes up** (after review). A `_total` counts rows in a state they never leave:
+  finished turns (not `running`), corrections the user settled, offers made and offers dismissed
+  (`hedwig_initiative_dismissed_total`). What is waiting now is a gauge beside it
+  (`hedwig_corrections_pending`). Counting rows by a status that later changes made a counter
+  fall — which Prometheus reads as a restart.
+* **A job's trace has no error text.** `task_run.error` is an exception's message and can quote
+  what the task was working on; the trace keeps the job's status and timings and leaves the text
+  to the logs. A tool call that timed out or was refused as invalid counts as a failure in a
+  trace's summary (a *denied* one did what the user asked).
+* **`hedwig trace` finds the latest turn** with `/v1/traces?kind=turn&limit=1`, however many
+  scheduled jobs ran since. `hedwig doctor` warns on dead letters in a week with no
+  conversations too — background work failing with nobody talking is still failing.
 * **Not built, and said so:** `hedwig_db_query_duration_seconds`, `hedwig_governor_yield_seconds`
   and `hedwig_task_restarts_total` need instrumentation that does not exist yet (a timed
   repository layer, a governor); `hedwig_retrieval_recall_at_5` is the eval's

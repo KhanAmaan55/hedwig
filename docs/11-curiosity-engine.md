@@ -434,6 +434,11 @@ graph TB
   session (docs/27 §5.1). With no conversation yet, one is opened. The brain does the writing
   (`Brain.speak_first`) under the session lock, so an offer can never land in the middle of a
   turn; the initiative module decides only what and when.
+* **Delivered without waiting on anyone** (after review). Each open socket has five seconds to
+  take the message; one that stopped reading is dropped from presence, so a stalled tab cannot
+  hold up the check or the other tabs. In the app, a message that arrives while the user's own
+  turn is in flight is held until that turn ends — switching conversations mid-turn would drop
+  the user's message and the streaming reply.
 * **Not spoken aloud.** Voice is for replies the user asked for; an unprompted voice in the
   room is a different kind of interruption. The avatar does not react either.
 * **Learning caution.** *Not interested* dismisses the finding (which already raises the

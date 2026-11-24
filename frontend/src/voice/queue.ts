@@ -23,6 +23,8 @@ export class SentenceQueue {
   private current: Utterance | null = null;
   private stopped = false;
   private finished = false;
+  /** Whether this queue has given up the shared "voiced" state: once, whoever asks first. */
+  private released = false;
   private readonly controller = new AbortController();
 
   constructor(
@@ -100,6 +102,9 @@ export class SentenceQueue {
   }
 
   private release(): void {
+    // A stopped queue's chain still settles later; by then a new reply may own the voice.
+    if (this.released) return;
+    this.released = true;
     if (!activityStore.voiced()) return;
     activityStore.setVoiced(false);
     activityStore.setMouth(0);

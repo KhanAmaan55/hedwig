@@ -509,6 +509,17 @@ class SqliteMemoryStore:
         with self._db.transaction() as connection:
             _derive(connection, derived, kind, source, relation, self._now(), source_kind)
 
+    async def record_derivations(
+        self, derived: MemoryId, sources: Sequence[MemoryId], relation: DerivationRelation
+    ) -> None:
+        """Many edges from one derived memory, in one transaction: all of them or none."""
+        kind = MemoryKind.BELIEF if self._is_belief(derived) else MemoryKind.EPISODE
+        now = self._now()
+        with self._db.transaction() as connection:
+            for source in sources:
+                source_kind = MemoryKind.BELIEF if self._is_belief(source) else MemoryKind.EPISODE
+                _derive(connection, derived, kind, source, relation, now, source_kind)
+
     async def sources_of(self, memory_id: MemoryId) -> Sequence[MemoryId]:
         rows = self._db.query(
             "SELECT source_id FROM memory_derivation WHERE derived_id = ?", (memory_id,)

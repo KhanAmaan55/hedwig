@@ -89,6 +89,8 @@ def test_what_is_refused() -> None:
         )
         == "nothing_said_about_it"
     ), "found live: a small model negates whatever it was shown"
+    assert acceptable(old, "", "No, Ana lives in Lisbon.") == "empty"
+    assert acceptable(old, "   ", "No, Ana lives in Lisbon.") == "empty"
 
 
 def test_a_one_word_swap_the_user_named_is_acceptable() -> None:

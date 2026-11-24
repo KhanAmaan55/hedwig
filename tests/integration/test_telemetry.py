@@ -82,6 +82,48 @@ async def test_a_scheduled_run_is_traced_too(running_container: Container) -> No
     assert running_container.traces.trace(run.correlation_id)["root"]["kind"] == "job"
 
 
+async def test_a_job_trace_never_carries_its_error_text(running_container: Container) -> None:
+    running_container.database.execute(
+        "INSERT INTO task_run (id, task_name, trigger, status, correlation_id, queued_at, "
+        "started_at, finished_at, error) VALUES ('run_x', 'memory.reembed', 'manual', 'failed', "
+        "'job_x', '2026-01-01T09:00:00+00:00', '2026-01-01T09:00:00+00:00', "
+        "'2026-01-01T09:00:01+00:00', ?)",
+        (f"ValueError: could not embed {SECRET!r}",),
+    )
+
+    root = running_container.traces.trace("job_x")["root"]
+
+    assert root["status"] == "failed" and "error" not in root
+    assert "4471" not in str(root)
+
+
+async def test_a_tool_that_timed_out_counts_as_a_failure(running_container: Container) -> None:
+    correlation = await _turn(running_container)
+    running_container.database.execute(
+        "INSERT INTO tool_call (id, tool_name, args, status, duration_ms, correlation_id, "
+        "created_at) VALUES ('tc_x', 'web.search', '{}', 'timeout', 30000, ?, ?)",
+        (correlation, running_container.clock.now().isoformat()),
+    )
+
+    assert running_container.traces.trace(correlation)["summary"]["failures"] == 1
+
+
+async def test_the_latest_turn_is_found_however_many_jobs_ran_since(
+    running_container: Container,
+) -> None:
+    correlation = await _turn(running_container)
+    for index in range(20):
+        running_container.database.execute(
+            "INSERT INTO task_run (id, task_name, trigger, status, correlation_id, "
+            "queued_at, started_at) VALUES (?, 'x', 'manual', 'completed', ?, '2099-01-01', "
+            "'2099-01-01')",
+            (f"run_{index}", f"job_{index}"),
+        )
+
+    (latest,) = running_container.traces.recent(limit=1, kind="turn")
+    assert latest["correlation_id"] == correlation
+
+
 async def test_an_unknown_id_is_not_found(running_container: Container) -> None:
     with pytest.raises(NotFoundError):
         running_container.traces.trace("turn_nope")
@@ -126,7 +168,9 @@ DESIGNED = (
     "hedwig_curiosity_dismissal_ratio",
     "hedwig_injection_quarantined_total",
     "hedwig_initiative_offers_total",
+    "hedwig_initiative_dismissed_total",
     "hedwig_corrections_total",
+    "hedwig_corrections_pending",
     "hedwig_bus_dead_letters_total",
     "hedwig_bus_queue_depth",
 )
@@ -171,3 +215,26 @@ async def test_the_traces_api(running_container: Container, api: AsyncClient) ->
     assert trace["root"]["kind"] == "turn"
     assert (await api.get("/v1/traces/turn_nope")).status_code == 404
     assert (await api.get("/v1/traces", headers={"Authorization": ""})).status_code == 401
+
+
+async def test_counters_never_go_down_when_something_waiting_is_settled(
+    running_container: Container, api: AsyncClient
+) -> None:
+    """A settled correction leaves the pending gauge and joins the counter; nothing decreases."""
+    now = running_container.clock.now().isoformat()
+    for proposal in ("cor_a", "cor_b"):
+        running_container.database.execute(
+            "INSERT INTO correction_proposal (id, memory_id, proposed_text, created_at) "
+            "VALUES (?, 'bel_x', 'The user is vegan.', ?)",
+            (proposal, now),
+        )
+    before = (await api.get("/v1/metrics")).text
+    running_container.database.execute(
+        "UPDATE correction_proposal SET status = 'declined' WHERE id = 'cor_a'"
+    )
+    after = (await api.get("/v1/metrics")).text
+
+    assert "hedwig_corrections_pending 2" in before and "hedwig_corrections_pending 1" in after
+    assert 'hedwig_corrections_total{status="declined"} 1' in after
+    assert 'status="proposed"' not in before + after
+    assert 'hedwig_turns_total{status="running"}' not in before

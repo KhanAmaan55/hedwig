@@ -624,18 +624,19 @@ def trace(
     recent: Annotated[bool, typer.Option("--recent", help="List recent turns and jobs.")] = False,
 ) -> None:
     """Where the time went in a turn or job: stages, handlers, model calls (docs/19 §13)."""
-    if recent or correlation_id is None:
+    if recent:
         listed = _call(lambda c: c.traces(limit=15))
         assert isinstance(listed, list)
-        if recent:
-            for item in listed:
-                ms = f"{item['latency_ms']:.0f} ms" if item["latency_ms"] else "—"
-                print(
-                    f"  {item['started_at'][:19]}  {item['kind']:<4} {item['status']:<10} "
-                    f"{ms:>9}  {item['correlation_id']}  {item['name']}"
-                )
-            return
-        turns = [t for t in listed if t["kind"] == "turn"]
+        for item in listed:
+            ms = f"{item['latency_ms']:.0f} ms" if item["latency_ms"] else "—"
+            print(
+                f"  {item['started_at'][:19]}  {item['kind']:<4} {item['status']:<10} "
+                f"{ms:>9}  {item['correlation_id']}  {item['name']}"
+            )
+        return
+    if correlation_id is None:
+        turns = _call(lambda c: c.traces(limit=1, kind="turn"))
+        assert isinstance(turns, list)
         if not turns:
             print("no turns yet")
             return

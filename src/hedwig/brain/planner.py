@@ -41,11 +41,18 @@ RECALL_PATTERN = re.compile(
 MAX_GOAL_QUERIES = 3
 
 
+_RENDERED = re.compile(
+    r"(?: \((?:\d+% done|(?:finished|dropped|blocked) \d{4}-\d{2}-\d{2})\))?"
+    r"(?:; (?:done when|lately): .*)?$"
+)
+"""What `goals.mind.render` appends to a goal's description: progress or closing, then notes."""
+
+
 def goal_subject(goal: str) -> str:
     """A goal line as the snapshot renders it, reduced to what it is about:
     "Help the user run the Lisbon half marathon (40% done); lately: …" → "run the Lisbon half
-    marathon"."""
-    subject = goal.split(" (", 1)[0].split(";", 1)[0].strip()
+    marathon". Parentheses that belong to the description ("Learn (Rust)") stay."""
+    subject = _RENDERED.sub("", goal, count=1).strip()
     for prefix in ("Help the user ", "help the user "):
         subject = subject.removeprefix(prefix)
     return subject

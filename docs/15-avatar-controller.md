@@ -478,6 +478,19 @@ sequenceDiagram
 * **Push-to-talk.** Holding *Mic* records while held and sends what was heard on release; a
   click still records until the next click and puts the words in the box to check first. The
   keyboard keeps the click behaviour.
+* **The microphone says whether it is recording** (after review). `useMicrophone` keeps its own
+  phase — idle, starting, recording, transcribing — and exposes `start` and `stop`; the
+  composer decides from that, never from its own guess. So a refused permission leaves the next
+  press a fresh start; a second start while the first is still waiting for permission opens no
+  second recorder; and a release that comes before the microphone has started is kept and
+  applied the moment it starts, so a quick press-and-release never leaves a recorder running.
+  The button captures its pointer, so letting go outside it still ends the press; a press the
+  browser takes over (`pointercancel`) stops and sends nothing. If what was heard could not be
+  sent, it is put in the box, as a typed message is.
+* **A failed turn ends its voice.** A turn that fails after its first sentence was spoken has no
+  reply to finish the queue with; the conversation now says so (`onFailed`) and the voice stops,
+  so the face does not stay *speaking*. And a stopped queue gives up the shared *voiced* state
+  only once: its chain settling later cannot take it from the next reply's queue.
 
 | Tradeoff | Gained | Given up | Revisit if |
 |---|---|---|---|

@@ -71,7 +71,8 @@ RECENT = re.compile(
     r"week)|recent(?:ly)?|lately|earlier|just now|the other day|we (?:were|was) (?:talking|"
     r"discussing)|(?:talk|spoke|chat)(?:ed)? about|what (?:did|have) (?:i|we) (?:say|said|tell|"
     r"told|talk|discuss)\w*|where (?:were|did) we (?:leave|get to)|catch me up|"
-    r"what were we (?:just )?(?:doing|up to|on about)|just then)\b",
+    r"what were we (?:just )?(?:doing|up to|on about)|what (?:did|have) we (?:just )?(?:do|done)|"
+    r"just then)\b",
     re.I,
 )
 """A query about what happened lately (docs/06 §20). Only then does the temporal channel

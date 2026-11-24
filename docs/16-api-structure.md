@@ -498,7 +498,7 @@ cold model's time to first token (G12). It makes the wait legible.
 
 ---
 
-### 13.1 Idempotent sends and pushed mind state (FND-06, EMO-02)
+### 13.1 Idempotent sends, pushed mind state and presence (FND-06, EMO-02, INI-01)
 
 * **A retry returns the original turn.** `POST …/messages` takes an optional
   `client_message_id`; the stream's `message.send` already carried one. It is stored on the
@@ -519,6 +519,15 @@ cold model's time to first token (G12). It makes the wait legible.
   reply saved and ending "(I stopped early: I was asked to stop.)" — so memory, explain and the
   history all see what was really said. In the app, *Stop* appears while HEDWIG is replying or
   speaking and stops both.
+* **`initiative.subscribe` → `initiative.message` (INI-01, ADR-0026).** `{session_id}` says the
+  app is open and which conversation it shows; sent again when that changes (or `null` after
+  *New conversation*). The socket joins `core.presence`, and a `message.send` on it also moves
+  it to that turn's session. When HEDWIG speaks first, every subscribed socket gets
+  `initiative.message`; the words are already in the conversation, so a socket that misses it
+  sees them in the history, where the message carries `offer_id`.
+  Each socket has five seconds to take a message: one that stopped reading is dropped, so it
+  cannot hold up the initiative check or the other sockets. A message that arrives while the
+  user's own turn is in flight is shown when that turn ends.
 
 ## 14. Implementation record — why HEDWIG said that (SEC-01)
 
@@ -567,11 +576,3 @@ docs/19 §12). The causal event graph is `/traces/{correlation_id}` (OBS-01, doc
 the search that found nothing, `get_datetime — ok`, the seven directives, the plan, the mood
 at the time and `gemma4:e2b, 404 tokens in, 22 out, 4.5 s`. The model and tool records joined
 through the streamed turn's correlation id.
-
-
-* **`initiative.subscribe` → `initiative.message` (INI-01, ADR-0026).** `{session_id}` says the
-  app is open and which conversation it shows; sent again when that changes (or `null` after
-  *New conversation*). The socket joins `core.presence`, and a `message.send` on it also moves
-  it to that turn's session. When HEDWIG speaks first, every subscribed socket gets
-  `initiative.message`; the words are already in the conversation, so a socket that misses it
-  sees them in the history, where the message carries `offer_id`.

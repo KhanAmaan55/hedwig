@@ -10,6 +10,7 @@ import pytest
 from pypdf import PdfWriter
 
 from hedwig.core.types import MemoryKind
+from hedwig.knowledge import documents, formats
 from hedwig.wiring import Container
 
 
@@ -133,7 +134,107 @@ async def test_a_word_file_keeps_its_headings_and_tables(
 
 
 async def test_an_unchanged_pdf_is_not_read_again(
-    running_container: Container, papers: Path
+    running_container: Container, papers: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     await running_container.library.add(str(papers))
+
+    real = formats.extract  # the same function documents.py calls, patched where it is looked up
+
+    def only_skipped_ones(path: Path, **kwargs: int) -> str:
+        assert path.name not in {"tides.pdf", "plan.docx"}, f"{path.name} was parsed again"
+        return real(path, **kwargs)  # skipped files are tried again: a library may now exist
+
+    monkeypatch.setattr(documents, "extract", only_skipped_ones)
     assert (await running_container.library.reindex())["unchanged"] == 2
+
+
+async def test_a_word_file_with_broken_xml_is_skipped_and_the_next_file_still_read(
+    running_container: Container, tmp_path: Path
+) -> None:
+    folder = tmp_path / "mixed"
+    folder.mkdir()
+    with zipfile.ZipFile(folder / "a_broken.docx", "w") as broken:
+        broken.writestr("[Content_Types].xml", b"<Types><unclosed>")
+        broken.writestr("word/document.xml", b"<w:document/>")
+    good = docx.Document()
+    good.add_paragraph("The ferry leaves at nine.")
+    good.save(str(folder / "b_good.docx"))
+
+    report = await running_container.library.add(str(folder))
+
+    assert report["added"] == 1
+    assert report["skipped"] == [
+        {"path": str(folder / "a_broken.docx"), "reason": "could not be read as a Word document"}
+    ]
+
+
+async def test_a_pdf_needing_a_missing_library_is_skipped_not_fatal(
+    running_container: Container, papers: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pypdf
+    from pypdf.errors import DependencyError
+
+    real = pypdf.PdfReader
+
+    def needs_aes(path: object, *args: object, **kwargs: object) -> object:
+        if Path(str(path)).name == "tides.pdf":  # AES-256 needs a crypto library to even open
+            raise DependencyError("cryptography is required for AES algorithm")
+        return real(path, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(pypdf, "PdfReader", needs_aes)
+
+    report = await running_container.library.add(str(papers))
+
+    reasons = {Path(s["path"]).name: s["reason"] for s in report["skipped"]}
+    assert reasons["tides.pdf"] == "encrypted"
+    assert report["added"] == 1  # plan.docx still read
+
+
+def test_a_stream_that_decodes_past_the_budget_is_refused(tmp_path: Path) -> None:
+    import zlib
+
+    path = tmp_path / "huge.pdf"
+    write_pdf(path, ["placeholder"])
+    content = b"BT /F1 12 Tf 72 720 Td (x) Tj ET\n" + b" " * (formats.MAX_PDF_STREAM + 1)
+    packed = zlib.compress(content, 9)
+    body = path.read_bytes()
+    old = b"BT /F1 12 Tf 72 720 Td (placeholder) Tj ET"
+    body = body.replace(
+        b"<< /Length %d >>\nstream\n" % len(old) + old,
+        b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(packed) + packed,
+    )
+    path.write_bytes(body)  # offsets now stale: pypdf repairs the xref, as with real files
+
+    with pytest.raises(formats.UnreadableError, match="too large inside"):
+        formats.extract(path, max_chars=10_000_000)
+
+
+def test_pdf_text_stops_at_the_size_limit_without_reading_every_page(tmp_path: Path) -> None:
+    path = tmp_path / "long.pdf"
+    write_pdf(path, [f"Line of text number {n} on its own page." for n in range(40)])
+    read: list[int] = []
+    import pypdf
+
+    original = pypdf.PageObject.extract_text
+
+    def counting(self: object, *args: object, **kwargs: object) -> str:
+        read.append(1)
+        return original(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    pypdf.PageObject.extract_text = counting  # type: ignore[method-assign]
+    try:
+        with pytest.raises(formats.UnreadableError, match="size limit"):
+            formats.extract(path, max_chars=200)
+    finally:
+        pypdf.PageObject.extract_text = original  # type: ignore[method-assign]
+    assert len(read) < 10
+
+
+def test_a_line_that_looks_like_a_heading_keeps_the_page_citation(tmp_path: Path) -> None:
+    path = tmp_path / "notes.pdf"
+    write_pdf(path, ["# 3 things to pack"])
+
+    text = formats.extract(path, max_chars=10_000)
+    passages = documents.chunk(text, title="notes")
+
+    assert passages == [("notes > Page 1", "# 3 things to pack")]

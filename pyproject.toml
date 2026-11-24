@@ -21,7 +21,7 @@ dependencies = [
     "faster-whisper>=1.2.1",
     "av>=13,<16",
     "huggingface-hub>=0.21,<2",
-    "pypdf>=5",
+    "pypdf>=7.1",
     "python-docx>=1.1",
 ]
 
