@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -37,6 +37,8 @@ from hedwig.brain.state import TurnState, new_turn, summarise
 from hedwig.core.ids import new_id
 from hedwig.core.live import emit_live
 from hedwig.core.logging import fields, get_logger
+from hedwig.core.ports.sessions import MessageRole
+from hedwig.core.types import TrustTier
 
 logger = get_logger(__name__)
 
@@ -164,6 +166,39 @@ class Brain:
                 session_id=session_id, channel=channel
             )
         return session_id
+
+    async def speak_first(
+        self,
+        text: str,
+        *,
+        session_id: str | None,
+        trust: TrustTier,
+        meta: Mapping[str, Any],
+        channel: str = "web",
+    ) -> tuple[str, str]:
+        """Say something unprompted into a conversation (ADR-0026). Returns (session, message).
+
+        Under the session lock, so it can never land inside a turn. A session the idle reaper
+        ended is resumed and announced as a new conversation, like any resumed session.
+        """
+        conversation = self.collaborators.conversation
+        target = session_id or new_id("sess")
+        async with self._session_turn(target):
+            if await conversation.open(target, channel=channel):
+                await self.collaborators.announcer.session_started(
+                    session_id=target, channel=channel
+                )
+            message_id = new_id("msg")
+            await conversation.record_message(
+                session_id=target,
+                message_id=message_id,
+                role=MessageRole.HEDWIG,
+                text=text,
+                trust=trust,
+                meta=meta,
+            )
+        logger.info("spoke first", extra=fields(session=target, message=message_id))
+        return target, message_id
 
     async def run_turn(
         self,

@@ -96,6 +96,39 @@ describe("HedwigStream", () => {
     expect(lost).toBe(true);
   });
 
+  it("says which conversation is on screen and hands over what HEDWIG says first", async () => {
+    const { stream, sockets } = harness();
+    const said: string[] = [];
+    let lost = false;
+    const watching = stream.watchInitiative(
+      "sess_1",
+      (message) => said.push(message.text),
+      () => {
+        lost = true;
+      },
+    );
+    await tick();
+    const socket = sockets[0];
+    if (!socket) throw new Error("no socket");
+    socket.accept();
+    await watching;
+    expect(socket.sent).toEqual([
+      { type: "initiative.subscribe", payload: { session_id: "sess_1" } },
+    ]);
+
+    stream.showing(null);
+    expect(socket.sent.at(-1)).toEqual({
+      type: "initiative.subscribe",
+      payload: { session_id: null },
+    });
+
+    socket.push("initiative.message", { text: "You asked me to find out…", offer_id: "ini_1" });
+    expect(said).toEqual(["You asked me to find out…"]);
+
+    socket.close();
+    expect(lost).toBe(true);
+  });
+
   it("offers the token as a subprotocol, never in the URL", async () => {
     const { stream, sockets } = harness();
     void stream.send(null, "hi");

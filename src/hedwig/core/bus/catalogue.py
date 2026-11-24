@@ -214,6 +214,12 @@ def platform_catalogue() -> EventCatalogue:
         "Exploration answered a gap; the finding is untrusted and waits in the feed.",
         payload_keys={"finding_id", "gap_id"},
     )
+    # Initiative (docs/11 §14, ADR-0026)
+    catalogue.register(
+        "initiative.offer.made",
+        "HEDWIG said something unprompted: a finding, or a check-in on a goal.",
+        payload_keys={"offer_id", "kind", "ref_id"},
+    )
     # Goals (docs/08 §6.1)
     for event_type, description in (
         ("goals.goal.created", "A goal was created, by the user or proposed by reflection."),

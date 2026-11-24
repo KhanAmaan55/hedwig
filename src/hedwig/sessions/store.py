@@ -354,7 +354,8 @@ class SqliteSessionStore:
             upper = int(row["seq"])
 
         rows = self._db.query(
-            "SELECT id, seq, role, text, created_at FROM message "
+            "SELECT id, seq, role, text, created_at, "
+            "json_extract(meta, '$.initiative.offer_id') AS offer_id FROM message "
             "WHERE session_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?",
             (session_id, upper, max(1, limit)),
         )
@@ -365,6 +366,7 @@ class SqliteSessionStore:
                 role=str(row["role"]),
                 text=str(row["text"]),
                 created_at=str(row["created_at"]),
+                offer_id=row["offer_id"],
             )
             for row in reversed(rows)
         )

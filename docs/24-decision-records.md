@@ -42,6 +42,7 @@ expensive to reverse, or (c) is one a future reader would otherwise assume was a
 | [0023](adr/0023-live-turn-output-through-a-scoped-sink.md) | Live turn output travels through a context-scoped sink, not the event bus | Accepted |
 | [0024](adr/0024-purge-is-one-classified-sweep.md) | Purge is one sweep over a classified schema, verified against the file | Accepted |
 | [0025](adr/0025-projects-are-goals-with-a-journal.md) | Projects are goals with a journal, not a new kind of thing | Accepted |
+| [0026](adr/0026-hedwig-speaks-first-only-through-the-brain.md) | HEDWIG speaks first only through the brain, about what the user asked for | Accepted |
 
 ---
 

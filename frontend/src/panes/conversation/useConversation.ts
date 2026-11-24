@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { activityStore } from "../../stores/activity";
 import { ApiError, client as defaultClient, type HedwigClient } from "../../transport/client";
 import { DISCONNECTED, UNREACHABLE, type StreamApi } from "../../transport/socket";
-import type { TurnReply } from "../../transport/types";
+import type { InitiativeMessage, TurnReply } from "../../transport/types";
 
 /**
  * The conversation pane's state (docs/18 §13.3).
@@ -30,6 +30,8 @@ export interface ChatMessage {
   readonly recalled?: number;
   /** Still arriving, token by token (docs/16 §13). */
   readonly streaming?: boolean;
+  /** HEDWIG said this unprompted (docs/11 §14); the offer, for *Not interested*. */
+  readonly offerId?: string;
 }
 
 export interface Conversation {
@@ -51,6 +53,7 @@ export interface Conversation {
 
 const STORAGE_KEY = "hedwig.conversation.session";
 const RESUME_LIMIT = 50;
+const RETRY_PRESENCE_MS = 10_000;
 
 /** `localStorage`, wrapped: it can be absent or throw (private windows, blocked storage). */
 export const browserStorage: SessionStorage = {
@@ -125,7 +128,14 @@ export function useConversation(
         setMessages(
           page.messages.flatMap((message): ChatMessage[] =>
             message.role === "user" || message.role === "hedwig"
-              ? [{ key: message.id, role: message.role, text: message.text }]
+              ? [
+                  {
+                    key: message.id,
+                    role: message.role,
+                    text: message.text,
+                    ...(message.offer_id ? { offerId: message.offer_id } : {}),
+                  },
+                ]
               : [],
           ),
         );
@@ -146,6 +156,64 @@ export function useConversation(
       cancelled = true;
     };
   }, [api, storage]);
+
+  // HEDWIG may speak first into the conversation on screen (docs/11 §14, ADR-0026). The live
+  // channel says the app is open and which conversation it shows; an unprompted message is
+  // appended as it arrives. Not spoken aloud: voice is for replies the user asked for.
+  const shown = useRef(sessionId);
+  useEffect(() => {
+    shown.current = sessionId;
+    live?.showing?.(sessionId);
+  }, [live, sessionId]);
+
+  useEffect(() => {
+    const watch = live?.watchInitiative?.bind(live);
+    if (!watch) return;
+    let cancelled = false;
+    let stop: (() => void) | null = null;
+    let retry = 0;
+
+    const arrive = (offer: InitiativeMessage) => {
+      const previous = shown.current;
+      const elsewhere = previous !== null && previous !== offer.session_id;
+      if (previous !== offer.session_id) {
+        shown.current = offer.session_id;
+        setSessionId(offer.session_id);
+        storage.set(offer.session_id);
+      }
+      const said: ChatMessage = {
+        key: offer.message_id,
+        role: "hedwig",
+        text: offer.text,
+        offerId: offer.offer_id,
+      };
+      setMessages((current) =>
+        elsewhere ? [said] : current.some((m) => m.key === said.key) ? current : [...current, said],
+      );
+    };
+
+    const subscribe = () => {
+      if (cancelled) return;
+      watch(shown.current, arrive, () => {
+        stop = null;
+        retry = window.setTimeout(subscribe, RETRY_PRESENCE_MS);
+      })
+        .then((unsubscribe) => {
+          if (cancelled) unsubscribe();
+          else stop = unsubscribe;
+        })
+        .catch(() => {
+          retry = window.setTimeout(subscribe, RETRY_PRESENCE_MS);
+        });
+    };
+    subscribe();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retry);
+      stop?.();
+    };
+  }, [live, storage]);
 
   const send = useCallback(
     async (text: string): Promise<boolean> => {

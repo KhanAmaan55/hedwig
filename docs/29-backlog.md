@@ -83,7 +83,7 @@ the repository, ahead of any new cognitive capability.
 | 4 | Personality: evidence-based drift *proposals* | **COMPLETE** (PER-02) | Reactions read by tested rules (17/17 precise), nightly `drift` stage, the seven guardrails, Recent changes + Revert (docs/10 §13) |
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
 | 5 | Emotion: never manipulative / dependent | **COMPLETE** (EMO-01) | No mood asks for feeling, guilt or need (64 corners, in the suite); live adversarial eval 120/120 on both models, zero gate |
-| 6 | Curiosity engine | **PARTIAL** | Gap register (offline), gated budgeted exploration, findings feed, deferred surfacing (CUR-01/02/03); active unprompted messages need the WebSocket |
+| 6 | Curiosity engine | **COMPLETE** | Gap register (offline), gated budgeted exploration, findings feed, deferred surfacing (CUR-01/02/03); active unprompted messages, goal-linked and capped at one a day (INI-01) |
 | 7 | Knowledge: local docs, web search, provenance, citations | **COMPLETE** | Local documents read narrowly with secrets skipped, recalled by words and meaning at CURATED trust with the file named (KNW-01); opt-in web research with citations and egress audit (KNW-02/03). PDFs not yet |
 | 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
 | 8 | Avatar: VRM renderer, expression from emotion, blink, saccade, breath, head drift | **COMPLETE** | `frontend/src/panes/avatar/`; `idle.test.ts`, `compose.test.ts`, `test_expression.py` |
@@ -92,7 +92,7 @@ the repository, ahead of any new cognitive capability.
 | 8 | Avatar: mind state over WebSocket | **COMPLETE** (EMO-02) | `mind.update` pushed on change, woken by turn activity; polling only as fallback |
 | 9 | Voice: TTS, ASR, streaming, interruption | **PARTIAL** | Local Piper TTS (VOI-01), local faster-whisper ASR (VOI-02), Stop mid-reply (VOI-03); speech is not streamed sentence by sentence yet |
 | 10 | Reflection (T1–T4) | **COMPLETE** | T1 per conversation (REF-01), T2 nightly (REF-02, PER-02 drift stage), T3 weekly review and T4 monthly identity report (REF-03) |
-| 11 | Goals | **PARTIAL** | Store, lifecycle, journal (MEM-06), in the prompt, from reflection; no retrieval boost or proactive check-ins |
+| 11 | Goals | **PARTIAL** | Store, lifecycle, journal (MEM-06), in the prompt, from reflection, check-ins on open questions (INI-01); no retrieval boost |
 | 13 | Security: loopback bind, CORS, log redaction | **COMPLETE** | `api/app.py`, `core/logging.py` |
 | 13 | Security: API token | **COMPLETE** (was MISSING) | `core/token.py`, `api/auth.py`; `test_token_file.py`, `test_conversation_api.py` (ADR-0022) |
 | 13 | Security: injection defence | **COMPLETE** | Guard and quarantine (COG-01), untrusted and curated content labelled as data, trust propagation (docs/13 §3) |
@@ -357,6 +357,22 @@ topics), so that curiosity has something to pursue — works with the network of
 #### CUR-03 — Findings feed and interruption policy
 **Status:** Done (2026-11-20, passive and deferred modes) · **P2** · **M** · **Depends on:** CUR-02, FND-05
 
+#### INI-01 — Speaking first over the live channel
+**Status:** Done (2026-11-24) · **P2** · **L** · **Depends on:** CUR-03, MEM-06, FND-05 · **Modules:** `initiative/`, `core/presence.py`, `brain/graph.py`, `api/routes/stream.py`, `api/routes/initiative.py`, conversation pane, migration 0022 · [ADR-0026](adr/0026-hedwig-speaks-first-only-through-the-brain.md)
+
+*As the user, I want HEDWIG to tell me what it found for me, or ask about a question I left
+open on a project, without waiting for me to speak — rarely, and only about what I care about.*
+
+- Every five minutes, with the app open, outside quiet hours, not mid-conversation, at most once
+  a day: a new finding the user asked for or that shares a telling word with an active
+  user-stated goal; else a check-in on a goal whose latest journal entry is a question left
+  open ≥3 days (once a week per goal).
+- Templated, in HEDWIG's voice, with the content's trust tier; written by `Brain.speak_first`
+  under the session lock into the conversation on screen, pushed as `initiative.message`.
+- *Not interested* dismisses the finding or ends check-ins on that goal; offers show as
+  answered once the user replies. `hedwig initiative [--check]`, `GET /v1/initiative`.
+- **Tests:** `test_initiative.py` (10), socket and pane tests; live on `gemma4:e2b`.
+
 ### 4.8 Reflection
 
 #### REF-01 — T1 session reflection: summary and belief extraction
@@ -504,8 +520,8 @@ Every story in §4 is done, except COG-03 (deferred: there is no side-effecting 
 What the product still lacks, highest value first — each a story to write before building:
 
 1. ~~**Reflection T3/T4**~~ — done as REF-03 (2026-11-24); entity resolution deferred.
-2. **Proactive curiosity and goal check-ins over the live channel** — findings and follow-ups
-   arrive today only when the user next speaks; the socket now exists to offer them (docs/11).
+2. ~~**Proactive curiosity and goal check-ins over the live channel**~~ — done as INI-01
+   (2026-11-24); OS notifications when the window is hidden remain.
 3. **Corrections in conversation** — "no, she lives in Lisbon" proposing a correction the user
    confirms (docs/06 §18).
 4. **`/traces` and `/metrics`** — the causal trace of a turn, and counters for the doctor to read.
@@ -772,3 +788,12 @@ tables, or copied rows). Nothing existing was changed or deleted.
   Shared model-asking helpers moved to `reflection/common.py`. Found live: session reflection
   sometimes fails validation, leaving a month with one summary — the period summary now falls
   back to the exchanges. Migration 0021. Design in [12](12-reflection-engine.md) §16.
+- **INI-01** Speaking first — `hedwig.initiative` decides when and what, `Brain.speak_first`
+  writes it under the session lock into the conversation on screen, `core.presence` (sockets
+  that sent `initiative.subscribe`) delivers it. Goal-linked only, one a day, templated (no model
+  composes it), *Not interested* on every one. Gate reasons are kept so `hedwig initiative`
+  can say why it stayed quiet. Goal word matching now folds plurals ("compilers" is the
+  compiler), which also helps "how did the compilers go?". Live on `gemma4:e2b`: the check-in
+  arrived in the open app the moment it was made, and the reply to it continued the topic
+  (train tips, then accommodation). Migration 0022; ADR-0026; design in
+  [11](11-curiosity-engine.md) §14.

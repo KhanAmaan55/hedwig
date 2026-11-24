@@ -49,6 +49,7 @@ from hedwig.core.ports.brain import MindReader
 from hedwig.core.ports.personality import PersonaControl, PersonaReader, RelationshipReader, Trait
 from hedwig.core.ports.scheduler import Priority, TaskSpec
 from hedwig.core.ports.speech import Listener, Speaker
+from hedwig.core.presence import Presence
 from hedwig.core.registry import InMemoryServiceRegistry
 from hedwig.core.scheduler import AsyncTaskScheduler, DailyTrigger, IntervalTrigger
 from hedwig.core.state import SqliteStateManager
@@ -58,6 +59,7 @@ from hedwig.core.store.backups import Backups
 from hedwig.curiosity import CuriosityStore, Explorer, FindingsMindReader, GapDetector
 from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
 from hedwig.goals import GoalsMindReader, GoalStore
+from hedwig.initiative import Initiative
 from hedwig.knowledge.documents import DocumentLibrary
 from hedwig.knowledge.web import WebClient
 from hedwig.llm import LanguageModelGateway, OllamaProvider, RecordedProvider
@@ -135,6 +137,9 @@ class Container:
     listener: Listener
     nightly: NightlyReflection
     periodic: PeriodicReflection
+    presence: Presence
+    """Who has the app open, and which conversation it shows (ADR-0026)."""
+    initiative: Initiative
     exporter: Exporter
     purger: Purger
     library: DocumentLibrary
@@ -578,6 +583,35 @@ def build_container(
             )
         )
 
+    # Speaking first (INI-01, docs/11 §14, ADR-0026): rare, goal-linked, only with the app open.
+    presence = Presence(clock)
+    initiative = Initiative(
+        database=database,
+        brain=brain,
+        presence=presence,
+        curiosity=curiosity,
+        goals=goals,
+        history=sessions,
+        clock=clock,
+        bus=bus,
+        enabled=config.initiative.enabled,
+        max_daily=config.initiative.max_daily,
+        idle_minutes=config.initiative.idle_minutes,
+        quiet_start=config.initiative.quiet_start_hour,
+        quiet_end=config.initiative.quiet_end_hour,
+        timezone=config.runtime.timezone,
+    )
+    scheduler.register(
+        TaskSpec(
+            name="initiative.check",
+            handler=initiative.task,
+            trigger=IntervalTrigger(seconds=config.initiative.check_interval_minutes * 60),
+            priority=Priority.MAINTENANCE,
+            description="Say something unprompted, if it is worth it and the moment is right.",
+            max_runtime_seconds=60.0,
+        )
+    )
+
     # Nightly backups, checked before they are kept (SEC-03, docs/05 §7).
     backups = Backups(database, config.runtime.backups_dir, clock=clock)
     scheduler.register(
@@ -662,6 +696,8 @@ def build_container(
         listener=listener,
         nightly=nightly,
         periodic=periodic,
+        presence=presence,
+        initiative=initiative,
         exporter=exporter,
         purger=purger,
         library=library,

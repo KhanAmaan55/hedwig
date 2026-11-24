@@ -227,7 +227,7 @@ class GoalStore:
         A word counts if it has four or more letters and is not one every goal shares
         ("project", "help", "user"), so "how did the compiler go?" finds the compiler.
         """
-        words = _telling(text)
+        words = telling_words(text)
         if not words:
             return []
         found = []
@@ -235,7 +235,7 @@ class GoalStore:
             "SELECT * FROM goal WHERE status IN ('done','abandoned','blocked') "
             "ORDER BY updated_at DESC LIMIT 200"
         ):
-            if words & _telling(str(row["description"])):
+            if words & telling_words(str(row["description"])):
                 found.append(_goal(row))
             if len(found) >= limit:
                 break
@@ -398,6 +398,12 @@ GENERIC = frozenset(
 )
 
 
-def _telling(text: str) -> set[str]:
-    words = {w.strip(".,;:!?'\"()").lower() for w in text.split()}
-    return {w.removesuffix("'s") for w in words if len(w) >= 4} - GENERIC
+def telling_words(text: str) -> set[str]:
+    """The words that tell one goal from another (four letters or more, not generic)."""
+    words = {w.strip(".,;:!?'\"()").lower().removesuffix("'s") for w in text.split()}
+    # "compilers" is the compiler: a plain plural folds to its singular ("class" stays).
+    return {
+        w[:-1] if len(w) > 4 and w.endswith("s") and not w.endswith("ss") else w
+        for w in words
+        if len(w) >= 4
+    } - GENERIC

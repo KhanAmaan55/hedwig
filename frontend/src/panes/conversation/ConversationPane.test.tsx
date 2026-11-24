@@ -2,7 +2,13 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../../transport/client";
-import type { Explanation, MessagePage, SessionInfo, TurnReply } from "../../transport/types";
+import type {
+  Explanation,
+  InitiativeMessage,
+  MessagePage,
+  SessionInfo,
+  TurnReply,
+} from "../../transport/types";
 
 import { activityStore } from "../../stores/activity";
 import { UNREACHABLE, type StreamHandlers } from "../../transport/socket";
@@ -486,5 +492,109 @@ describe("Why? (docs/16 §14)", () => {
 
     expect(await screen.findByText("Did not search memory.")).toBeInTheDocument();
     expect(screen.getByText("Not recorded for replies this old.")).toBeInTheDocument();
+  });
+});
+
+describe("ConversationPane when HEDWIG speaks first (docs/11 §14)", () => {
+  function offer(overrides: Partial<InitiativeMessage> = {}): InitiativeMessage {
+    return {
+      offer_id: "ini_1",
+      kind: "finding",
+      session_id: "sess_1",
+      message_id: "msg_offer",
+      text: "You asked me to find out “Why are neap tides weaker?”. Here is what I read: …",
+      created_at: "2026-11-24T10:00:00.000+00:00",
+      ...overrides,
+    };
+  }
+
+  function liveWithInitiative() {
+    let deliver: (message: InitiativeMessage) => void = () => undefined;
+    const live = {
+      send: vi.fn(),
+      showing: vi.fn(),
+      watchInitiative: vi.fn(
+        (_session: string | null, handler: (message: InitiativeMessage) => void) => {
+          deliver = handler;
+          return Promise.resolve(() => undefined);
+        },
+      ),
+    };
+    return {
+      live,
+      say: (message: InitiativeMessage) => {
+        deliver(message);
+      },
+    };
+  }
+
+  it("shows it in the conversation on screen, marked, and takes Not interested", async () => {
+    const { live, say } = liveWithInitiative();
+    const storage = memoryStorage("sess_1");
+    const initiativeApi = { dismissOffer: vi.fn().mockResolvedValue(undefined) };
+    render(
+      <ConversationPane
+        api={fakeApi()}
+        storage={storage}
+        live={live}
+        initiativeApi={initiativeApi}
+      />,
+    );
+    await waitFor(() => {
+      expect(live.watchInitiative).toHaveBeenCalledWith(
+        "sess_1",
+        expect.any(Function),
+        expect.any(Function),
+      );
+    });
+
+    act(() => {
+      say(offer());
+    });
+
+    expect(screen.getByText(/Why are neap tides weaker/)).toBeInTheDocument();
+    expect(screen.getByText(/HEDWIG started this/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Why?" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not interested" }));
+    expect(initiativeApi.dismissOffer).toHaveBeenCalledWith("ini_1");
+    expect(await screen.findByText(/won't bring this up again/)).toBeInTheDocument();
+  });
+
+  it("adopts the conversation HEDWIG opened when none was on screen", async () => {
+    const { live, say } = liveWithInitiative();
+    const storage = memoryStorage();
+    render(<ConversationPane api={fakeApi()} storage={storage} live={live} />);
+    await waitFor(() => {
+      expect(live.watchInitiative).toHaveBeenCalled();
+    });
+
+    act(() => {
+      say(offer({ session_id: "sess_new" }));
+    });
+
+    expect(storage.value).toBe("sess_new");
+    await waitFor(() => {
+      expect(live.showing).toHaveBeenLastCalledWith("sess_new");
+    });
+  });
+
+  it("marks an unprompted message again after a reload", async () => {
+    const api = fakeApi({
+      history: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            id: "msg_offer",
+            seq: 1,
+            role: "hedwig",
+            text: "On “plan the Porto trip”: last time this was still open.",
+            created_at: "2026-11-24T10:00:00.000+00:00",
+            offer_id: "ini_2",
+          },
+        ],
+        next_before: null,
+      } satisfies MessagePage),
+    });
+    render(<ConversationPane api={api} storage={memoryStorage("sess_1")} />);
+    expect(await screen.findByText(/HEDWIG started this/)).toBeInTheDocument();
   });
 });

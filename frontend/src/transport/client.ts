@@ -202,6 +202,13 @@ export class HedwigClient {
     );
   }
 
+  /** *Not interested* on something HEDWIG said unprompted (docs/11 §14). */
+  async dismissOffer(offerId: string): Promise<void> {
+    await this.request<unknown>("POST", `/v1/initiative/${encodeURIComponent(offerId)}/dismiss`, {
+      auth: true,
+    });
+  }
+
   async markReportSeen(month: string): Promise<void> {
     await this.request<unknown>(
       "POST",

@@ -178,6 +178,8 @@ class HistoryMessage:
     role: str
     text: str
     created_at: str
+    offer_id: str | None = None
+    """Set when HEDWIG said this unprompted (ADR-0026): the offer, for *Not interested*."""
 
 
 @runtime_checkable

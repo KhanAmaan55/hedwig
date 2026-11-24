@@ -107,6 +107,8 @@ export interface HistoryMessage {
   role: "user" | "hedwig" | "system" | "tool";
   text: string;
   created_at: string;
+  /** Set when HEDWIG said this unprompted (docs/11 §14): the offer, for *Not interested*. */
+  offer_id?: string | null;
 }
 
 /** `GET /v1/sessions/{id}/messages`: oldest first. */
@@ -331,4 +333,16 @@ export interface Explanation {
     duration_ms: number | null;
   }[];
   trace_id: string | null;
+}
+
+// --- speaking first (INI-01, docs/11 §14) ------------------------------------------
+
+/** `initiative.message` over the live channel: HEDWIG said something unprompted. */
+export interface InitiativeMessage {
+  offer_id: string;
+  kind: "finding" | "goal_check_in";
+  session_id: string;
+  message_id: string;
+  text: string;
+  created_at: string;
 }
