@@ -56,6 +56,7 @@ from hedwig.core.state import SqliteStateManager
 from hedwig.core.storage import ContentAddressedStorage
 from hedwig.core.store import Database, MigrationRunner
 from hedwig.core.store.backups import Backups
+from hedwig.core.tracing import SpanStore
 from hedwig.curiosity import CuriosityStore, Explorer, FindingsMindReader, GapDetector
 from hedwig.emotion import EmotionEngine, EmotionMindReader, EmotionStore
 from hedwig.goals import GoalsMindReader, GoalStore
@@ -81,6 +82,7 @@ from hedwig.privacy import Exporter, Purger
 from hedwig.reflection import NightlyReflection, PeriodicReflection, SessionReflector
 from hedwig.sessions import SqliteSessionStore
 from hedwig.speech import PiperSpeaker, WhisperListener
+from hedwig.telemetry import Traces
 from hedwig.tools import (
     ToolRegistry,
     calculate_tool,
@@ -139,6 +141,8 @@ class Container:
     nightly: NightlyReflection
     periodic: PeriodicReflection
     presence: Presence
+    traces: Traces
+    """What happened in a turn or job, by correlation id (OBS-01)."""
     corrections: CorrectionProposer
     """Who has the app open, and which conversation it shows (ADR-0026)."""
     initiative: Initiative
@@ -211,6 +215,9 @@ def build_container(
             database, MIGRATIONS_DIR, clock=clock, backup_dir=config.runtime.backups_dir
         ).run()
 
+    # Where the time goes (OBS-01, docs/19 §13): turn stages and bus handlers record spans.
+    spans = SpanStore(database, clock=clock)
+
     # 2. Configuration manager — provenance and hot reload over the frozen Config.
     config_manager = LayeredConfigManager(config)
 
@@ -223,6 +230,7 @@ def build_container(
         queue_size=config.bus.queue_size,
         handler_timeout=config.bus.handler_timeout_seconds,
         replay_window=timedelta(hours=config.bus.replay_window_hours),
+        spans=spans,
         strict_types=config.bus.strict_types,
     )
 
@@ -428,6 +436,7 @@ def build_container(
             tools=tools,
             conversation=sessions,
             announcer=BusAnnouncer(bus),
+            spans=spans,
         )
     )
     bus.subscribe(
@@ -623,6 +632,17 @@ def build_container(
         )
     )
 
+    scheduler.register(
+        TaskSpec(
+            name="telemetry.prune_spans",
+            handler=spans.prune_task,
+            trigger=DailyTrigger(hour=config.memory.maintenance_hour),
+            priority=Priority.MAINTENANCE,
+            description="Drop trace spans older than 30 days.",
+            max_runtime_seconds=120.0,
+        )
+    )
+
     # Nightly backups, checked before they are kept (SEC-03, docs/05 §7).
     backups = Backups(database, config.runtime.backups_dir, clock=clock)
     scheduler.register(
@@ -708,6 +728,7 @@ def build_container(
         nightly=nightly,
         periodic=periodic,
         presence=presence,
+        traces=Traces(database),
         corrections=corrections,
         initiative=initiative,
         exporter=exporter,

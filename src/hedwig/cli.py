@@ -617,6 +617,70 @@ def reflect(
 
 
 @app.command()
+def trace(
+    correlation_id: Annotated[
+        str | None, typer.Argument(help="A turn's or job's id; the latest turn if omitted.")
+    ] = None,
+    recent: Annotated[bool, typer.Option("--recent", help="List recent turns and jobs.")] = False,
+) -> None:
+    """Where the time went in a turn or job: stages, handlers, model calls (docs/19 §13)."""
+    if recent or correlation_id is None:
+        listed = _call(lambda c: c.traces(limit=15))
+        assert isinstance(listed, list)
+        if recent:
+            for item in listed:
+                ms = f"{item['latency_ms']:.0f} ms" if item["latency_ms"] else "—"
+                print(
+                    f"  {item['started_at'][:19]}  {item['kind']:<4} {item['status']:<10} "
+                    f"{ms:>9}  {item['correlation_id']}  {item['name']}"
+                )
+            return
+        turns = [t for t in listed if t["kind"] == "turn"]
+        if not turns:
+            print("no turns yet")
+            return
+        correlation_id = str(turns[0]["correlation_id"])
+    chosen = correlation_id
+    found = _call(lambda c: c.trace(chosen))
+    assert isinstance(found, dict)
+    root = found["root"] or {}
+    total = root.get("latency_ms")
+    print(
+        f"{chosen} · {root.get('kind', '?')} · {root.get('status', '?')}"
+        + (f" · {total} ms" if total else "")
+    )
+    for entry in found["timeline"]:
+        duration = entry.get("duration_ms")
+        took = f"{duration:>8.0f} ms" if duration is not None else " " * 11
+        extra = ""
+        if entry["type"] == "model":
+            extra = f"  [{entry['tier']} {entry['model']}, {entry.get('tokens_out') or 0} tok out"
+            if entry.get("first_token_ms"):
+                extra += f", first token {entry['first_token_ms']:.0f} ms"
+            extra += "]"
+        elif entry["type"] == "handler":
+            extra = f"  (on {entry.get('event', '?')})"
+        failed = "  FAILED" if entry.get("status") in ("failed", "error") else ""
+        print(
+            f"  +{entry['offset_ms']:>8.0f}  {entry['type']:<7} {entry['name']:<46}{took}"
+            f"{extra}{failed}"
+        )
+    summary = found["summary"]
+    print(
+        f"  {summary['model_calls']} model calls ({summary['model_ms']:.0f} ms), "
+        f"{summary['handlers']} handlers, {summary['events']} events, "
+        f"{summary['failures']} failures"
+    )
+
+
+@app.command()
+def metrics() -> None:
+    """Health and cognitive metrics, in Prometheus text (docs/19 §6)."""
+    text = _call(lambda c: c.metrics())
+    print(text, end="")
+
+
+@app.command()
 def corrections(
     accept: Annotated[str | None, typer.Option(help="Yes, correct it: a proposal's id.")] = None,
     decline: Annotated[str | None, typer.Option(help="No, leave it: a proposal's id.")] = None,

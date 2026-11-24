@@ -220,6 +220,23 @@ class HedwigClient:
     def report(self, month: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/reflection/reports/{month}")
 
+    def traces(self, limit: int = 20) -> list[dict[str, Any]]:
+        return list(self._request("GET", "/v1/traces", params={"limit": limit})["traces"])
+
+    def trace(self, correlation_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/v1/traces/{correlation_id}")
+
+    def metrics(self) -> str:
+        try:
+            response = self._http.get(
+                "/v1/metrics", headers={"Authorization": f"Bearer {self._token}"}
+            )
+        except httpx.TransportError as error:
+            raise ClientError("unreachable", f"Could not reach HEDWIG: {error}") from error
+        if response.is_success:
+            return response.text
+        self._fail(response)
+
     def corrections(self, status: str = "proposed") -> list[dict[str, Any]]:
         return list(self._request("GET", "/v1/corrections", params={"status": status})["proposals"])
 

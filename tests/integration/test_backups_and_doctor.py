@@ -145,3 +145,32 @@ def test_the_doctor_says_what_is_wrong_and_what_to_do(tmp_path: Path) -> None:
     assert findings["backups"].status == "warn"
     assert findings["HEDWIG"].detail.startswith("not running")
     assert findings["recall by meaning"].status == "ok"
+
+
+def test_the_doctor_reads_the_last_week(tmp_path: Path) -> None:
+    """OBS-01: failed turns and dead letters from the records, with where to look next."""
+    config = load_config(runtime={"data_dir": str(tmp_path)}, api={"port": 9})
+    database = Database(config.database_path)
+    clock = FakeClock("2026-11-20T09:00:00+00:00")
+    from hedwig.core.store import MigrationRunner
+
+    MigrationRunner(database, MIGRATIONS_DIR, clock=clock).run()
+    database.execute(
+        "INSERT INTO session (id, channel, started_at, created_at, updated_at) "
+        "VALUES ('s','web','2026-11-20','2026-11-20','2026-11-20')"
+    )
+    for index, (status, ms) in enumerate([("completed", 3000), ("failed", 9000)]):
+        database.execute(
+            "INSERT INTO turn (id, session_id, correlation_id, started_at, status, latency_ms, "
+            "created_at) VALUES (?, 's', ?, '2026-11-20T09:00:00', ?, ?, '2026-11-20')",
+            (f"turn_{index}", f"turn_{index}", status, ms),
+        )
+    database.close()
+
+    findings = {
+        f.name: f for f in run_checks(config, migrations=MIGRATIONS_DIR, today=date(2026, 11, 23))
+    }
+
+    week = findings["last 7 days"]
+    assert week.status == "warn" and week.detail.startswith("2 turns, 1 failed")
+    assert "hedwig trace" in week.fix

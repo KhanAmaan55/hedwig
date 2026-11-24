@@ -262,3 +262,84 @@ dashboard nobody opens will not.
 | "Time machine": scrub the inspector to any past moment | Identity snapshots + emotion history already make this mostly possible |
 | Regression bisection by `prompt_version` × `model_id` | First serious unexplained quality regression |
 | Crash-report bundle (`hedwig doctor`) | First remote debugging session |
+
+---
+
+## 13. Implementation record — traces and metrics (OBS-01)
+
+What already existed: a correlation id on every turn (`turn_…`), every scheduled run (the
+`task_run` row's) and every bus delivery (the event's, with the event as causation), and on the
+rows that matter — `turn`, `llm_call`, `tool_call`, `event`, `working_set_log`. What was missing
+was *where the time went* inside a turn, and a way to read any of it without SQL.
+
+```mermaid
+graph TB
+    subgraph write["written as work happens"]
+        N["turn graph: each node"] -->|"span · stage"| SP[("span<br/><small>correlation · name · kind · started · ms · status · counts</small>")]
+        H["bus: each handler delivery"] -->|"span · handler"| SP
+        L["gateway"] --> LC[("llm_call")]
+        T["tools"] --> TC[("tool_call")]
+        B["bus"] --> EV[("event")]
+        S["scheduler"] --> TR[("task_run")]
+    end
+    subgraph read["read model: hedwig.telemetry"]
+        TRACE["/v1/traces/{correlation_id}<br/><small>root (turn or job) · stages · model calls ·<br/>tools · events · handlers, one timeline</small>"]
+        LIST["/v1/traces<br/><small>recent turns and jobs</small>"]
+        MET["/v1/metrics<br/><small>Prometheus text</small>"]
+    end
+    SP & LC & TC & EV & TR --> TRACE
+    SP & LC & TC & EV & TR --> LIST
+    DB[("turn · memory · reflection_run · finding ·<br/>initiative_offer · correction_proposal · …")] --> MET
+    GM["gateway counters<br/><small>since start</small>"] --> MET
+    BS["bus stats<br/><small>queues, dead letters</small>"] --> MET
+    TRACE --> CLI["hedwig trace [id]"]
+    MET --> CLI2["hedwig metrics · hedwig doctor"]
+```
+
+* **Spans, two kinds, no content.** Every turn-graph node and every bus handler delivery writes
+  one `span` row: correlation id, name (`recall`, `compose`; `memory.capture`), kind (`stage`,
+  `handler`), start, duration, status, and for a handler the event type it handled. Never a
+  message, a memory or a prompt — the redaction rule of §4 holds for spans too. Written as each
+  finishes (one small insert; measured below) rather than batched: a crash keeps the spans up
+  to the crash, which is when they are wanted. Kept 30 days, pruned daily.
+* **Handlers inherit the turn's correlation**, so a turn's trace also shows what happened
+  *because* of it — capture, embedding, the correction check, emotion's appraisal — and the
+  model calls they made. "Where did the time go after the reply?" is the same query.
+* **`/v1/traces/{id}` is a read model**, like `/explain`: it assembles rows other modules own
+  and owns none (`hedwig.telemetry`). Root: the turn or the scheduled run; then one timeline of
+  stages, handlers, model calls (with first-token time), tool calls and events, each with its
+  offset from the start. `/v1/traces` lists recent turns and runs. `hedwig trace` prints the
+  tree of §5, the latest turn by default.
+* **`/v1/metrics`, computed at scrape.** Counters and histograms over the tables (turns by
+  status and duration, memories by kind and status, forgetting, beliefs tentative, reflection
+  runs and lag, curiosity, initiative, corrections, drift) survive restarts because they are
+  the records; the gateway's own counters and the bus's queues are since-start, as Prometheus
+  expects of a process. Same auth as the rest of the API (§10).
+* **Not built, and said so:** `hedwig_db_query_duration_seconds`, `hedwig_governor_yield_seconds`
+  and `hedwig_task_restarts_total` need instrumentation that does not exist yet (a timed
+  repository layer, a governor); `hedwig_retrieval_recall_at_5` is the eval's
+  (`scripts/eval_recall.py`), not the running system's; `hedwig_emotion_variance_7d` needs a
+  windowed computation over `emotion_history` worth doing when the weekly review reads it.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Spans written one by one | Simple; survive a crash | A write per node and handler | The overhead measure exceeds §10's 2 % |
+| Metrics from the tables at scrape | Correct across restarts; nothing to keep in sync | Each scrape runs a few aggregate queries | Scrapes become frequent or the tables huge |
+| Handlers in the turn's trace | The whole consequence of a turn in one place | A long trace for a busy turn | Never — that is the point |
+| Read model, not a span hierarchy | No parent ids to maintain | Nesting is by time, not by call | Nested spans inside a stage are needed (recall's channels) |
+
+**Measured.** A span write costs 0.025 ms (2,000 writes to a file database); a turn writes about
+25, so ~0.6 ms against turns of seconds — far inside §10's 2 % budget, which is why spans are
+written one by one rather than batched.
+
+**Verified live** (`gemma4:e2b`, a scratch install, "I just started learning Portuguese, any
+tips for a beginner?"). `hedwig trace` showed the 896 ms turn: recall 29 ms, compose 847 ms of
+which the model call was 845 ms (57 tokens out), and after the reply the twelve handlers it set
+off — capture 2 ms, the episode's embedding 24 ms, the correction check, emotion, curiosity,
+relationship, personality — with the five events between them. `hedwig metrics` exposed the
+turn, the new episode, the mood and each tier's reflection lag; `hedwig doctor` reported
+*1 turns, 0 failed, p95 0.9 s, 0 dead letters*.
+
+**Found while testing.** A turn run directly — by a test or an eval script rather than through
+the API — wrote its model calls with no correlation id, because only the API bound one. The turn
+now binds its own (`Brain.run_turn`), so a trace is complete whoever started it.

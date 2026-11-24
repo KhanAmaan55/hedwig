@@ -276,6 +276,8 @@ graph LR
 | `speech` | TTS/ASR adapters, phoneme timings for lip sync. Built: Piper TTS behind `Speaker` | [15](15-avatar-controller.md) §6, §13 |
 | `expression` | Emotion + speech → expression frames | [15](15-avatar-controller.md) |
 | `explain` | Read model: assembles why a reply was what it was, from records other modules own (docs/08 §3.1) | [16](16-api-structure.md) §14 |
+| `telemetry` | Read models for traces (`/v1/traces`) and metrics (`/v1/metrics`); owns no table | [19](19-observability.md) §13 |
+| `core.tracing` | Spans: each turn stage and bus handler, timed under its correlation id; owns `span` | [19](19-observability.md) §13 |
 | `core.bus` | Publish/subscribe, durable outbox, replay | [04](04-communication-and-event-bus.md) |
 | `core.config` | Layered config load, validation, hot-reload of safe keys | §7 below |
 | `core.presence` | Who has the app open and which conversation it shows; ephemeral delivery to them | [ADR-0026](adr/0026-hedwig-speaks-first-only-through-the-brain.md) |

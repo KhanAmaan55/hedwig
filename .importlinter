@@ -18,7 +18,7 @@ layers =
     hedwig.wiring | hedwig.doctor
     hedwig.initiative
     hedwig.brain | hedwig.reflection | hedwig.curiosity
-    hedwig.tools | hedwig.speech | hedwig.explain | hedwig.privacy
+    hedwig.tools | hedwig.speech | hedwig.explain | hedwig.privacy | hedwig.telemetry
     hedwig.emotion | hedwig.personality | hedwig.expression | hedwig.goals
     hedwig.sessions
     hedwig.memory

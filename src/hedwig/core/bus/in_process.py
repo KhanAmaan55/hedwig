@@ -37,6 +37,7 @@ from hedwig.core.ids import new_id, new_ulid
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock, Delivery, Event, EventHandler, Health, HealthStatus
 from hedwig.core.store import Database
+from hedwig.core.tracing import SpanRecorder
 
 logger = get_logger(__name__)
 
@@ -124,8 +125,10 @@ class InProcessBus:
         handler_timeout: float = DEFAULT_HANDLER_TIMEOUT,
         replay_window: timedelta = DEFAULT_REPLAY_WINDOW,
         strict_types: bool = True,
+        spans: SpanRecorder | None = None,
     ) -> None:
         self._database = database
+        self._spans = spans
         self._clock = clock
         self._catalogue = catalogue if catalogue is not None else platform_catalogue()
         self._queue_size = queue_size
@@ -395,6 +398,7 @@ class InProcessBus:
 
         self._in_flight += 1
         started = time.monotonic()
+        started_at = self._clock.now()
         try:
             with correlation_scope(event.correlation_id, causation_id=event.id):
                 token = _depth.set(envelope.depth_hint + 1)
@@ -405,8 +409,10 @@ class InProcessBus:
                 finally:
                     _depth.reset(token)
         except Exception as exc:
+            self._span(subscription, event, started_at, started, ok=False)
             await self._on_failure(subscription, envelope, exc)
         else:
+            self._span(subscription, event, started_at, started, ok=True)
             subscription.delivered += 1
             if subscription.durable:
                 self._record(subscription.name, event.id, "ok", envelope.attempts + 1, None)
@@ -420,6 +426,27 @@ class InProcessBus:
             )
         finally:
             self._in_flight -= 1
+
+    def _span(
+        self,
+        subscription: _Subscription,
+        event: Event,
+        started_at: datetime,
+        started: float,
+        *,
+        ok: bool,
+    ) -> None:
+        """A handler's time, under the event's correlation id (docs/19 §13)."""
+        if self._spans is not None:
+            self._spans.record(
+                subscription.name,
+                kind="handler",
+                started_at=started_at,
+                duration_ms=(time.monotonic() - started) * 1000,
+                ok=ok,
+                detail={"event": event.type},
+                correlation_id=event.correlation_id,
+            )
 
     async def _on_failure(
         self, subscription: _Subscription, envelope: _Envelope, exc: BaseException

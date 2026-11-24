@@ -13,7 +13,7 @@ import socket
 import sqlite3
 import stat
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import httpx
@@ -44,6 +44,7 @@ def run_checks(config: Config, *, migrations: Path, today: date) -> list[Finding
         _synced(data),
         _token(config),
         *_database(config.database_path, migrations),
+        _recent(config.database_path, today),
         _vectors(),
         *_ollama(config),
         *_voice(config),
@@ -125,6 +126,37 @@ def _database(path: Path, migrations: Path) -> list[Finding]:
         else Finding("schema", "ok", f"up to date (version {max(applied, default=0)})")
     )
     return found
+
+
+def _recent(path: Path, today: date) -> Finding:
+    """The last week from the records `/v1/metrics` reads: turns, failures, dead letters."""
+    if not path.exists():
+        return Finding("last 7 days", "ok", "nothing yet")
+    since = (today - timedelta(days=7)).isoformat()
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            rows = connection.execute(
+                "SELECT status, latency_ms FROM turn WHERE started_at >= ?", (since,)
+            ).fetchall()
+            dead = connection.execute(
+                "SELECT COUNT(*) FROM event_dead_letter WHERE created_at >= ?", (since,)
+            ).fetchone()[0]
+        finally:
+            connection.close()
+    except sqlite3.Error:
+        return Finding("last 7 days", "ok", "not recorded by this version yet")
+    if not rows:
+        return Finding("last 7 days", "ok", "no conversations")
+    failed = sum(status == "failed" for status, _ in rows)
+    latencies = sorted(ms for _, ms in rows if ms is not None)
+    p95 = latencies[min(len(latencies) - 1, int(len(latencies) * 0.95))] / 1000 if latencies else 0
+    detail = f"{len(rows)} turns, {failed} failed, p95 {p95:.1f} s, {dead} dead letters"
+    if dead or failed / len(rows) > 0.1:
+        return Finding(
+            "last 7 days", "warn", detail, "hedwig trace --recent, then hedwig trace <id>"
+        )
+    return Finding("last 7 days", "ok", detail)
 
 
 def _vectors() -> Finding:

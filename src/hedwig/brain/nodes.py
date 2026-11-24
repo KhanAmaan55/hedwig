@@ -47,6 +47,7 @@ from hedwig.core.ports.sessions import (
     TurnRecord,
     WorkingSetRecord,
 )
+from hedwig.core.tracing import SpanRecorder
 from hedwig.core.types import TrustTier
 
 logger = get_logger(__name__)
@@ -83,6 +84,8 @@ class Collaborators:
     conversation: Conversation
     announcer: TurnAnnouncer
     caps: TurnCaps = DEFAULT_CAPS
+    spans: SpanRecorder | None = None
+    """Where each stage's time goes (docs/19 §13). Optional: a turn runs the same without."""
 
 
 def make_nodes(deps: Collaborators) -> dict[str, Node]:
