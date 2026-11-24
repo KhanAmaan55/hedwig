@@ -1,0 +1,483 @@
+{
+ "about": "A held-out recall corpus (docs/06 §20): a different, fictional user, written after retrieval was tuned on recall_corpus.json and never used to tune it. Adds `goal` queries (about the user's active goals, which never name them) and `temporal` ones (about what was said recently). `goals` are the user-stated goals active during the queries.",
+ "version": 1,
+ "goals": [
+  "Help the user run the Lisbon half marathon in October",
+  "Help the user learn the Bach minuet on the cello"
+ ],
+ "memories": [
+  {
+   "id": "hb01",
+   "kind": "belief",
+   "days_ago": 200,
+   "text": "The user works night shifts as a nurse at St Clare's hospital."
+  },
+  {
+   "id": "hb02",
+   "kind": "belief",
+   "days_ago": 300,
+   "text": "The user is allergic to penicillin."
+  },
+  {
+   "id": "hb03",
+   "kind": "belief",
+   "days_ago": 250,
+   "text": "The user's partner Sam is a carpenter."
+  },
+  {
+   "id": "hb04",
+   "kind": "belief",
+   "days_ago": 90,
+   "text": "The user is training for the Lisbon half marathon in October."
+  },
+  {
+   "id": "hb05",
+   "kind": "belief",
+   "days_ago": 120,
+   "text": "The user prefers tea to coffee."
+  },
+  {
+   "id": "hb06",
+   "kind": "belief",
+   "days_ago": 150,
+   "text": "The user's daughter Lila is seven years old."
+  },
+  {
+   "id": "hb07",
+   "kind": "belief",
+   "days_ago": 100,
+   "text": "The user is learning to play the cello."
+  },
+  {
+   "id": "hb08",
+   "kind": "belief",
+   "days_ago": 280,
+   "text": "The user grew up in Galway."
+  },
+  {
+   "id": "hb09",
+   "kind": "belief",
+   "days_ago": 210,
+   "text": "The user does not eat fish."
+  },
+  {
+   "id": "hb10",
+   "kind": "belief",
+   "days_ago": 180,
+   "text": "The user's car is an old blue Volvo."
+  },
+  {
+   "id": "hb11",
+   "kind": "belief",
+   "days_ago": 60,
+   "text": "The user is afraid of flying."
+  },
+  {
+   "id": "hb12",
+   "kind": "belief",
+   "days_ago": 130,
+   "text": "The user reads crime novels before bed."
+  },
+  {
+   "id": "hb13",
+   "kind": "belief",
+   "days_ago": 24,
+   "text": "The user's mother is recovering from a hip operation."
+  },
+  {
+   "id": "hb14",
+   "kind": "belief",
+   "days_ago": 170,
+   "text": "The user keeps bees in the back garden."
+  },
+  {
+   "id": "hb15",
+   "kind": "belief",
+   "days_ago": 75,
+   "text": "The user wants to move to the coast within five years."
+  },
+  {
+   "id": "hb16",
+   "kind": "belief",
+   "days_ago": 260,
+   "text": "The user speaks Irish and English."
+  },
+  {
+   "id": "hb17",
+   "kind": "belief",
+   "days_ago": 230,
+   "text": "The user's birthday is on 2 March."
+  },
+  {
+   "id": "hb18",
+   "kind": "belief",
+   "days_ago": 140,
+   "text": "The user has a cat named Pickle."
+  },
+  {
+   "id": "hb19",
+   "kind": "belief",
+   "days_ago": 110,
+   "text": "The user dislikes loud restaurants."
+  },
+  {
+   "id": "hb20",
+   "kind": "belief",
+   "days_ago": 95,
+   "text": "The user volunteers at a food bank on Saturdays."
+  },
+  {
+   "id": "he01",
+   "kind": "episode",
+   "days_ago": 2,
+   "title": "Half marathon training",
+   "text": "User: Did a 14 km long run this morning, my left knee ached at the end."
+  },
+  {
+   "id": "he02",
+   "kind": "episode",
+   "days_ago": 5,
+   "title": "Cello lesson",
+   "text": "User: My cello teacher says my bow hold is finally relaxed; we start the Bach minuet next."
+  },
+  {
+   "id": "he03",
+   "kind": "episode",
+   "days_ago": 9,
+   "title": "Night shift",
+   "text": "User: Rough night on the ward, two admissions at 3am and no break until six."
+  },
+  {
+   "id": "he04",
+   "kind": "episode",
+   "days_ago": 14,
+   "title": "Beehive inspection",
+   "text": "User: Found the queen and fresh eggs in the hive; the colony looks strong after winter."
+  },
+  {
+   "id": "he05",
+   "kind": "episode",
+   "days_ago": 20,
+   "title": "Lila's school play",
+   "text": "User: Lila played a tree in the school play and forgot one line but loved it."
+  },
+  {
+   "id": "he06",
+   "kind": "episode",
+   "days_ago": 25,
+   "title": "Mum's surgery",
+   "text": "User: Mum had her hip operation today, the surgeon said it went well."
+  },
+  {
+   "id": "he07",
+   "kind": "episode",
+   "days_ago": 30,
+   "title": "Coast house hunting",
+   "text": "User: We looked at two cottages near Clifden; one had damp walls, the other no garden."
+  },
+  {
+   "id": "he08",
+   "kind": "episode",
+   "days_ago": 33,
+   "title": "Volvo repairs",
+   "text": "User: The Volvo failed its test because of the brake pads; the garage fixed it for 180 euro."
+  },
+  {
+   "id": "he09",
+   "kind": "episode",
+   "days_ago": 40,
+   "title": "Food bank",
+   "text": "User: Sorted tinned food for three hours at the food bank, they are short of pasta."
+  },
+  {
+   "id": "he10",
+   "kind": "episode",
+   "days_ago": 45,
+   "title": "Book club",
+   "text": "User: Finished the new Tana French novel, guessed the killer halfway through."
+  },
+  {
+   "id": "he11",
+   "kind": "episode",
+   "days_ago": 1,
+   "title": "Talking about sleep",
+   "text": "User: I can't sleep after night shifts, I'm trying blackout curtains."
+  },
+  {
+   "id": "he12",
+   "kind": "episode",
+   "days_ago": 50,
+   "title": "Flight to Boston",
+   "text": "User: Took a sedative for the flight to Boston and still panicked during take-off."
+  },
+  {
+   "id": "he13",
+   "kind": "episode",
+   "days_ago": 60,
+   "title": "Knee physio",
+   "text": "User: The physio said my knee pain is runner's knee and gave me hip strengthening exercises."
+  },
+  {
+   "id": "he14",
+   "kind": "episode",
+   "days_ago": 12,
+   "title": "Sam's workshop",
+   "text": "User: Sam built a cherry wood bookshelf for Lila's room this weekend."
+  },
+  {
+   "id": "he15",
+   "kind": "episode",
+   "days_ago": 3,
+   "title": "Pickle at the vet",
+   "text": "User: Pickle had her vaccinations; the vet says she is a little overweight."
+  },
+  {
+   "id": "he16",
+   "kind": "episode",
+   "days_ago": 35,
+   "title": "Coffee shop meeting",
+   "text": "User: Met a colleague at a coffee shop, too noisy to hear each other."
+  },
+  {
+   "id": "he17",
+   "kind": "episode",
+   "days_ago": 22,
+   "title": "Hospital parking",
+   "text": "User: The hospital raised the parking fees again, everyone on the ward is annoyed."
+  },
+  {
+   "id": "he18",
+   "kind": "episode",
+   "days_ago": 8,
+   "title": "Marathon on TV",
+   "text": "User: Watched the Boston marathon on TV with Sam."
+  }
+ ],
+ "queries": [
+  {
+   "kind": "lexical",
+   "text": "How did my long run go?",
+   "relevant": [
+    "he01"
+   ]
+  },
+  {
+   "kind": "lexical",
+   "text": "What did the cello teacher say?",
+   "relevant": [
+    "he02"
+   ]
+  },
+  {
+   "kind": "lexical",
+   "text": "How is the beehive doing?",
+   "relevant": [
+    "he04"
+   ]
+  },
+  {
+   "kind": "lexical",
+   "text": "What happened with the Volvo test?",
+   "relevant": [
+    "he08"
+   ]
+  },
+  {
+   "kind": "lexical",
+   "text": "What was Lila's part in the school play?",
+   "relevant": [
+    "he05"
+   ]
+  },
+  {
+   "kind": "lexical",
+   "text": "How did mum's hip operation go?",
+   "relevant": [
+    "he06",
+    "hb13"
+   ]
+  },
+  {
+   "kind": "lexical",
+   "text": "What did the physio say about my knee?",
+   "relevant": [
+    "he13"
+   ]
+  },
+  {
+   "kind": "lexical",
+   "text": "What did Sam build?",
+   "relevant": [
+    "he14"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "Which antibiotics should I avoid?",
+   "relevant": [
+    "hb02"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "What does my other half do for a living?",
+   "relevant": [
+    "hb03"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "Do I like seafood?",
+   "relevant": [
+    "hb09"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "Where was I raised?",
+   "relevant": [
+    "hb08"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "Am I nervous on planes?",
+   "relevant": [
+    "hb11",
+    "he12"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "Which hot drink do I prefer?",
+   "relevant": [
+    "hb05"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "Which languages am I fluent in?",
+   "relevant": [
+    "hb16"
+   ]
+  },
+  {
+   "kind": "paraphrase",
+   "text": "How do I help people at weekends?",
+   "relevant": [
+    "hb20",
+    "he09"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "When is my birthday?",
+   "relevant": [
+    "hb17"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "How old is my daughter?",
+   "relevant": [
+    "hb06"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "What's my pet's name?",
+   "relevant": [
+    "hb18"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "What kind of books do I read?",
+   "relevant": [
+    "hb12",
+    "he10"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "Where do I want to live in the future?",
+   "relevant": [
+    "hb15",
+    "he07"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "What instrument am I learning?",
+   "relevant": [
+    "hb07",
+    "he02"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "What race am I preparing for?",
+   "relevant": [
+    "hb04"
+   ]
+  },
+  {
+   "kind": "question",
+   "text": "Where do I work?",
+   "relevant": [
+    "hb01"
+   ]
+  },
+  {
+   "kind": "goal",
+   "text": "Am I on track?",
+   "relevant": [
+    "hb04",
+    "he01",
+    "he02"
+   ]
+  },
+  {
+   "kind": "goal",
+   "text": "Remind me what I'm working towards.",
+   "relevant": [
+    "hb04",
+    "hb07"
+   ]
+  },
+  {
+   "kind": "goal",
+   "text": "How's practice going?",
+   "relevant": [
+    "he02",
+    "hb07"
+   ]
+  },
+  {
+   "kind": "goal",
+   "text": "Any update on my project?",
+   "relevant": [
+    "hb04",
+    "he01",
+    "hb07",
+    "he02"
+   ]
+  },
+  {
+   "kind": "temporal",
+   "text": "What were we talking about yesterday?",
+   "relevant": [
+    "he11"
+   ]
+  },
+  {
+   "kind": "temporal",
+   "text": "What did I tell you recently?",
+   "relevant": [
+    "he11",
+    "he01",
+    "he15"
+   ]
+  }
+ ]
+}

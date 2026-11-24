@@ -29,6 +29,10 @@ from hedwig.memory.retrieval import episode_text
 
 logger = get_logger(__name__)
 
+SAME_SUBJECT = 0.22
+"""Cosine distance under which two beliefs are about the same thing, for nomic-embed-text.
+Measured (docs/06 §20): paraphrases and conflicts 0.02-0.18; unrelated beliefs 0.265 and up."""
+
 BATCH = 32
 BACKFILL_LIMIT = 512
 
@@ -241,6 +245,34 @@ class EmbeddingIndex:
             ):
                 best[memory_id] = min(best.get(memory_id, 2.0), distance)
         return sorted(best, key=lambda key: best[key])[:limit]
+
+    def close_beliefs(
+        self, *, max_distance: float = SAME_SUBJECT
+    ) -> list[tuple[MemoryId, MemoryId, float]]:
+        """Pairs of live beliefs close in meaning, closest first (docs/06 §20).
+
+        From the stored vectors, no model call: what the nightly judge should look at when two
+        beliefs share no words — "vegetarian" and "does not eat meat".
+        """
+        if not self.available:
+            return []
+        rows = self._db.query(
+            "SELECT a.memory_id AS first, b.memory_id AS second, "
+            "vec_distance_cosine(a.vector, b.vector) AS distance "
+            "FROM memory_embedding a JOIN memory_embedding b "
+            "ON a.memory_id < b.memory_id AND b.model = a.model AND b.dims = a.dims "
+            "JOIN belief x ON x.id = a.memory_id JOIN belief y ON y.id = b.memory_id "
+            "WHERE a.model = ? AND a.memory_kind = 'belief' AND b.memory_kind = 'belief' "
+            "AND x.tombstoned_at IS NULL AND y.tombstoned_at IS NULL "
+            "AND x.status IN ('tentative','active') AND y.status IN ('tentative','active') "
+            "AND vec_distance_cosine(a.vector, b.vector) <= ? "
+            "ORDER BY distance",
+            (self._model, max_distance),
+        )
+        return [
+            (MemoryId(str(r["first"])), MemoryId(str(r["second"])), float(r["distance"]))
+            for r in rows
+        ]
 
     async def _vectors(self, texts: list[str]) -> Sequence[Sequence[float]] | None:
         try:

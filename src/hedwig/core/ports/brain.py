@@ -294,8 +294,11 @@ class Planner(Protocol):
     an LLM-backed one replaces it without the graph changing (docs/07 §3.1, `deliberate`).
     """
 
-    async def plan_queries(self, text: str, *, policy: TurnPolicy) -> Sequence[str]:
-        """Expand the input into retrieval queries (docs/06 §5.2)."""
+    async def plan_queries(
+        self, text: str, *, policy: TurnPolicy, goals: Sequence[str] = ()
+    ) -> Sequence[str]:
+        """Expand the input into retrieval queries (docs/06 §5.2). `goals` are the active
+        goals as the snapshot rendered them, for a message about them that names none."""
         ...
 
     async def deliberate(

@@ -85,6 +85,7 @@ of what exists in code. Update it as each milestone lands.
 | Memory correction: the user's word replaces, the old version stays as history | **Implemented** (MEM-03, [06](06-memory-architecture.md) §18) | `src/hedwig/memory/store.py`, inspector *Correct* |
 | Corrections in conversation: "No, she lives in Lisbon" proposes a correction the user confirms | **Implemented** (MEM-07, [06](06-memory-architecture.md) §19) | `src/hedwig/memory/corrections.py`, conversation pane |
 | Retrieval: semantic/embedding channel; recall eval (recall@5 0.306 → 0.972) | **Implemented** (MEM-04, MEM-05, [06](06-memory-architecture.md) §17) | `src/hedwig/memory/embeddings.py`, `tests/evals/`, `scripts/eval_recall.py` |
+| Retrieval on a held-out corpus (0.814 → 0.944); goal questions; paraphrased duplicates to the nightly judge | **Implemented** (RET-01, [06](06-memory-architecture.md) §20) | `src/hedwig/memory/retrieval.py`, `src/hedwig/brain/planner.py` |
 | Conversation log: sessions, messages, turns, working-set log | **Implemented** (M6) | `src/hedwig/sessions/` |
 | The turn/memory loop: capture, reinforcement, persistence | **Implemented** (M6) | [26](26-turn-memory-loop.md) |
 | Emotion: six dimensions, deterministic transitions, behaviour bindings | **Implemented** (M7, [ADR-0019](adr/0019-the-emotion-vector-is-six-named-drives.md)) | `src/hedwig/emotion/` |

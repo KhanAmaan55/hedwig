@@ -11,10 +11,19 @@ from dataclasses import dataclass, replace
 
 from hedwig.core.ports.brain import MindReader, MindSnapshot
 from hedwig.core.ports.goals import Goal, GoalNote, GoalReader, GoalStatus
+from hedwig.knowledge.cues import refers_to_aims
 
 MAX_IN_PROMPT = 5
 """Goals are context, not the agenda: a handful at most, highest priority first."""
 
+
+ASKED_ABOUT_AIMS = (
+    "They are asking how their goals are going without naming one. Answer about the goals "
+    "listed under goals, using what you remember about them; do not ask which they mean."
+)
+"""Found live (docs/06 §20): recall found the 14 km run for "Am I on track?", and a 2B model
+still answered "What are you referring to?". Like curiosity's share directive (docs/11 §13),
+the moment is said through cognition's own channel."""
 
 NOTES_PER_GOAL = 2
 """The latest decisions and open questions; the whole journal is in the Goals tab."""
@@ -38,7 +47,10 @@ class GoalsMindReader:
         if input:
             shown += [g for g in await self.goals.mentioned_in(input) if g not in shown]
         lines = [render(goal, await self.goals.notes(goal.id, limit=8)) for goal in shown]
-        return replace(snapshot, goals=tuple(lines))
+        directives = snapshot.directives
+        if lines and input and refers_to_aims(input):
+            directives = (*directives, ASKED_ABOUT_AIMS)
+        return replace(snapshot, goals=tuple(lines), directives=directives)
 
 
 def render(goal: Goal, notes: Sequence[GoalNote] = ()) -> str:

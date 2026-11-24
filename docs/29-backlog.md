@@ -72,7 +72,7 @@ the repository, ahead of any new cognitive capability.
 | 13 | LLM gateway: tiering, streaming, structured output, metrics, replaceable provider | **COMPLETE** | `llm/`; `test_llm_gateway.py`, `test_ollama_provider.py`, `RecordedProvider` |
 | 3 | Episodic memory: capture, novelty gate, decay maths, tombstones | **COMPLETE** | `memory/capture.py`, `store.py`; `test_memory_*` |
 | 3 | Memory decay and forgetting **in the running system** | **COMPLETE** (was BROKEN) | Scheduled nightly (MEM-01), now the last stage of `reflection.nightly` (REF-02); `test_memory_maintenance_scheduled.py` |
-| 3 | Semantic memory (beliefs) | **PARTIAL** | T1 writes tentative beliefs (REF-01); T2 merges duplicates, promotes on two conversations, and puts judged conflicts to the user (REF-02). Recalled by meaning since MEM-04 |
+| 3 | Semantic memory (beliefs) | **PARTIAL** | T1 writes tentative beliefs (REF-01); T2 merges duplicates, promotes on two conversations, and puts judged conflicts to the user (REF-02), paraphrased pairs included (RET-01). Recalled by meaning since MEM-04 |
 | 3 | Working memory | **PARTIAL** | Recent-turn window + `working_set_log`; no task-scoped working memory |
 | 3 | Relationship memory | **PARTIAL** | `relation` tallies and session-end update; preferences not extracted |
 | 3 | Project memory | **COMPLETE** (MEM-06) | Projects are goals with a journal (ADR-0025): system, reflection and user notes; finished projects come back when named (docs/08 §13) |
@@ -300,6 +300,22 @@ once I confirm it — so that I never have to open the inspector to correct it.*
   gemma3:4b 22/24 (one wrong proposal, one miss). Live in the app on gemma4.
 - **Tests:** `test_memory_corrections.py` (34), `test_conversational_corrections.py` (7), pane and
   socket tests.
+
+
+#### RET-01 — Retrieval, measured on what it was not tuned on
+**Status:** Done (2026-11-24) · **P2** · **M** · **Depends on:** MEM-04, MEM-05, GOA-02 · **Modules:** `memory/retrieval.py`, `brain/planner.py`, `goals/mind.py`, `knowledge/cues.py`, `memory/embeddings.py`, `reflection/nightly.py`, `tests/evals/`
+
+*As the user, I want "Am I on track?" and "Do I eat fish?" answered from what HEDWIG knows, so
+that it does not ask me what I mean or answer from the latest chat instead.*
+
+- A held-out recall corpus (38 memories, 30 queries; goal and recent-conversation questions).
+- RRF k 60 → 10; the temporal channel only for questions about lately; goal queries and a
+  directive for messages about the user's aims; nightly judge pairs by embedding distance.
+- HyDE measured and not adopted; capture novelty left on words (no model on the write path).
+- **Measured:** held-out recall@5 0.814 → 0.944, MRR 0.794 → 0.844, goal questions 0.271 →
+  1.000; tuning corpus 0.972 → 1.000.
+- **Tests:** `test_recall.py` (both corpora, recorded vectors), `test_retrieval_planning.py`, a
+  nightly test for paraphrased pairs.
 
 ### 4.4 Personality
 
@@ -559,8 +575,8 @@ What the product still lacks, highest value first — each a story to write befo
 3. ~~**Corrections in conversation**~~ — done as MEM-07 (2026-11-24); episodes and cue-less
    updates ("we moved to Berlin") remain.
 4. ~~**`/traces` and `/metrics`**~~ — done as OBS-01 (2026-11-24).
-5. **Retrieval** — HyDE; embeddings for REF-02's judge candidates and capture novelty; a held-out
-   half of the recall corpus; a goal-relevance boost.
+5. ~~**Retrieval**~~ — done as RET-01 (2026-11-24); HyDE measured and not adopted, capture
+   novelty kept on words (docs/06 §20).
 6. **Voice** — speak sentence by sentence as the reply streams; true phoneme timing if a voice
    with alignments appears; push-to-talk.
 7. **Documents** — PDF and `.docx` (a parser dependency, to be asked for first).
@@ -847,3 +863,10 @@ tables, or copied rows). Nothing existing was changed or deleted.
   correlation id, because only the API set one; `Brain.run_turn` now binds its own. Live on
   gemma4: a 896 ms turn, 845 of it the reply's model call, and the twelve handlers it set off.
   Migration 0024; design in [19](19-observability.md) §13.
+- **RET-01** Retrieval, measured on a held-out corpus — written first, it showed the running
+  system at recall@5 0.814 where the tuning corpus said 0.972. The cause was RRF's k = 60, which
+  let recency and confidence multipliers outrank relevance; k = 10 fixed most of it. Goal
+  questions ("Am I on track?") went 0.271 → 1.000 with goal queries, and a directive fixed the
+  live reply that still asked "What are you referring to?". HyDE helped MRR but hurt recall and
+  costs a model call per turn: not adopted. Held-out overall 0.944 / MRR 0.844. Design in
+  [06](06-memory-architecture.md) §20.

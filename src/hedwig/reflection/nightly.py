@@ -70,6 +70,10 @@ STYLE_MAX_PER_RUN = 500
 STYLE_FIRST_LOOK = timedelta(days=7)
 
 
+class BeliefNeighbours(Protocol):
+    def close_beliefs(self) -> list[tuple[MemoryId, MemoryId, float]]: ...
+
+
 class Generator(Protocol):
     async def generate(self, request: GenerationRequest) -> GenerationResult: ...
 
@@ -138,6 +142,7 @@ class NightlyReflection:
         timezone: str = "",
         auto_apply: bool = False,
         drift: DriftEvidence | None = None,
+        neighbours: BeliefNeighbours | None = None,
     ) -> None:
         self._db = database
         self._store = store
@@ -145,6 +150,7 @@ class NightlyReflection:
         self._maintenance = maintenance
         self._history = history
         self._gateway = gateway
+        self._neighbours = neighbours
         self._clock = clock
         self._zone = ZoneInfo(timezone) if timezone else None
         self._auto_apply = auto_apply
@@ -285,10 +291,14 @@ class NightlyReflection:
         return {"merged": merged}
 
     async def _judge(self) -> dict[str, Any]:
+        candidates = await self._pairs(minimum=RELATED, below=SAME)
+        seen = {frozenset((older.id, newer.id)) for older, newer in candidates}
+        for older, newer in await self._close_in_meaning():
+            if frozenset((older.id, newer.id)) not in seen:
+                candidates.append((older, newer))
+                seen.add(frozenset((older.id, newer.id)))
         pending = [
-            (older, newer)
-            for older, newer in await self._pairs(minimum=RELATED, below=SAME)
-            if self._verdict(older, newer) is None
+            (older, newer) for older, newer in candidates if self._verdict(older, newer) is None
         ][:MAX_PAIRS]
         if not pending:
             return {"judged": 0}
@@ -341,6 +351,22 @@ class NightlyReflection:
                     continue
                 if score >= minimum or (minimum < SAME and _same_subject(older, newer)):
                     found.append((older, newer))
+        return found
+
+    async def _close_in_meaning(self) -> list[tuple[Belief, Belief]]:
+        """Pairs that share no words but mean nearly the same (docs/06 §20): "vegetarian" and
+        "does not eat meat" never reached the judge on word overlap alone."""
+        if self._neighbours is None:
+            return []
+        live = {belief.id: belief for belief in await self._store.live_beliefs()}
+        found = []
+        for first, second, _ in self._neighbours.close_beliefs():
+            a, b = live.get(first), live.get(second)
+            if a is None or b is None or a.provenance.tier != b.provenance.tier:
+                continue
+            older, newer = (a, b) if a.valid_from <= b.valid_from else (b, a)
+            if similarity(older.statement, newer.statement) < SAME:  # SAME merges by rule
+                found.append((older, newer))
         return found
 
     async def _absorb(self, winner: Belief, loser: Belief) -> bool:

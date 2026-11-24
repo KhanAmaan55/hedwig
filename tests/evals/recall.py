@@ -19,7 +19,7 @@ import base64
 import json
 import struct
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -32,17 +32,21 @@ from hedwig.core.types import MemoryId
 
 CORPUS = Path(__file__).with_name("recall_corpus.json")
 VECTORS = Path(__file__).with_name("recall_vectors.json")
+HELDOUT = Path(__file__).with_name("recall_heldout.json")
+"""Written after retrieval was tuned on CORPUS, and never used to tune it (docs/06 §20)."""
+HELDOUT_VECTORS = Path(__file__).with_name("recall_heldout_vectors.json")
+CORPORA = {"tuning": (CORPUS, VECTORS), "heldout": (HELDOUT, HELDOUT_VECTORS)}
 K = 5
 DEPTH = 10
 
 
-def load() -> dict[str, Any]:
-    return dict(json.loads(CORPUS.read_text(encoding="utf-8")))
+def load(name: str = "tuning") -> dict[str, Any]:
+    return dict(json.loads(CORPORA[name][0].read_text(encoding="utf-8")))
 
 
-def recorded_vectors() -> dict[str, Sequence[float]]:
+def recorded_vectors(name: str = "tuning") -> dict[str, Sequence[float]]:
     """The real model's vectors for every corpus text and query, by exact input text."""
-    data = json.loads(VECTORS.read_text(encoding="utf-8"))
+    data = json.loads(CORPORA[name][1].read_text(encoding="utf-8"))
     vectors: dict[str, Sequence[float]] = {}
     for text, packed in data["vectors"].items():
         raw = base64.b64decode(packed)
@@ -124,12 +128,37 @@ class Report:
         return [r for r in self.results if r.hit == 0.0]
 
 
+Expand = Callable[[str], Awaitable[Sequence[str]]]
+
+
+async def _literal(text: str) -> Sequence[str]:
+    return [text]
+
+
+def as_a_turn(corpus: dict[str, Any]) -> Expand:
+    """Query planning as a turn does it, with the corpus's active goals in the snapshot."""
+    from hedwig.brain.planner import RulePlanner
+    from hedwig.core.ports.brain import TurnPolicy
+
+    planner, goals = RulePlanner(), tuple(corpus.get("goals", ()))
+
+    async def expand(text: str) -> Sequence[str]:
+        return await planner.plan_queries(text, policy=TurnPolicy(), goals=goals)
+
+    return expand
+
+
 async def evaluate(
-    retrieval: RetrievalEngine, corpus: dict[str, Any], names: dict[MemoryId, str]
+    retrieval: RetrievalEngine,
+    corpus: dict[str, Any],
+    names: dict[MemoryId, str],
+    *,
+    expand: Expand = _literal,
 ) -> Report:
+    """Each query as a turn would search it: `expand` is the turn's query planning."""
     results = []
     for query in corpus["queries"]:
-        working = await retrieval.search([query["text"]])
+        working = await retrieval.search(list(await expand(query["text"])))
         ranked = sorted(working.items, key=lambda item: item.score, reverse=True)
         results.append(
             Result(
@@ -144,7 +173,7 @@ async def evaluate(
 
 def table(summary: dict[str, dict[str, float]]) -> str:
     lines = [f"{'kind':<11} {'n':>3} {'recall@5':>9} {'hit@5':>7} {'MRR':>6}"]
-    for kind in ("lexical", "paraphrase", "question", "all"):
+    for kind in ("lexical", "paraphrase", "question", "goal", "temporal", "all"):
         if kind in summary:
             s = summary[kind]
             lines.append(
