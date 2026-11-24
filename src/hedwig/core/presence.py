@@ -23,6 +23,7 @@ from hedwig.core.ports import Clock
 logger = get_logger(__name__)
 
 Deliver = Callable[[str, Mapping[str, Any]], Awaitable[None]]
+Drop = Callable[[], Awaitable[None]]
 DELIVERY_TIMEOUT = 5.0
 """Seconds one listener may take to accept a message. A client that stopped reading would
 otherwise hold up whoever broadcast — an initiative check, a correction — indefinitely."""
@@ -34,6 +35,9 @@ class Listener:
     deliver: Deliver
     session_id: str | None
     seen_at: datetime
+    drop: Drop | None = None
+    """Ends the listener's connection when it is removed for failing or stalling, so the
+    client notices, reconnects and joins again — rather than staying open and unheard."""
 
 
 class Presence:
@@ -42,8 +46,10 @@ class Presence:
         self._timeout = delivery_timeout
         self._listeners: dict[str, Listener] = {}
 
-    def join(self, deliver: Deliver, *, session_id: str | None = None) -> str:
-        listener = Listener(new_id("lsn"), deliver, session_id, self._clock.now())
+    def join(
+        self, deliver: Deliver, *, session_id: str | None = None, drop: Drop | None = None
+    ) -> str:
+        listener = Listener(new_id("lsn"), deliver, session_id, self._clock.now(), drop)
         self._listeners[listener.id] = listener
         return listener.id
 
@@ -78,9 +84,16 @@ class Presence:
             return_exceptions=True,
         )
         delivered = 0
+        dropped: list[Listener] = []
         for item, result in zip(listeners, results, strict=True):
             if isinstance(result, BaseException):
                 self.leave(item.id)
+                dropped.append(item)
             else:
                 delivered += 1
+        # A stalled send may have left half a frame on the wire: close, don't reuse.
+        await asyncio.gather(
+            *(asyncio.wait_for(item.drop(), self._timeout) for item in dropped if item.drop),
+            return_exceptions=True,
+        )
         return delivered

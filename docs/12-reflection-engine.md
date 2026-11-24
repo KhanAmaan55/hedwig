@@ -540,10 +540,14 @@ graph TB
   model leaves the period open for the next day. A period summary is never folded into another
   memory as a near-duplicate unless it is the same period's: two quiet weeks summarised in the
   same words each keep their own summary.
-* **Edges with the summary, or on the retry.** The summary's `SUMMARISED_FROM` edges are written
-  in one transaction (`record_derivations`). If a run stops between storing the summary and
-  linking it, the next run finds the summary and writes the edges before going on — a summary
-  without its edges would survive erasing the conversations it condenses (§8).
+* **Stored with its edges, and only if its sources still exist.** The period's conversations are
+  read *before* the model call; the summary is then written with its `SUMMARISED_FROM` edges to
+  them in the same transaction, which first checks that every one still exists. A conversation
+  erased while the model was writing makes that write fail (`sources_erased`): the summary,
+  which may hold the erased words, is never stored, and the period is summarised again the next
+  day without it. Erasure lands wholly before the write (refused) or after it (the edges lead
+  erasure to the summary), never in between. A summary stored by an older run without its edges
+  gets them on the next run (§8).
 * **Boundaries in UTC.** Periods are calendar weeks and months in the user's time zone; their
   boundaries are converted to UTC before they are compared with stored timestamps (all UTC), so
   a memory made near local midnight is counted in the right month.

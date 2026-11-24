@@ -18,6 +18,7 @@ mechanism:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from collections.abc import AsyncIterator, Sequence
@@ -63,12 +64,17 @@ class SqliteMemoryStore:
         self._db = database
         self._clock = clock
         self._bus = bus
+        # Replacing a belief is check-then-write with an await between (the new belief's event
+        # can wait on a busy subscriber). One at a time, so two corrections of the same belief
+        # cannot both see it current and both replace it.
+        self._superseding = asyncio.Lock()
 
     # -- episodic ----------------------------------------------------------
 
     async def add_episode(self, episode: Episode) -> MemoryId:
         now = self._now()
         with self._db.transaction() as connection:
+            _require_sources(connection, episode.provenance.derived_from)
             connection.execute(
                 """
                 INSERT INTO episode (
@@ -261,21 +267,28 @@ class SqliteMemoryStore:
         relation: DerivationRelation = DerivationRelation.MERGED_FROM,
     ) -> MemoryId:
         """Replace a belief while keeping the old one as history."""
-        existing = await self.get_belief(old)
-        if existing is None:
-            raise LookupError(f"belief {old} does not exist")
+        async with self._superseding:
+            existing = await self.get_belief(old)
+            if existing is None:
+                raise LookupError(f"belief {old} does not exist")
+            if existing.status is BeliefStatus.SUPERSEDED:
+                raise ConflictError(
+                    "That belief was already replaced; correct the one that replaced it.",
+                    memory_id=old,
+                    replaced_by=existing.superseded_by,
+                )
 
-        # The new belief must exist before the old one can point at it: `superseded_by` is
-        # a foreign key, and a dangling reference in a memory system is a false memory
-        # (docs/05 §3 rule 8).
-        await self.add_belief(new)
+            # The new belief must exist before the old one can point at it: `superseded_by` is
+            # a foreign key, and a dangling reference in a memory system is a false memory
+            # (docs/05 §3 rule 8).
+            await self.add_belief(new)
 
-        now = self._now()
-        self._db.execute(
-            "UPDATE belief SET status = 'superseded', valid_to = ?, superseded_by = ?, "
-            "updated_at = ?, version = version + 1 WHERE id = ?",
-            (now, new.id, now, old),
-        )
+            now = self._now()
+            self._db.execute(
+                "UPDATE belief SET status = 'superseded', valid_to = ?, superseded_by = ?, "
+                "updated_at = ?, version = version + 1 WHERE id = ?",
+                (now, new.id, now, old),
+            )
 
         await self.record_derivation(new.id, old, relation)
         await self._announce(
@@ -852,6 +865,35 @@ def _link(
         "VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",
         (memory_id, kind.value, entity, role, now),
     )
+
+
+def _require_sources(connection: sqlite3.Connection, sources: Sequence[MemoryId]) -> None:
+    """A memory derived from others is written only while all of them exist.
+
+    A summary written while one of its conversations was being erased would keep that
+    conversation's words with no edge for erasure to follow (docs/21 §7.3). Checked in the
+    same transaction as the write, so erasure lands wholly before it (refused) or after it
+    (the edges lead erasure to the summary).
+    """
+    wanted = set(sources)
+    if not wanted:
+        return
+    found: set[str] = set()
+    ids = list(wanted)
+    for start in range(0, len(ids), 500):
+        chunk = ids[start : start + 500]
+        marks = ",".join("?" * len(chunk))
+        for table in ("episode", "belief"):
+            found |= {
+                str(row[0])
+                for row in connection.execute(
+                    f"SELECT id FROM {table} WHERE id IN ({marks})", chunk
+                ).fetchall()
+            }
+    if wanted - found:
+        raise ConflictError(
+            "Something it was made from was erased meanwhile.", missing=len(wanted - found)
+        )
 
 
 def _derive(

@@ -948,3 +948,21 @@ that changed a design are written into the design documents:
   `hedwig trace` finds the latest turn however many jobs ran; the doctor warns on dead letters
   in a quiet week. The inspector refreshes both history views after a revert and says when one
   fails.
+
+A second pass of the review, on the fixed branch, raised 11 more (3 major, 7 minor, 1 nitpick);
+all held up and all are fixed, each with a test that fails without it:
+
+- **Erasure during a summary's model call** ([12](12-reflection-engine.md) §16): a period
+  summary is now written with its edges in one transaction that checks its conversations still
+  exist, so one erased meanwhile stops the summary instead of leaving its words behind.
+- **Two corrections of one belief** ([06](06-memory-architecture.md) §19): replacing a belief is
+  check-and-write one at a time, so two cannot both replace it — a gap the per-conversation
+  proposals of the first pass had widened.
+- **A stalled socket** ([16](16-api-structure.md) §13.1): dropped from presence *and closed*, so
+  the app reconnects instead of staying open and unheard.
+- The rest: a recorder that fails to start releases the microphone; the first queued stop keeps
+  the words; a late notice cannot bring back an answered correction; a conversation's history
+  arriving after HEDWIG opened another is ignored; the hashed bytes are the parsed bytes; a blank
+  line before a `#` line no longer defeats the heading guard; an accept still being applied is
+  not yet counted; and a report test across a Kolkata month boundary.
+

@@ -525,8 +525,9 @@ cold model's time to first token (G12). It makes the wait legible.
   it to that turn's session. When HEDWIG speaks first, every subscribed socket gets
   `initiative.message`; the words are already in the conversation, so a socket that misses it
   sees them in the history, where the message carries `offer_id`.
-  Each socket has five seconds to take a message: one that stopped reading is dropped, so it
-  cannot hold up the initiative check or the other sockets. A message that arrives while the
+  Each socket has five seconds to take a message: one that stopped reading is dropped from
+  presence and closed (`4408`), so it cannot hold up the initiative check or the other sockets,
+  and the app — which sees the close — reconnects and subscribes again. A message that arrives while the
   user's own turn is in flight is shown when that turn ends.
 
 ## 14. Implementation record — why HEDWIG said that (SEC-01)

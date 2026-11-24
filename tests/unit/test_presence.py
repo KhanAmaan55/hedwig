@@ -38,3 +38,19 @@ async def test_a_listener_that_fails_is_dropped() -> None:
     presence.join(broken)
     assert await presence.broadcast("x", {}) == 0
     assert not presence.present
+
+
+async def test_a_listener_dropped_for_stalling_is_closed_so_it_can_reconnect() -> None:
+    presence = Presence(FakeClock("2026-01-01T09:00:00+00:00"), delivery_timeout=0.05)
+    closed: list[str] = []
+
+    async def stalled(kind: str, payload: Mapping[str, Any]) -> None:
+        await asyncio.Event().wait()
+
+    async def close() -> None:
+        closed.append("closed")
+
+    presence.join(stalled, session_id="a", drop=close)
+
+    assert await presence.broadcast("initiative.message", {}) == 0
+    assert closed == ["closed"] and not presence.present

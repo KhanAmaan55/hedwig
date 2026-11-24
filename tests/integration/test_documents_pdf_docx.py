@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import zipfile
 from pathlib import Path
 
@@ -140,9 +141,10 @@ async def test_an_unchanged_pdf_is_not_read_again(
 
     real = formats.extract  # the same function documents.py calls, patched where it is looked up
 
-    def only_skipped_ones(path: Path, **kwargs: int) -> str:
+    def only_skipped_ones(path: Path, *, max_chars: int, data: bytes | None = None) -> str:
         assert path.name not in {"tides.pdf", "plan.docx"}, f"{path.name} was parsed again"
-        return real(path, **kwargs)  # skipped files are tried again: a library may now exist
+        # Skipped files are tried again: a library may have been installed since.
+        return real(path, max_chars=max_chars, data=data)
 
     monkeypatch.setattr(documents, "extract", only_skipped_ones)
     assert (await running_container.library.reindex())["unchanged"] == 2
@@ -176,10 +178,11 @@ async def test_a_pdf_needing_a_missing_library_is_skipped_not_fatal(
 
     real = pypdf.PdfReader
 
-    def needs_aes(path: object, *args: object, **kwargs: object) -> object:
-        if Path(str(path)).name == "tides.pdf":  # AES-256 needs a crypto library to even open
+    def needs_aes(source: object, *args: object, **kwargs: object) -> object:
+        data = source.getvalue() if isinstance(source, io.BytesIO) else b""
+        if b"Tides rise" in data:  # tides.pdf: AES-256 needs a crypto library to even open
             raise DependencyError("cryptography is required for AES algorithm")
-        return real(path, *args, **kwargs)  # type: ignore[arg-type]
+        return real(source, *args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(pypdf, "PdfReader", needs_aes)
 
@@ -238,3 +241,37 @@ def test_a_line_that_looks_like_a_heading_keeps_the_page_citation(tmp_path: Path
     passages = documents.chunk(text, title="notes")
 
     assert passages == [("notes > Page 1", "# 3 things to pack")]
+
+
+def test_heading_lookalikes_after_a_blank_line_stay_text() -> None:
+    plain = formats._plain("Intro\n\n# Details\nBody")
+
+    assert plain == "Intro\n\n # Details\nBody"
+    assert documents.chunk(f"## Page 1\n\n{plain}", title="notes") == [
+        ("notes > Page 1", "Intro\n\n # Details\nBody")
+    ]
+
+
+def test_the_bytes_already_read_are_what_is_parsed(tmp_path: Path) -> None:
+    """The hash and the text must describe one version, even if the file changes between."""
+    path = tmp_path / "notes.pdf"
+    write_pdf(path, ["The version that was hashed."])
+    hashed = path.read_bytes()
+    write_pdf(path, ["A version saved a moment later."])
+
+    text = formats.extract(path, max_chars=10_000, data=hashed)
+
+    assert "hashed" in text and "later" not in text
+
+
+def test_word_bytes_are_parsed_too(tmp_path: Path) -> None:
+    path = tmp_path / "plan.docx"
+    first = docx.Document()
+    first.add_paragraph("We travel in June.")
+    first.save(str(path))
+    hashed = path.read_bytes()
+    second = docx.Document()
+    second.add_paragraph("We travel in July.")
+    second.save(str(path))
+
+    assert "June" in formats.extract(path, max_chars=10_000, data=hashed)

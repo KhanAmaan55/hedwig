@@ -118,6 +118,8 @@ export function useConversation(
   const nextKey = () => `local-${++counter.current}`;
 
   // Resume where the last window left off. Once, on mount.
+  // The conversation on screen, read by callbacks that outlive a render.
+  const shown = useRef(sessionId);
   const resumeFrom = useRef(sessionId);
   useEffect(() => {
     const resumed = resumeFrom.current;
@@ -127,7 +129,8 @@ export function useConversation(
     api
       .history(resumed, RESUME_LIMIT)
       .then((page) => {
-        if (cancelled) return;
+        // An unprompted message may have switched conversations while this was loading.
+        if (cancelled || shown.current !== resumed) return;
         setMessages(
           page.messages.flatMap((message): ChatMessage[] =>
             message.role === "user" || message.role === "hedwig"
@@ -144,7 +147,7 @@ export function useConversation(
         );
       })
       .catch((caught: unknown) => {
-        if (cancelled) return;
+        if (cancelled || shown.current !== resumed) return;
         // A stale id is not an error worth showing: start fresh, quietly.
         if (caught instanceof ApiError && caught.code === "not_found") {
           storage.clear();
@@ -163,7 +166,6 @@ export function useConversation(
   // HEDWIG may speak first into the conversation on screen (docs/11 §14, ADR-0026). The live
   // channel says the app is open and which conversation it shows; an unprompted message is
   // appended as it arrives. Not spoken aloud: voice is for replies the user asked for.
-  const shown = useRef(sessionId);
   useEffect(() => {
     shown.current = sessionId;
     live?.showing?.(sessionId);

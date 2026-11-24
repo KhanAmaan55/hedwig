@@ -86,11 +86,19 @@ export function useMicrophone(api: ListenApi): Microphone {
     phase.current = "starting";
     setState("starting");
     setError(null);
+    let media: MediaStream | null = null;
     let started: MediaRecorder;
     try {
-      const media = await navigator.mediaDevices.getUserMedia({ audio: true });
+      media = await navigator.mediaDevices.getUserMedia({ audio: true });
       started = new MediaRecorder(media);
+      chunks.current = [];
+      started.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.current.push(event.data);
+      };
+      // May throw too (NotSupportedError) — after the microphone is already open.
+      started.start();
     } catch {
+      for (const track of media?.getTracks() ?? []) track.stop();
       phase.current = "idle";
       setState("idle");
       setError("The microphone is not available.");
@@ -99,11 +107,6 @@ export function useMicrophone(api: ListenApi): Microphone {
       waiting?.(null);
       return false;
     }
-    chunks.current = [];
-    started.ondataavailable = (event) => {
-      if (event.data.size > 0) chunks.current.push(event.data);
-    };
-    started.start();
     recorder.current = started;
     phase.current = "recording";
     setState("recording");
@@ -117,6 +120,9 @@ export function useMicrophone(api: ListenApi): Microphone {
 
   const stop = useCallback(async (): Promise<string | null> => {
     if (phase.current === "starting") {
+      // The first stop asked for gets the words; any later one, like a stop while transcribing,
+      // gets nothing — replacing the first would lose a held release's transcript.
+      if (stopWhenStarted.current) return null;
       return new Promise((resolve) => {
         stopWhenStarted.current = resolve;
       });

@@ -115,4 +115,57 @@ describe("useMicrophone (VOI-02, docs/15 §14)", () => {
     expect(result.current.state).toBe("idle");
     expect(result.current.error).toMatch(/not available/);
   });
+
+  it("a recorder that will not start closes the microphone and leaves it idle", async () => {
+    const track = { stop: vi.fn() };
+    const stream = { getTracks: () => [track] } as unknown as MediaStream;
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(stream) },
+    });
+    class Refusing extends FakeRecorder {
+      override start(): void {
+        throw new DOMException("no", "NotSupportedError");
+      }
+    }
+    vi.stubGlobal("MediaRecorder", Refusing);
+    const { result } = renderHook(() => useMicrophone(api()));
+
+    let started: Promise<boolean> = Promise.resolve(true);
+    await act(async () => {
+      started = result.current.start();
+      await started;
+    });
+
+    await expect(started).resolves.toBe(false);
+    expect(track.stop).toHaveBeenCalled();
+    expect(result.current.state).toBe("idle");
+    let again: Promise<boolean> = Promise.resolve(false);
+    vi.stubGlobal("MediaRecorder", FakeRecorder);
+    await act(async () => {
+      again = result.current.start();
+      await again;
+    });
+    await expect(again).resolves.toBe(true);
+  });
+
+  it("the first stop asked for while starting gets the words", async () => {
+    const permission = microphoneThatAnswersLater();
+    const { result } = renderHook(() => useMicrophone(api()));
+
+    let started: Promise<boolean> = Promise.resolve(false);
+    let first: Promise<string | null> = Promise.resolve(null);
+    let second: Promise<string | null> = Promise.resolve("x");
+    act(() => {
+      started = result.current.start();
+      first = result.current.stop(); // the held release
+      second = result.current.stop(); // a click on Stop meanwhile
+    });
+    await act(async () => {
+      permission.grant();
+      await started;
+    });
+
+    await expect(first).resolves.toBe("water the tomatoes");
+    await expect(second).resolves.toBeNull();
+  });
 });

@@ -269,8 +269,11 @@ def render_metrics(
         "Corrections heard in conversation and settled, by what the user decided.",
         _grouped(
             db,
+            # An accept still under way is `accepted` with no replacement yet, and may yet
+            # become `stale` or go back to `proposed`: not counted until it has settled.
             "SELECT status AS k, COUNT(*) AS n FROM correction_proposal "
-            "WHERE status != 'proposed' GROUP BY status",
+            "WHERE status != 'proposed' "
+            "AND NOT (status = 'accepted' AND replacement_id IS NULL) GROUP BY status",
             "status",
         ),
     )

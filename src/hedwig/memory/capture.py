@@ -104,6 +104,9 @@ class EpisodeCandidate:
     source_ref: str | None = None
     model_id: str | None = None
     """The model that extracted it, when one did — so a bad extraction run can be found."""
+    derived_from: tuple[MemoryId, ...] = ()
+    """What it condenses (a summary's conversations): linked in the same write, and refused if
+    any of them no longer exists."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +267,7 @@ class CaptureService:
                 source_ref=candidate.source_ref,
                 model_id=candidate.model_id,
                 captured_at=now,
+                derived_from=candidate.derived_from,
             ),
         )
         memory_id = await self._store.add_episode(episode)

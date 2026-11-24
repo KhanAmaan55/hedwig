@@ -14,6 +14,7 @@ reached, an encryption scheme it cannot handle — becomes a skip reason, never 
 
 from __future__ import annotations
 
+import io
 import logging
 import re
 import time
@@ -31,7 +32,9 @@ MAX_PDF_SECONDS = 60.0
 MAX_DOCX_UNZIPPED = 50_000_000
 """A .docx is a zip; one that would unzip past this is refused before it is parsed."""
 
-_LOOKS_LIKE_HEADING = re.compile(r"^(\s*)(#{1,6}\s)", re.MULTILINE)
+_LOOKS_LIKE_HEADING = re.compile(r"^([ \t]*)(#{1,6}[ \t])", re.MULTILINE)
+"""Horizontal space only: any whitespace would reach back across a blank line and indent that
+instead, leaving the `#` line a heading."""
 
 
 # pypdf narrates repairs and font guesses at WARNING ("fontTools is required…", "Ignoring wrong
@@ -44,9 +47,12 @@ class UnreadableError(Exception):
     """Why a file could not be read, in words shown to the user."""
 
 
-def extract(path: Path, *, max_chars: int) -> str:
+def extract(path: Path, *, max_chars: int, data: bytes | None = None) -> str:
+    """The file's text. `data`, when given, is the file's bytes as already read: parsing those,
+    not the path again, means the text and the caller's hash describe the same version."""
     suffix = path.suffix.lower()
-    text = _pdf(path, max_chars=max_chars) if suffix == ".pdf" else _docx(path)
+    source: Path | io.BytesIO = io.BytesIO(data) if data is not None else path
+    text = _pdf(source, max_chars=max_chars) if suffix == ".pdf" else _docx(source)
     if not text.strip():
         raise UnreadableError(
             "no text in it (a scanned PDF?)" if suffix == ".pdf" else "no text in it"
@@ -66,7 +72,7 @@ def mime(path: Path) -> str:
     }[path.suffix.lower()]
 
 
-def _pdf(path: Path, *, max_chars: int) -> str:
+def _pdf(path: Path | io.BytesIO, *, max_chars: int) -> str:
     try:
         from pypdf import PdfReader, apply_configuration, get_configuration  # pypdf ≥ 7.1
         from pypdf.errors import DependencyError, LimitReachedError
@@ -116,7 +122,7 @@ def _pdf(path: Path, *, max_chars: int) -> str:
         raise UnreadableError("could not be read as a PDF") from error
 
 
-def _docx(path: Path) -> str:
+def _docx(path: Path | io.BytesIO) -> str:
     try:
         import docx
     except ImportError as error:
@@ -125,7 +131,9 @@ def _docx(path: Path) -> str:
         with zipfile.ZipFile(path) as archive:
             if sum(member.file_size for member in archive.infolist()) > MAX_DOCX_UNZIPPED:
                 raise UnreadableError("unzips to more than the safe limit")
-        return _docx_text(docx.Document(str(path)))
+        if isinstance(path, io.BytesIO):
+            path.seek(0)  # the size check above read the archive's directory
+        return _docx_text(docx.Document(path if isinstance(path, io.BytesIO) else str(path)))
     except UnreadableError:
         raise
     except Exception as error:  # a parser boundary: bad zips, bad XML (lxml), missing parts

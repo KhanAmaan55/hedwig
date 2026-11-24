@@ -894,6 +894,11 @@ graph TB
   "declined" proposal whose correction was applied. If the correction fails for a reason other
   than the belief having changed, the claim is released and the user can answer again; in the
   app the card stays, saying the answer did not reach HEDWIG.
+* **One replacement per belief.** Replacing a belief (`supersede_belief`, which every correction
+  goes through) checks that it is still current and writes the replacement one at a time, so two
+  corrections of the same belief — the same one accepted in two conversations, say — cannot both
+  find it current while the first waits to announce its new belief; the second is refused
+  (`409`, and its proposal goes `stale`).
 * **Once per conversation.** The same correction heard in two conversations is proposed in each:
   the card belongs to the conversation on screen. Within one conversation it is proposed once.
   An empty rewrite is refused like any other bad one (`empty`).
