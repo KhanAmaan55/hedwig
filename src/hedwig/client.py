@@ -220,6 +220,12 @@ class HedwigClient:
     def report(self, month: str) -> dict[str, Any]:
         return self._request("GET", f"/v1/reflection/reports/{month}")
 
+    def initiative(self) -> dict[str, Any]:
+        return self._request("GET", "/v1/initiative")
+
+    def check_initiative(self) -> dict[str, Any]:
+        return self._request("POST", "/v1/initiative/check")
+
     def run_periodic(self, which: str) -> dict[str, Any]:
         return self._request("POST", f"/v1/reflection/{which}/run")
 

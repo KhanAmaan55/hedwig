@@ -263,6 +263,7 @@ graph LR
 | `emotion` | Emotional state vector, appraisal, decay, behaviour bindings | [09](09-emotion-engine.md) |
 | `personality` | Trait vector, drift proposals and application, identity core | [10](10-personality-engine.md) |
 | `curiosity` | Gap register, exploration scheduling, findings, interruption policy. Built (passive + deferred surfacing) | [11](11-curiosity-engine.md) §13 |
+| `initiative` | Speaking first: when HEDWIG may say something unprompted, and what. Writes through `Brain.speak_first`, delivers through `core.presence` | [11](11-curiosity-engine.md) §14, [ADR-0026](adr/0026-hedwig-speaks-first-only-through-the-brain.md) |
 | `reflection` | Five-tier reflection, consolidation, decay/forgetting passes. T1 built: `SessionReflector` | [12](12-reflection-engine.md) §14 |
 | `goals` | Goal lifecycle, priority, progress, influence on retrieval and initiative | [08](08-state-management.md) §6 |
 | `memory` | The four durable memory stores and their write paths | [06](06-memory-architecture.md) |
@@ -277,6 +278,7 @@ graph LR
 | `explain` | Read model: assembles why a reply was what it was, from records other modules own (docs/08 §3.1) | [16](16-api-structure.md) §14 |
 | `core.bus` | Publish/subscribe, durable outbox, replay | [04](04-communication-and-event-bus.md) |
 | `core.config` | Layered config load, validation, hot-reload of safe keys | §7 below |
+| `core.presence` | Who has the app open and which conversation it shows; ephemeral delivery to them | [ADR-0026](adr/0026-hedwig-speaks-first-only-through-the-brain.md) |
 | `core.token` | The API bearer token file: create `0600`, rotate, constant-time match | [ADR-0022](adr/0022-the-token-gates-user-content.md) |
 | `core.store` | Connection management, migrations, transactions, repositories | [05](05-data-model-and-database.md) |
 | `core.clock` | Injectable time; the reason time-travel tests are possible | [20](20-testing-strategy.md) §3 |

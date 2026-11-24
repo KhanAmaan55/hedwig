@@ -8,7 +8,7 @@
  */
 
 import { ApiError, resolveBaseUrl, resolveTokenSource, type TokenSource } from "./client";
-import type { ExpressionIntent, TurnReply } from "./types";
+import type { ExpressionIntent, InitiativeMessage, TurnReply } from "./types";
 
 export interface StreamHandlers {
   readonly onStarted?: (sessionId: string, turnId: string) => void;
@@ -16,10 +16,12 @@ export interface StreamHandlers {
   readonly onToken?: (text: string) => void;
 }
 
-export type StreamApi = Pick<HedwigStream, "send"> & Partial<Pick<HedwigStream, "interrupt">>;
+export type StreamApi = Pick<HedwigStream, "send"> &
+  Partial<Pick<HedwigStream, "interrupt" | "watchInitiative" | "showing">>;
 export type MindStream = Pick<HedwigStream, "watchMind">;
 
 type MindHandler = (intent: ExpressionIntent) => void;
+type InitiativeHandler = (message: InitiativeMessage) => void;
 
 interface Envelope {
   readonly type: string;
@@ -59,6 +61,9 @@ export class HedwigStream {
   private readonly mindHandlers = new Set<MindHandler>();
   private readonly mindLost = new Set<() => void>();
   private mindSubscribed = false;
+  private readonly initiativeHandlers = new Set<InitiativeHandler>();
+  private readonly initiativeLost = new Set<() => void>();
+  private showingSession: string | null = null;
 
   constructor(
     private readonly url: string = streamUrl(),
@@ -115,6 +120,43 @@ export class HedwigStream {
     };
   }
 
+  /**
+   * Say the app is open and which conversation it shows, so HEDWIG may speak first into it
+   * (ADR-0026). `onLost` is called if the socket closes. Returns an unsubscribe function.
+   */
+  async watchInitiative(
+    sessionId: string | null,
+    handler: InitiativeHandler,
+    onLost: () => void = () => undefined,
+  ): Promise<() => void> {
+    const socket = await this.open();
+    this.initiativeHandlers.add(handler);
+    this.initiativeLost.add(onLost);
+    this.showingSession = sessionId;
+    this.sendShowing(socket);
+    return () => {
+      this.initiativeHandlers.delete(handler);
+      this.initiativeLost.delete(onLost);
+    };
+  }
+
+  /** The conversation on screen changed (or there is none: "New conversation"). */
+  showing(sessionId: string | null): void {
+    this.showingSession = sessionId;
+    if (this.socket?.readyState === WebSocket.OPEN && this.initiativeHandlers.size > 0) {
+      this.sendShowing(this.socket);
+    }
+  }
+
+  private sendShowing(socket: WebSocket): void {
+    socket.send(
+      JSON.stringify({
+        type: "initiative.subscribe",
+        payload: { session_id: this.showingSession },
+      }),
+    );
+  }
+
   close(): void {
     this.socket?.close();
   }
@@ -166,6 +208,12 @@ export class HedwigStream {
     const { type, payload, corr } = envelope;
     if (type === "mind.update") {
       for (const handler of this.mindHandlers) handler(payload as unknown as ExpressionIntent);
+      return;
+    }
+    if (type === "initiative.message") {
+      for (const handler of this.initiativeHandlers) {
+        handler(payload as unknown as InitiativeMessage);
+      }
       return;
     }
     const clientId =
@@ -226,6 +274,9 @@ export class HedwigStream {
     for (const lost of this.mindLost) lost();
     this.mindLost.clear();
     this.mindHandlers.clear();
+    for (const lost of this.initiativeLost) lost();
+    this.initiativeLost.clear();
+    this.initiativeHandlers.clear();
     for (const [clientId, pending] of this.pending) {
       pending.reject(
         new ApiError(

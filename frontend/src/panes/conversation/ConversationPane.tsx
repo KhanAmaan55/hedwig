@@ -7,7 +7,7 @@ import {
   type ConversationApi,
   type SessionStorage,
 } from "./useConversation";
-import { client } from "../../transport/client";
+import { client, type HedwigClient } from "../../transport/client";
 import type { StreamApi } from "../../transport/socket";
 import { useMicrophone, type ListenApi } from "../../voice/useMicrophone";
 import { useVoice, type VoiceApi } from "../../voice/useVoice";
@@ -23,6 +23,8 @@ export interface ConversationPaneProps {
   readonly explainApi?: ExplainApi;
   /** The live channel (docs/16 §13). Without it, replies arrive whole over REST. */
   readonly live?: StreamApi | null;
+  /** *Not interested* on what HEDWIG said unprompted (docs/11 §14). */
+  readonly initiativeApi?: Pick<HedwigClient, "dismissOffer">;
 }
 
 const STAGES: Record<string, string> = {
@@ -45,6 +47,7 @@ export default function ConversationPane({
   listenApi = client,
   explainApi = client,
   live = null,
+  initiativeApi = client,
 }: ConversationPaneProps): JSX.Element {
   const voice = useVoice(voiceApi);
   const microphone = useMicrophone(listenApi);
@@ -63,6 +66,17 @@ export default function ConversationPane({
   };
 
   const [why, setWhy] = useState<string | null>(null);
+  const [waved, setWaved] = useState<ReadonlySet<string>>(new Set());
+  const notInterested = (offerId: string) => {
+    setWaved((current) => new Set(current).add(offerId));
+    void initiativeApi.dismissOffer(offerId).catch(() => {
+      setWaved((current) => {
+        const next = new Set(current);
+        next.delete(offerId);
+        return next;
+      });
+    });
+  };
   const listRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const list = listRef.current;
@@ -119,12 +133,33 @@ export default function ConversationPane({
           >
             <span className="message__speaker">{message.role === "user" ? "You" : "HEDWIG"}</span>
             <p className="message__text">{message.text}</p>
+            {message.offerId !== undefined && (
+              <p className="message__meta">
+                HEDWIG started this
+                {waved.has(message.offerId) ? (
+                  " · noted, it won't bring this up again"
+                ) : (
+                  <>
+                    {" · "}
+                    <button
+                      className="message__why"
+                      type="button"
+                      onClick={() => {
+                        if (message.offerId) notInterested(message.offerId);
+                      }}
+                    >
+                      Not interested
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
             {message.recalled !== undefined && message.recalled > 0 && (
               <p className="message__meta">
                 drew on {message.recalled} {message.recalled === 1 ? "memory" : "memories"}
               </p>
             )}
-            {message.role === "hedwig" && message.key.startsWith("msg_") && (
+            {message.role === "hedwig" && message.key.startsWith("msg_") && !message.offerId && (
               <>
                 <button
                   className="message__why"

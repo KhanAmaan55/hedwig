@@ -617,6 +617,31 @@ def reflect(
 
 
 @app.command()
+def initiative(
+    check: Annotated[
+        bool, typer.Option("--check", help="See now whether HEDWIG has something to say.")
+    ] = False,
+) -> None:
+    """What HEDWIG said unprompted, and why it last stayed quiet (docs/11 §14)."""
+    if check:
+        print(json.dumps(_call(lambda c: c.check_initiative()), indent=2))
+        return
+    status = _call(lambda c: c.initiative())
+    assert isinstance(status, dict)
+    state = "on" if status["enabled"] else "off (initiative.enabled)"
+    print(
+        f"speaking first: {state} · app open: {status['present']} · last: {status['last_reason']}"
+    )
+    for offer in status["offers"]:
+        mark = (
+            "dismissed"
+            if offer["status"] == "dismissed"
+            else ("answered" if offer["answered"] else "offered")
+        )
+        print(f"  {offer['created_at'][:16]}  {offer['kind']:<14} {mark:<9} {offer['text'] or ''}")
+
+
+@app.command()
 def export(
     out: Annotated[
         Path, typer.Option(help="A file, or a folder for the dated zip HEDWIG names.")

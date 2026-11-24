@@ -289,6 +289,19 @@ class CuriosityConfig(BaseModel):
     quiet_end_hour: Annotated[int, Field(ge=0, le=23)] = 8
 
 
+class InitiativeConfig(BaseModel):
+    """Speaking first (docs/11 §14, ADR-0026): about what the user asked for, rarely."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    enabled: bool = True
+    max_daily: Annotated[int, Field(ge=0, le=5)] = 1
+    check_interval_minutes: Annotated[float, Field(gt=0)] = 5.0
+    idle_minutes: Annotated[float, Field(ge=0)] = 2.0
+    quiet_start_hour: Annotated[int, Field(ge=0, le=23)] = 22
+    quiet_end_hour: Annotated[int, Field(ge=0, le=23)] = 8
+
+
 class ReflectionConfig(BaseModel):
     """Reflection (docs/12). Only T1 exists so far (docs/12 §14)."""
 
@@ -368,6 +381,7 @@ class Config(BaseSettings):
     reflection: ReflectionConfig = ReflectionConfig()
     knowledge: KnowledgeConfig = KnowledgeConfig()
     curiosity: CuriosityConfig = CuriosityConfig()
+    initiative: InitiativeConfig = InitiativeConfig()
     speech: SpeechConfig = SpeechConfig()
     plugins: PluginsConfig = PluginsConfig()
 

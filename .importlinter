@@ -16,6 +16,7 @@ layers =
     hedwig.client
     hedwig.api
     hedwig.wiring | hedwig.doctor
+    hedwig.initiative
     hedwig.brain | hedwig.reflection | hedwig.curiosity
     hedwig.tools | hedwig.speech | hedwig.explain | hedwig.privacy
     hedwig.emotion | hedwig.personality | hedwig.expression | hedwig.goals
@@ -36,6 +37,8 @@ layers =
 ;     hedwig.curiosity | hedwig.reflection | hedwig.goals
 ;     hedwig.retrieval | hedwig.knowledge | hedwig.tools
 ;     hedwig.embeddings | hedwig.fetch | hedwig.speech | hedwig.expression
+; `initiative` sits above `curiosity` and `goals`, whose records it reads, and reaches the
+; brain only through a protocol (ADR-0026).
 ; `wiring` sits above core and below the edge: it is the only module allowed to name
 ; concrete implementations.
 

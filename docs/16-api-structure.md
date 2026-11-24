@@ -114,6 +114,9 @@ accumulates errors forever, and the user is the highest-trust source available.
 | `POST` | `/curiosity/findings/{id}/dismiss` · `/confirm` | Dismiss (raises the topic threshold) or confirm (promotes to `active`) |
 | `GET`/`POST`/`DELETE` | `/sources` | Allowlist management |
 | `POST` | `/curiosity/explore` | Manual trigger, still budget-bound |
+| `GET` | `/initiative` | What HEDWIG said unprompted, whether each was answered, and why it last stayed quiet (INI-01) |
+| `POST` | `/initiative/check` | Check now; every gate still applies (INI-01) |
+| `POST` | `/initiative/{id}/dismiss` | *Not interested*: the finding is dismissed, or the goal gets no more check-ins (INI-01) |
 | `GET`/`POST`/`DELETE` | `/documents` | Ingest, list, remove local documents (built: KNW-01; `DELETE /documents/{id}` sets a file aside, `DELETE /documents?path=` stops reading a folder) |
 | `POST` | `/documents/reindex` | Re-ingest |
 | `GET` | `/reflection/runs?tier=` | Run history and stats (built as `GET /reflection/runs?limit=`, T2 only — REF-02) |
@@ -195,6 +198,7 @@ accordingly, but clients branch on `code`.
 | `expression.frame` | see [15](15-avatar-controller.md) §4 | yes |
 | `mind.update` | `{emotion?, personality?, goals?}` | yes (snapshots) |
 | `memory.event` | `{kind, memory_id, summary}` | yes |
+| `initiative.message` | `{offer_id, kind, session_id, message_id, text, created_at}` — HEDWIG spoke first (INI-01) | no |
 | `notice` | `{level, code, message, actions?}` | no |
 | `approval.request` | `{call_id, tool, args, reason}` | no |
 | `error` | error object | no |
@@ -473,6 +477,8 @@ sequenceDiagram
 * **Not built yet:** `interrupt` (cancelling a turn mid-graph needs the turn to be resumable or
   cleanly failed, COG-03), `approval.*` (COG-03), `client_message_id` dedupe across reconnects
   (FND-06), `mind.update`/`expression.frame` (the avatar still polls; EMO-02), `presence`.
+  (Since built: FND-06, `mind.update` and `turn.interrupt` — §13.1; presence as
+  `initiative.subscribe` — §13.1, INI-01.)
 
 **The app.** `frontend/src/transport/socket.ts` connects on the first send, offers the token as a
 subprotocol, asks for a fresh token once after a 4401 (a rotation), and keeps the connection
@@ -559,3 +565,10 @@ the search that found nothing, `get_datetime — ok`, the seven directives, the 
 at the time and `gemma4:e2b, 404 tokens in, 22 out, 4.5 s`. The model and tool records joined
 through the streamed turn's correlation id.
 
+
+* **`initiative.subscribe` → `initiative.message` (INI-01, ADR-0026).** `{session_id}` says the
+  app is open and which conversation it shows; sent again when that changes (or `null` after
+  *New conversation*). The socket joins `core.presence`, and a `message.send` on it also moves
+  it to that turn's session. When HEDWIG speaks first, every subscribed socket gets
+  `initiative.message`; the words are already in the conversation, so a socket that misses it
+  sees them in the history, where the message carries `offer_id`.

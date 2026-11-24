@@ -369,7 +369,7 @@ graph TB
   `FindingsMindReader` (composition, like goals) offers at most one unsurfaced finding to a
   turn, at most 2 a day and an hour apart, under the label *"something you read while exploring;
   mention it only if it fits the conversation"*. It is marked surfaced when offered. Active,
-  unprompted messages need the WebSocket and are not built.
+  unprompted messages: §14 (INI-01).
 
 | Tradeoff | Gained | Given up | Revisit if |
 |---|---|---|---|
@@ -386,3 +386,79 @@ greeting, and the label agrees ("when the moment fits, such as when they greet y
 2/3 replies shared it ("Hello. I found an article discussing context-resident compression…").
 A 2B model's ceiling here is worth re-measuring on a larger one.
 
+
+---
+
+## 14. Implementation record — speaking first (INI-01)
+
+§7's third delivery mode: an unprompted message. Built as a small `hedwig.initiative` module
+rather than the `InitiativeGraph` of docs/07 §5 — like the reflection tiers, it is a fixed
+sequence of checks with no branching a graph would earn. Decisions in
+[ADR-0026](adr/0026-hedwig-speaks-first-only-through-the-brain.md).
+
+```mermaid
+graph TB
+    T["initiative.check · every 5 min"] --> G{"gates (all)"}
+    G -->|"enabled · someone has the app open ·<br/>outside 22:00–08:00 · not mid-turn, quiet 2 min ·<br/>none in 24 h · no finding surfaced in the last hour"| C["candidates, best first"]
+    G -->|"any fails"| N["nothing; the reason is kept for /v1/initiative"]
+    C --> F["1 · a new finding the user asked for (gap origin user),<br/>or one that overlaps an active user-stated goal"]
+    C --> Q["2 · a goal check-in: an active user-stated goal whose latest<br/>journal note is an open question, ≥3 days old,<br/>no check-in on it in 7 days, never dismissed"]
+    F --> S["Brain.speak_first<br/><small>session lock · resume or open the session the app is in ·<br/>HEDWIG message with its trust tier</small>"]
+    Q --> S
+    S --> O[("initiative_offer<br/><small>id · kind · ref · session · message · status</small>")]
+    O --> P["Presence.broadcast → initiative.message<br/><small>to every subscribed socket</small>"]
+    O --> E["bus: initiative.offer.made"]
+    P --> UI["Conversation pane: the message, marked<br/>'HEDWIG started this', with Not interested"]
+    UI -->|"Not interested"| D["POST /v1/initiative/{id}/dismiss<br/><small>finding → dismissed (raises the bar for its topic) ·<br/>goal → no more check-ins about it</small>"]
+```
+
+* **Who it is for.** Only things the user asked for or is working on (§7, docs/21: no
+  re-engagement pings). A finding qualifies if its gap was the user's own question
+  (`hedwig curiosity ask`), or if its question and summary overlap an active, user-stated goal.
+  A goal qualifies for a check-in when its journal's latest entry is a question left open in a
+  conversation at least three days ago — "this was still open; did you settle it?" — and at most
+  once a week per goal. Self-generated and maintenance goals never speak.
+* **When.** Every gate of §7 that can be measured: the app is open (a socket has subscribed —
+  presence, nothing more), it is outside quiet hours, HEDWIG is not mid-turn and nobody has said
+  anything for two minutes, nothing unprompted in the last 24 hours (§7's hard cap), and no
+  finding was surfaced into a turn in the last hour (the deferred mode's spacing, shared). The
+  first failing gate is kept as the reason, so `hedwig initiative` can say why it stayed quiet.
+* **What it says — templated, not generated.** The finding's own summary with its sources, or
+  the goal and its open question, in a fixed sentence. A 2B model composing an opening would
+  add warmth and risk saying something the finding does not (measured repeatedly in this
+  project); a template says exactly what is known. The message is recorded with the content's
+  trust tier — a finding's text stays `untrusted` (§6) even in HEDWIG's mouth.
+* **Where.** Into the conversation the app is showing (each socket reports its session), so
+  "tell me more" is the next turn of that conversation and the model sees what it said. A
+  session the idle reaper ended is resumed, announced as a new conversation like any resumed
+  session (docs/27 §5.1). With no conversation yet, one is opened. The brain does the writing
+  (`Brain.speak_first`) under the session lock, so an offer can never land in the middle of a
+  turn; the initiative module decides only what and when.
+* **Not spoken aloud.** Voice is for replies the user asked for; an unprompted voice in the
+  room is a different kind of interruption. The avatar does not react either.
+* **Learning caution.** *Not interested* dismisses the finding (which already raises the
+  novelty bar for its topic, §5.1) or ends check-ins on that goal for good. An offer is
+  *answered* when the user's next message in that session follows it.
+* **Config.** `[initiative] enabled = true`, `max_daily = 1`, `quiet_start_hour = 22`,
+  `quiet_end_hour = 8`, `idle_minutes = 2`, `check_interval_minutes = 5`.
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| Templated text | Nothing invented; testable exactly | Less natural | A model passes the honesty gate composing openings |
+| Word overlap for goal linkage | Deterministic, no model call | Paraphrased links missed | Offers are rare because links are missed — use embeddings (MEM-04) |
+| Presence = an open socket | Simple; no OS hooks | "Open but away" counts as present | Users find offers waiting stale — add focus/visibility from the app |
+| On by default | The designed behaviour works | One unprompted message a day without opting in | Dismissal ratio > 30 % (docs/19) |
+
+**Live check** (`gemma4:e2b`, the app open in the browser pane, a goal "Help the user plan the
+Porto trip in June" with the open question "Whether to take the train from Lisbon or fly" four
+days old). With the app closed: `nobody_here`. With it open, the check-in appeared in the
+conversation the moment it was made — *On "plan the Porto trip in June": last time this was
+still open — whether to take the train from Lisbon or fly. Did you settle it?* — marked *HEDWIG
+started this*. The reply to "Yes, we decided on the train. Any tips?" continued the topic
+(book early for June; then asked about accommodation), and the offer showed as answered. A
+second check: `already_spoke_today`. After a reload the marker and *Not interested* were still
+there; clicking it recorded the dismissal.
+
+**Future improvements.** OS notifications when the window is hidden (docs/18); a due-date
+check-in once goals can carry a due date; a weekly digest instead of interruptions (§12); the
+dismissal ratio as a metric (docs/19).

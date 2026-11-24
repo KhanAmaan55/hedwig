@@ -12,6 +12,7 @@ from hedwig.api.routes import (
     explain,
     goals,
     health,
+    initiative,
     memory,
     mind,
     persona,
@@ -30,6 +31,7 @@ v1.include_router(memory.router)
 v1.include_router(goals.router)
 v1.include_router(egress.router)
 v1.include_router(curiosity.router)
+v1.include_router(initiative.router)
 v1.include_router(speech.router)
 v1.include_router(stream.router)
 v1.include_router(explain.router)

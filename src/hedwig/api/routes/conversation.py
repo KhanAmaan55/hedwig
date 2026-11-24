@@ -91,6 +91,9 @@ class MessageRead(BaseModel):
     role: str
     text: str
     created_at: str
+    offer_id: str | None = Field(
+        default=None, description="Set when HEDWIG said this unprompted (docs/11 §14)."
+    )
 
 
 class MessagePage(BaseModel):
@@ -224,6 +227,7 @@ async def history(
                 role=message.role,
                 text=message.text,
                 created_at=message.created_at,
+                offer_id=message.offer_id,
             )
             for message in messages
         ],

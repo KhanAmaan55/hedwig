@@ -251,6 +251,7 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig docs add` / `list` / `remove` / `forget-folder` | Your notes, recalled and cited (text files; secrets skipped) |
 | `uv run hedwig egress` | Every request HEDWIG made to the internet, and what it sent |
 | `uv run hedwig curiosity gaps` / `ask` / `findings` / `explore` | What HEDWIG wants to find out, and what it found |
+| `uv run hedwig initiative` (`--check`) | What HEDWIG said unprompted, and why it last stayed quiet (`[initiative] enabled = false` turns it off) |
 | `uv run hedwig export` | Everything HEDWIG holds, as one readable zip |
 | `uv run hedwig purge --phrase …` | Erase for good, after a preview (`--memory`, `--session`, `--everything`) |
 | `uv run hedwig reflect` / `disputes` / `settle` | Run the nightly consolidation now (`--weekly`, `--monthly` for the reviews); settle the conflicts it found |

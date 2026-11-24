@@ -114,6 +114,7 @@ of what exists in code. Update it as each milestone lands.
 | Goals: store, lifecycle, API/CLI, in the prompt, from reflection | **Implemented** (GOA-01/02, [08](08-state-management.md) §6.1) | `src/hedwig/goals/` |
 | Web research: opt-in search, fetch controls, citations, egress audit | **Implemented** (KNW-02/03, [13](13-knowledge-and-tools.md) §13) | `src/hedwig/knowledge/`, `src/hedwig/tools/research.py` |
 | Curiosity: gap register, gated exploration, findings feed, deferred surfacing | **Implemented** (CUR-01/02/03, [11](11-curiosity-engine.md) §13) | `src/hedwig/curiosity/` |
+| Speaking first: goal-linked findings and check-ins, live, at most one a day | **Implemented** (INI-01, [11](11-curiosity-engine.md) §14, ADR-0026) | `src/hedwig/initiative/`, `src/hedwig/core/presence.py` |
 | Export everything; purge with derivation-following and file-level verification | **Implemented** (SEC-02, [21](21-security-privacy-ethics.md) §7.4, [ADR-0024](adr/0024-purge-is-one-classified-sweep.md)) | `src/hedwig/privacy/`, inspector *Data* tab |
 | Reflection T2 nightly: day summaries, belief merge and promotion, judged conflicts put to the user | **Implemented** (REF-02a/b/c, [12](12-reflection-engine.md) §15) | `src/hedwig/reflection/nightly.py`, `frontend/src/panes/inspector/` |
 | Reflection T3 weekly review and T4 monthly identity report | **Implemented** (REF-03, [12](12-reflection-engine.md) §16) | `src/hedwig/reflection/periodic.py`, `frontend/src/panes/inspector/` |

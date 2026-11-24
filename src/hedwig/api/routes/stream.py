@@ -92,6 +92,8 @@ async def stream(websocket: WebSocket) -> None:
     await websocket.accept(subprotocol=PROTOCOL if PROTOCOL in offered else None)
 
     connection = Connection(websocket, container.clock)
+    presence = container.presence
+    present: str | None = None  # this socket's place in presence, once it subscribes
     turns: set[asyncio.Task[None]] = set()
     watcher: asyncio.Task[None] | None = None
     running: dict[str, LiveHandle] = {}
@@ -113,10 +115,19 @@ async def stream(websocket: WebSocket) -> None:
                 # Push the avatar's expression as it changes, instead of the client polling.
                 if watcher is None or watcher.done():
                     watcher = asyncio.create_task(_watch_mind(container, connection))
+            elif kind == "initiative.subscribe":
+                # The app is open and showing this conversation: HEDWIG may speak first into
+                # it (ADR-0026). Sent again whenever the conversation changes.
+                session = payload.get("session_id")
+                session = str(session) if session else None
+                if present is None:
+                    present = presence.join(connection.send, session_id=session)
+                else:
+                    presence.showing(present, session)
             elif kind == "message.send":
                 # A task, so the socket keeps answering pings while HEDWIG thinks. The turn is
                 # not cancelled if the client leaves: it completes and persists (docs/16 §9).
-                task = asyncio.create_task(_turn(container, connection, payload, running))
+                task = asyncio.create_task(_turn(container, connection, payload, running, present))
                 turns.add(task)
                 task.add_done_callback(turns.discard)
             else:
@@ -130,6 +141,8 @@ async def stream(websocket: WebSocket) -> None:
         logger.exception("stream closed unexpectedly")
     finally:
         connection.open = False
+        if present is not None:
+            presence.leave(present)
         if watcher is not None:
             watcher.cancel()
 
@@ -154,6 +167,7 @@ async def _turn(
     connection: Connection,
     payload: Mapping[str, Any],
     running: dict[str, LiveHandle],
+    present: str | None = None,
 ) -> None:
     client_id = payload.get("client_message_id")
     text = str(payload.get("text", ""))
@@ -186,6 +200,8 @@ async def _turn(
             return
     else:
         session_id = await container.brain.open_session(channel="web")
+    if present is not None:
+        container.presence.showing(present, str(session_id))
 
     turn_id = new_id("turn")
     with correlation_scope(turn_id):
