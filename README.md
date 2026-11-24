@@ -220,7 +220,7 @@ capability assessment and story backlog are in [`docs/29-backlog.md`](docs/29-ba
 
 ## Running it
 
-Requires Python 3.12+, Node 22.12+, [uv](https://docs.astral.sh/uv/), and
+Requires Python 3.12+, Node 24 (see `.nvmrc`; 22.22+ also works), [uv](https://docs.astral.sh/uv/), and
 [Ollama](https://ollama.com) with a conversational model and the embedding model that lets
 HEDWIG recall by meaning (without it, recall falls back to matching words):
 
