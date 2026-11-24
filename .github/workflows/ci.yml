@@ -47,7 +47,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # One source of truth with local development. Node 20 here (while package.json asked
+          # for 22.12+) let jsdom's undici crash every test worker before a test ran.
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci

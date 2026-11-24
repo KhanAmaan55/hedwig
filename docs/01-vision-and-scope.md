@@ -121,7 +121,7 @@ conflict, the higher number wins, and the conflict gets an ADR.
 | Dimension | Assumption |
 |---|---|
 | Host | Single developer machine: Apple Silicon Mac (16 GB+) or Linux with a consumer GPU |
-| Runtime | Python 3.12+, Node 20+ for the frontend |
+| Runtime | Python 3.12+, Node 24 for the frontend (`.nvmrc`; 22.22+ also works) |
 | Models | Ollama-served local models; a 7–14 B class conversational model and a small (1–3 B) utility model |
 | Storage | Single SQLite database file plus a blob directory; expected growth ~1–3 GB/year of active use |
 | Network | Assumed absent by default. Available intermittently for the Live Internet knowledge tier |
