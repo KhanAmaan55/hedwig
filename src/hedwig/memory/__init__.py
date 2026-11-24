@@ -21,6 +21,7 @@ from hedwig.memory.capture import (
     has_substance,
     similarity,
 )
+from hedwig.memory.corrections import CorrectionProposer
 from hedwig.memory.embeddings import EmbeddingIndex
 from hedwig.memory.maintenance import MaintenanceReport, MemoryMaintenance
 from hedwig.memory.recaller import MemoryRecaller
@@ -54,6 +55,7 @@ __all__ = [
     "BeliefCandidate",
     "CaptureReport",
     "CaptureService",
+    "CorrectionProposer",
     "EmbeddingIndex",
     "EpisodeCandidate",
     "HybridRetrieval",

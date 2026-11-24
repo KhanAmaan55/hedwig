@@ -125,6 +125,13 @@ describe("HedwigStream", () => {
     socket.push("initiative.message", { text: "You asked me to find out…", offer_id: "ini_1" });
     expect(said).toEqual(["You asked me to find out…"]);
 
+    const proposed: string[] = [];
+    const stopWatching = stream.watchCorrections((p) => proposed.push(p.proposed_text));
+    socket.push("memory.correction.proposed", { id: "cor_1", proposed_text: "Lisbon." });
+    stopWatching();
+    socket.push("memory.correction.proposed", { id: "cor_2", proposed_text: "Faro." });
+    expect(proposed).toEqual(["Lisbon."]);
+
     socket.close();
     expect(lost).toBe(true);
   });
