@@ -84,7 +84,7 @@ the repository, ahead of any new cognitive capability.
 | 5 | Emotion: six drives, appraisal, decay, mood dynamics, behaviour bindings | **COMPLETE** | `emotion/`; ADR-0019 (excitement/calmness are derived arousal/valence) |
 | 5 | Emotion: never manipulative / dependent | **COMPLETE** (EMO-01) | No mood asks for feeling, guilt or need (64 corners, in the suite); live adversarial eval 120/120 on both models, zero gate |
 | 6 | Curiosity engine | **COMPLETE** | Gap register (offline), gated budgeted exploration, findings feed, deferred surfacing (CUR-01/02/03); active unprompted messages, goal-linked and capped at one a day (INI-01) |
-| 7 | Knowledge: local docs, web search, provenance, citations | **COMPLETE** | Local documents read narrowly with secrets skipped, recalled by words and meaning at CURATED trust with the file named (KNW-01); opt-in web research with citations and egress audit (KNW-02/03). PDFs not yet |
+| 7 | Knowledge: local docs, web search, provenance, citations | **COMPLETE** | Local documents read narrowly with secrets skipped, recalled by words and meaning at CURATED trust with the file named (KNW-01), PDFs and Word files included (KNW-04); opt-in web research with citations and egress audit (KNW-02/03) |
 | 7 | Knowledge: "remember vs. researched vs. uncertain" | **COMPLETE** | user/self memory, `untrusted` research notes in their own prompt block, cite directive, no-web honesty directive (docs/13 §13) |
 | 8 | Avatar: VRM renderer, expression from emotion, blink, saccade, breath, head drift | **COMPLETE** | `frontend/src/panes/avatar/`; `idle.test.ts`, `compose.test.ts`, `test_expression.py` |
 | 8 | Avatar: speaking / thinking / attention states | **COMPLETE** | Thinking from `Brain.busy` and the pane; speaking from the voice (AVA-01, docs/15 §13) |
@@ -363,6 +363,18 @@ or encourage dependence (INV-10).
 As the user, I want to point HEDWIG at a folder of notes and have them retrievable with
 attribution, with secrets skipped.
 
+#### KNW-04 — PDF and Word documents
+**Status:** Done (2026-11-24) · **P2** · **S** · **Depends on:** KNW-01 · **Modules:** `knowledge/formats.py`, `knowledge/documents.py`; dependencies `pypdf` (BSD-3) and `python-docx` (MIT), added with the user's agreement
+
+*As the user, I want my PDFs and Word files read like my notes, cited by page or heading.*
+
+- Extracted into heading-marked text (a `## Page N` per PDF page; Word heading styles; tables as
+  rows), then §14's chunker and everything after it, unchanged.
+- Skipped and reported: encrypted, unreadable, no text layer (no OCR), over 1,000 pages, more text
+  than the limit, a `.docx` that unzips past 50 MB; the secret scan runs on the extracted text.
+- **Tests:** `test_documents_pdf_docx.py` with generated files, hostile ones included; a real
+  1.5 MB PDF read in 0.86 s; live answers from a Word file and a PDF on gemma4.
+
 #### KNW-02 — Web search and fetch, allowlisted and audited
 **Status:** Done (2026-11-20) · **P1** · **L** · **Depends on:** COG-01, COG-02 · **Modules:** `knowledge/fetch.py`
 
@@ -592,7 +604,7 @@ What the product still lacks, highest value first — each a story to write befo
    novelty kept on words (docs/06 §20).
 6. ~~**Voice**~~ — done as VOI-04 (2026-11-24); phoneme timing still waits for a voice with
    alignments.
-7. **Documents** — PDF and `.docx` (a parser dependency, to be asked for first).
+7. ~~**Documents**~~ — done as KNW-04 (2026-11-24), with `pypdf` and `python-docx` as agreed.
 
 ## 6. Development log
 
@@ -891,3 +903,12 @@ tables, or copied rows). Nothing existing was changed or deleted.
   finished at +1.81 s, against ~+2.9 s before. Also fixed a REF-03 inspector test that raced an
   effect on a loaded machine (the one intermittent frontend failure seen earlier). Design in
   [15](15-avatar-controller.md) §14.
+- **KNW-04** PDF and Word documents — `pypdf` and `python-docx`, agreed with the user first.
+  Extraction produces heading-marked text, so passages are cited by page ("tides > Page 2") or
+  by the document's own headings ("plan > Porto trip > Budget") and nothing after the chunker
+  changed. Hostile files tested: encrypted, corrupt, image-only, a zip bomb, a key inside a Word
+  file. A real 1.5 MB licence PDF: 393,641 characters, 337 passages, 0.86 s; pypdf's warnings
+  (a screenful per file) are quieted to errors. Live, gemma4 answered from both kinds of file but
+  did not name the file, as with text notes. Design in [13](13-knowledge-and-tools.md) §15.
+
+With this, every item of §5 "Next up" is done.

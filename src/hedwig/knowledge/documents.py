@@ -6,8 +6,9 @@ most care at its edge, because it reads the user's filesystem. So the edge is na
 * **Only under folders the user added**, read-only. A folder is resolved once; nothing outside
   it is read, symlinks that leave it are skipped, hidden files and folders are skipped, and the
   filesystem root, the home folder itself and HEDWIG's own data folder are refused as roots.
-* **Text formats only**, with a size cap per file and a count cap per folder. A folder over the
-  cap is refused rather than half-read.
+* **Text formats, PDFs and Word files**, with a size cap per file and a count cap per folder. A
+  folder over the cap is refused rather than half-read. PDFs and `.docx` are turned into text by
+  `knowledge.formats` (docs/13 §15) and then treated exactly like a note.
 * **Secrets are skipped and reported**, by name (`.env`, keys) and by content (private keys,
   API tokens). A note containing a key is not indexed at all; nothing of it reaches a prompt.
 
@@ -32,10 +33,14 @@ from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock
 from hedwig.core.ports.scheduler import TaskContext, TaskResult
 from hedwig.core.store import Database
+from hedwig.knowledge.formats import BINARY_SUFFIXES, UnreadableError, extract, mime
 
 logger = get_logger(__name__)
 
 TEXT_SUFFIXES = frozenset({".md", ".markdown", ".txt", ".text", ".rst", ".org", ".html", ".htm"})
+READABLE_SUFFIXES = TEXT_SUFFIXES | BINARY_SUFFIXES
+BINARY_SIZE_FACTOR = 10
+"""A PDF or Word file may be this many times the text cap: most of its bytes are not text."""
 SKIP_DIRS = frozenset({"node_modules", "__pycache__", "venv", "site-packages", "dist", "build"})
 CHUNK_CHARS = 1600
 OVERLAP_CHARS = 200
@@ -200,21 +205,21 @@ class DocumentLibrary:
         files = list(self._walk(root))
         if len(files) > self._max_files:
             raise InvalidRequestError(
-                f"That folder has more than {self._max_files} text files. Choose a narrower one.",
+                f"That folder has more than {self._max_files} readable files. Choose a narrower one.",
                 path=str(root),
             )
         return root
 
     def _walk(self, root: Path) -> Iterator[Path]:
         if root.is_file():
-            if root.suffix.lower() in TEXT_SUFFIXES:
+            if root.suffix.lower() in READABLE_SUFFIXES:
                 yield root
             return
         for path in sorted(root.rglob("*")):
             relative = path.relative_to(root).parts
             if any(part.startswith(".") or part in SKIP_DIRS for part in relative):
                 continue
-            if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
+            if not path.is_file() or path.suffix.lower() not in READABLE_SUFFIXES:
                 continue
             if path.is_symlink() and root not in path.resolve().parents:
                 continue  # never leave the folder the user chose
@@ -243,17 +248,25 @@ class DocumentLibrary:
         if existing is not None and existing["removed_at"] is not None:
             return  # the user excluded it; adding the folder again lifts that
         size = path.stat().st_size
-        if size > self._max_bytes:
+        binary = path.suffix.lower() in BINARY_SUFFIXES
+        if size > self._max_bytes * (BINARY_SIZE_FACTOR if binary else 1):
             report.skipped.append({"path": str(path), "reason": "larger than the size limit"})
             return
         if SECRET_NAMES.search(path.name):
             report.skipped.append({"path": str(path), "reason": "looks like a secrets file"})
             return
         raw = path.read_bytes()
-        if b"\x00" in raw[:4096]:
+        if binary:
+            try:
+                text = extract(path, max_chars=self._max_bytes)
+            except UnreadableError as why:
+                report.skipped.append({"path": str(path), "reason": str(why)})
+                return
+        elif b"\x00" in raw[:4096]:
             report.skipped.append({"path": str(path), "reason": "not text"})
             return
-        text = raw.decode("utf-8", errors="replace")
+        else:
+            text = raw.decode("utf-8", errors="replace")
         if SECRET_CONTENT.search(text):
             report.skipped.append({"path": str(path), "reason": "contains what looks like a key"})
             return
@@ -383,4 +396,6 @@ def _html_text(html: str) -> str:
 
 
 def _mime(path: Path) -> str:
+    if path.suffix.lower() in BINARY_SUFFIXES:
+        return mime(path)
     return {".html": "text/html", ".htm": "text/html"}.get(path.suffix.lower(), "text/plain")

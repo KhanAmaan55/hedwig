@@ -474,11 +474,62 @@ graph LR
 
 | Tradeoff | Gained | Given up | Revisit if |
 |---|---|---|---|
-| Text formats only | No new parser dependency, nothing opaque ingested | PDFs and Word files | Users keep notes in PDF: add `pypdf` (a dependency, asked first) |
+| Text formats only | No new parser dependency, nothing opaque ingested | PDFs and Word files | Users keep notes in PDF: add `pypdf` (a dependency, asked first) — since done, §15 |
 | Refuse rather than half-read big folders | The user knows exactly what HEDWIG reads | A large vault needs a narrower folder | Per-subfolder selection in the UI |
 | Hourly reindex, not a file watcher | No background OS hooks | Up to an hour stale | Watchers become cheap and portable |
 | A whole file set aside on an erased phrase | No half-notes | The rest of that file leaves recall | Users want passage-level exclusions |
 
-**Future improvements.** PDF and `.docx` text extraction; a file watcher; per-document trust
+**Future improvements.** ~~PDF and `.docx` text extraction~~ (§15); a file watcher; per-document trust
 ("this folder is drafts"); citations rendered as links in the app; documents in the export's
 readable part.
+
+---
+
+## 15. PDF and Word documents (KNW-04)
+
+§14 read text formats only and named the next step: PDFs and Word files, with a parser
+dependency asked for first. Asked and agreed: **`pypdf`** (BSD-3, pure Python) and
+**`python-docx`** (MIT; brings `lxml`, BSD). Both only *read*: no script in a PDF runs, no macro in
+a document is looked at, nothing is fetched.
+
+```mermaid
+graph LR
+    W["walk: text suffixes + .pdf + .docx"] --> S{"secret name? file over 10 × the text cap?"}
+    S -->|yes| K["skipped and reported"]
+    S -->|no| X["knowledge.formats.extract(path)<br/><small>.pdf → '## Page N' per page<br/>.docx → '#' per Heading style, tables as rows</small>"]
+    X -->|"encrypted · unreadable · no text (scanned) ·<br/>too much text · a .docx that unzips too big"| K
+    X --> C{"secret in the text?"}
+    C -->|yes| K
+    C -->|no| CH["§14's chunker: heading path, 1,600 chars"]
+    CH --> D[("document · document_chunk")]
+```
+
+* **Into text the chunker already understands.** Extraction produces Markdown-style headings,
+  so everything after it — chunking, the heading path in citations, FTS, embeddings, the prompt
+  block, set aside, purge — is §14 unchanged. A PDF's passages are cited by page ("report >
+  Page 3"); a Word file's by its own headings ("plan > Budget > Travel").
+* **One module, imported lazily** (`knowledge/formats.py`). If either library is missing, those
+  files are skipped with the reason ("PDF reading is not installed") and everything else works.
+* **The same edge as §14, plus the ways a binary file can bite.** File size up to ten times the
+  text cap (PDFs are mostly not text); extracted text up to the text cap, or the file is skipped
+  ("more text than the size limit") rather than half-read; at most 1,000 pages; a `.docx` whose
+  parts would unzip to more than 50 MB is refused before parsing (a zip bomb); encrypted files
+  and files the parser cannot read are skipped and reported; a PDF with no text layer is reported
+  as "no text in it (a scanned PDF?)" — no OCR. The secret scan runs on the extracted text.
+* **Change detection by the file's bytes**, as before, so re-saving a PDF without changes is
+  "unchanged".
+
+| Tradeoff | Gained | Given up | Revisit if |
+|---|---|---|---|
+| pypdf, not a C library (pdfminer/PyMuPDF) | Pure Python, permissive licence, small | Slower on large PDFs; weaker layout | Users index big PDFs or complex layouts |
+| Pages as headings for PDFs | Citations a person can check | No real section structure | A PDF outline (bookmarks) is worth reading |
+| No OCR | No large model or binary | Scanned PDFs are skipped | Users ask; a local OCR is a separate decision |
+| Skip on too much text | Never half-read | A huge PDF is not indexed | A per-file page range in the UI |
+
+**Measured and verified.** A real 1.5 MB, multi-language licence PDF: 393,641 characters, 337
+passages, 0.86 s; three image-only PDFs reported as having no text. pypdf narrates repairs and
+font guesses at WARNING — a screenful for that one file, none of it actionable — so its logger is
+set to errors; what matters reaches the user as a skip reason. Live (`gemma4:e2b`): "How much is
+the hotel in Porto per night?" → "The hotel near Ribeira costs 90 euro a night." from a Word
+file, and "Why are neap tides weaker?" answered from page 2 of a PDF. Neither reply named the
+file, as §14 found for text notes: the model's habit, not retrieval's.

@@ -249,7 +249,7 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig memory list` / `search` / `correct` / `forget` / `restore` | What HEDWIG remembers, under your control |
 | `uv run hedwig corrections` (`--accept` / `--decline`) | Corrections HEDWIG heard in conversation ("no, she lives in Lisbon"), waiting for your yes |
 | `uv run hedwig goals list` / `add` / `done` / `journal` / `note` | What HEDWIG is helping you with over time, and each project's journal |
-| `uv run hedwig docs add` / `list` / `remove` / `forget-folder` | Your notes, recalled and cited (text files; secrets skipped) |
+| `uv run hedwig docs add` / `list` / `remove` / `forget-folder` | Your notes, recalled and cited (text, PDF and Word files; secrets skipped) |
 | `uv run hedwig egress` | Every request HEDWIG made to the internet, and what it sent |
 | `uv run hedwig curiosity gaps` / `ask` / `findings` / `explore` | What HEDWIG wants to find out, and what it found |
 | `uv run hedwig initiative` (`--check`) | What HEDWIG said unprompted, and why it last stayed quiet (`[initiative] enabled = false` turns it off) |
