@@ -253,7 +253,8 @@ before starting the next. Both sides hot reload. Ctrl-C stops everything.
 | `uv run hedwig curiosity gaps` / `ask` / `findings` / `explore` | What HEDWIG wants to find out, and what it found |
 | `uv run hedwig export` | Everything HEDWIG holds, as one readable zip |
 | `uv run hedwig purge --phrase …` | Erase for good, after a preview (`--memory`, `--session`, `--everything`) |
-| `uv run hedwig reflect` / `disputes` / `settle` | Run the nightly consolidation now; settle the conflicts it found |
+| `uv run hedwig reflect` / `disputes` / `settle` | Run the nightly consolidation now (`--weekly`, `--monthly` for the reviews); settle the conflicts it found |
+| `uv run hedwig report [MONTH]` | The monthly report: how HEDWIG changed and why, what it learned, how your goals went |
 | `uv run python scripts/eval_honesty.py` | The honesty gate: adversarial probes in extreme moods, zero violations allowed |
 | `uv run python scripts/eval_recall.py` | Measure recall on the fixed corpus, words only and with meaning |
 | `uv run hedwig doctor` | Check everything HEDWIG needs, with what to do about anything wrong |

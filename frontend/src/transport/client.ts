@@ -19,6 +19,7 @@ import type {
   Goal,
   GoalNote,
   Health,
+  IdentityReport,
   IngestReport,
   MemoryItem,
   MemorySearch,
@@ -183,6 +184,30 @@ export class HedwigClient {
 
   async personality(): Promise<PersonalityReading> {
     return this.request<PersonalityReading>("GET", "/v1/mind/personality", { auth: true });
+  }
+
+  /** The newest monthly identity report, or null before the first (docs/12 §16). */
+  async latestReport(): Promise<IdentityReport | null> {
+    const listing = await this.request<{ reports: { month: string }[] }>(
+      "GET",
+      "/v1/reflection/reports",
+      { auth: true },
+    );
+    const newest = listing.reports[0];
+    if (!newest) return null;
+    return this.request<IdentityReport>(
+      "GET",
+      `/v1/reflection/reports/${encodeURIComponent(newest.month)}`,
+      { auth: true },
+    );
+  }
+
+  async markReportSeen(month: string): Promise<void> {
+    await this.request<unknown>(
+      "POST",
+      `/v1/reflection/reports/${encodeURIComponent(month)}/seen`,
+      { auth: true },
+    );
   }
 
   async personalityHistory(limit = 8): Promise<PersonalityChange[]> {

@@ -18,16 +18,13 @@ from datetime import datetime, time, timedelta
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
-from hedwig.core.errors import ConflictError, HedwigError, InvalidRequestError, NotFoundError
+from hedwig.core.errors import ConflictError, InvalidRequestError, NotFoundError
 from hedwig.core.ids import new_id
 from hedwig.core.logging import fields, get_logger
 from hedwig.core.ports import Clock, ConversationHistory
 from hedwig.core.ports.llm import (
     GenerationRequest,
     GenerationResult,
-    Message,
-    RequestPriority,
-    Role,
 )
 from hedwig.core.ports.memory import (
     Belief,
@@ -49,6 +46,7 @@ from hedwig.memory.maintenance import MemoryMaintenance
 from hedwig.memory.store import SqliteMemoryStore
 from hedwig.personality.feedback import detect_feedback
 from hedwig.personality.instructions import detect_instructions
+from hedwig.reflection.common import ask_structured, user_is_talking
 
 logger = get_logger(__name__)
 
@@ -226,11 +224,7 @@ class NightlyReflection:
         return STAGES[0]
 
     async def _user_is_talking(self) -> bool:
-        recent = await self._history.list_sessions(limit=1)
-        if not recent or recent[0].ended_at is not None:
-            return False
-        last = datetime.fromisoformat(recent[0].last_active_at)
-        return self._clock.now() - last < ACTIVE_WINDOW
+        return await user_is_talking(self._history, self._clock)
 
     # -- stage: summarise finished days ---------------------------------------------
 
@@ -528,25 +522,7 @@ class NightlyReflection:
     async def _ask(
         self, purpose: str, instructions: str, content: str, schema: Mapping[str, Any]
     ) -> dict[str, Any] | None:
-        request = GenerationRequest(
-            messages=(
-                Message(role=Role.SYSTEM, content=instructions),
-                Message(role=Role.USER, content=content),
-            ),
-            purpose=purpose,
-            json_schema=schema,
-            max_tokens=900,
-            temperature=0.0,
-            priority=RequestPriority.BACKGROUND,
-        )
-        try:
-            result = await self._gateway.generate(request)
-        except HedwigError as error:
-            logger.warning(
-                "nightly stage waits for the model", extra=fields(purpose=purpose, error=str(error))
-            )
-            return None
-        return result.parsed if isinstance(result.parsed, dict) else None
+        return await ask_structured(self._gateway, purpose, instructions, content, schema)
 
     def _content_hash(self) -> str:
         rows = self._db.query(

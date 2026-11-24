@@ -596,8 +596,17 @@ def curiosity_dismiss(finding_id: str) -> None:
 
 
 @app.command()
-def reflect() -> None:
+def reflect(
+    weekly: Annotated[bool, typer.Option("--weekly", help="Review last week instead.")] = False,
+    monthly: Annotated[
+        bool, typer.Option("--monthly", help="Make last month's identity report instead.")
+    ] = False,
+) -> None:
     """Run the nightly consolidation now: summarise days, merge and judge beliefs, promote, decay."""
+    if weekly or monthly:
+        done = _call(lambda c: c.run_periodic("weekly" if weekly else "monthly"))
+        print(json.dumps(done, indent=2))
+        return
     result = _call(lambda c: c.reflect())
     assert isinstance(result, dict)
     print(
@@ -796,6 +805,44 @@ def restore(
     print(f"restored {source.name}.")
     if safety:
         print(f"the database it replaced is kept as {safety.name}.")
+
+
+@app.command()
+def report(
+    month: Annotated[str | None, typer.Argument(help="YYYY-MM; the newest if omitted.")] = None,
+) -> None:
+    """How HEDWIG changed this month, and why — the monthly identity report."""
+    listing = _call(lambda c: c.reports())
+    assert isinstance(listing, list)
+    if not listing:
+        print(
+            "no report yet: the first is made on the 1st of next month (or hedwig reflect --monthly)"
+        )
+        return
+    chosen = month or str(listing[0]["month"])
+    body = _call(lambda c: c.report(chosen))
+    assert isinstance(body, dict)
+    print(f"# {chosen}\n")
+    print(body["summary"] or "(not enough conversation to summarise)")
+    print("\nHow I changed:")
+    for change in body["personality"] or [
+        {"trait": "nothing", "delta": 0, "source": "", "rationale": ""}
+    ]:
+        mark = " (undone)" if change.get("reverted_at") else ""
+        print(
+            f"  {change['trait']} {change['delta']:+.3f} {change['source']}{mark} {change.get('rationale') or ''}"
+        )
+    rel, mem, goals = body["relationship"], body["memory"], body["goals"]
+    print(f"\nWe talked {rel.get('conversations', 0)} times ({rel.get('turns', 0)} turns).")
+    print(
+        f"Memories: {mem['episodes_formed']} episodes and {mem['beliefs_formed']} beliefs formed, "
+        f"{mem['merged']} merged, {mem['faded']} faded, {mem['forgotten_by_you']} forgotten by you."
+    )
+    for label in ("finished", "dropped", "started"):
+        for goal in goals[label]:
+            print(f"  goal {label}: {goal}")
+    for reaction in body["reactions"]:
+        print(f"  you wanted {reaction['wanted']} {reaction['trait']} ({reaction['times']}x)")
 
 
 @app.command()

@@ -116,7 +116,8 @@ of what exists in code. Update it as each milestone lands.
 | Curiosity: gap register, gated exploration, findings feed, deferred surfacing | **Implemented** (CUR-01/02/03, [11](11-curiosity-engine.md) §13) | `src/hedwig/curiosity/` |
 | Export everything; purge with derivation-following and file-level verification | **Implemented** (SEC-02, [21](21-security-privacy-ethics.md) §7.4, [ADR-0024](adr/0024-purge-is-one-classified-sweep.md)) | `src/hedwig/privacy/`, inspector *Data* tab |
 | Reflection T2 nightly: day summaries, belief merge and promotion, judged conflicts put to the user | **Implemented** (REF-02a/b/c, [12](12-reflection-engine.md) §15) | `src/hedwig/reflection/nightly.py`, `frontend/src/panes/inspector/` |
-| Reflection T2 procedures and drift; T3–T4 | Not started — [29](29-backlog.md) | — |
+| Reflection T3 weekly review and T4 monthly identity report | **Implemented** (REF-03, [12](12-reflection-engine.md) §16) | `src/hedwig/reflection/periodic.py`, `frontend/src/panes/inspector/` |
+| Reflection T2 procedures; T3 entity resolution | Not started — [29](29-backlog.md) | — |
 
 The milestone numbering above follows the phases in [22-roadmap.md](22-roadmap.md);
 Milestone 1 corresponds to Phase 0.

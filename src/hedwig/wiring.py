@@ -75,7 +75,7 @@ from hedwig.memory import (
 )
 from hedwig.personality import DriftLimits, PersonalityEngine, PersonalityStore, PersonaMindReader
 from hedwig.privacy import Exporter, Purger
-from hedwig.reflection import NightlyReflection, SessionReflector
+from hedwig.reflection import NightlyReflection, PeriodicReflection, SessionReflector
 from hedwig.sessions import SqliteSessionStore
 from hedwig.speech import PiperSpeaker, WhisperListener
 from hedwig.tools import (
@@ -134,6 +134,7 @@ class Container:
     speaker: Speaker
     listener: Listener
     nightly: NightlyReflection
+    periodic: PeriodicReflection
     exporter: Exporter
     purger: Purger
     library: DocumentLibrary
@@ -544,6 +545,39 @@ def build_container(
             critical=False,
         )
 
+    # Weekly review and monthly identity report (REF-03, docs/12 §16). Daily, an hour after the
+    # nightly run, doing work only when last week's or month's is not done: a review that
+    # yielded, or a laptop that slept, is caught up the next day.
+    periodic = PeriodicReflection(
+        database=database,
+        store=memory,
+        capture=capture,
+        goals=goals,
+        gateway=llm,
+        history=sessions,
+        clock=clock,
+        timezone=config.runtime.timezone,
+    )
+    after_nightly = (config.memory.maintenance_hour + 1) % 24
+    for name, handler, description in (
+        (
+            "reflection.weekly",
+            periodic.weekly_task,
+            "Review last week: themes, stale goals, health.",
+        ),
+        ("reflection.monthly", periodic.monthly_task, "Last month's summary and identity report."),
+    ):
+        scheduler.register(
+            TaskSpec(
+                name=name,
+                handler=handler,
+                trigger=DailyTrigger(hour=after_nightly),
+                priority=Priority.MAINTENANCE,
+                description=description,
+                max_runtime_seconds=900.0,
+            )
+        )
+
     # Nightly backups, checked before they are kept (SEC-03, docs/05 §7).
     backups = Backups(database, config.runtime.backups_dir, clock=clock)
     scheduler.register(
@@ -627,6 +661,7 @@ def build_container(
         speaker=speaker,
         listener=listener,
         nightly=nightly,
+        periodic=periodic,
         exporter=exporter,
         purger=purger,
         library=library,

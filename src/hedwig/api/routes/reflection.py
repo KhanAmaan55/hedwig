@@ -39,3 +39,29 @@ async def disputes(container: ContainerDep) -> dict[str, Any]:
 @router.post("/disputes/{pair}/resolve", summary="Say which is true")
 async def resolve(pair: str, body: Resolution, container: ContainerDep) -> dict[str, Any]:
     return await container.nightly.resolve(pair, body.choice)
+
+
+@router.post("/weekly/run", summary="Review last week now (once per week)")
+async def weekly(container: ContainerDep) -> dict[str, Any]:
+    return await container.periodic.weekly()
+
+
+@router.post("/monthly/run", summary="Make last month's identity report now (once per month)")
+async def monthly(container: ContainerDep) -> dict[str, Any]:
+    return await container.periodic.monthly()
+
+
+@router.get("/reports", summary="Monthly identity reports, newest first")
+async def reports(container: ContainerDep) -> dict[str, Any]:
+    return {"reports": container.periodic.reports()}
+
+
+@router.get("/reports/{month}", summary="One month's identity report, as things stand now")
+async def report(month: str, container: ContainerDep) -> dict[str, Any]:
+    return await container.periodic.report(month)
+
+
+@router.post("/reports/{month}/seen", summary="Mark a report as read")
+async def seen(month: str, container: ContainerDep) -> dict[str, bool]:
+    container.periodic.mark_seen(month)
+    return {"seen": True}

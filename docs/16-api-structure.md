@@ -120,7 +120,9 @@ accumulates errors forever, and the user is the highest-trust source available.
 | `POST` | `/reflection/trigger?tier=` | Manual trigger (dev and impatience) (built as `POST /reflection/run` — REF-02) |
 | `GET` | `/reflection/disputes` | Beliefs the nightly run thinks repeat or conflict, waiting for the user (REF-02) |
 | `POST` | `/reflection/disputes/{pair}/resolve` | `{"choice": "first" \| "second" \| "both" \| "same"}` — the user settles one (REF-02) |
-| `GET` | `/reflection/report/latest` | The T4 identity report |
+| `GET` | `/reflection/report/latest` | The T4 identity report (built as `GET /reflection/reports` → `{"reports": [...]}` newest first, and `GET /reflection/reports/{month}` — REF-03) |
+| `POST` | `/reflection/reports/{month}/seen` | Mark a report seen (REF-03) |
+| `POST` | `/reflection/weekly/run`, `/reflection/monthly/run` | Run the weekly review or monthly report now; once per period (REF-03) |
 
 ### 4.5 System and introspection
 

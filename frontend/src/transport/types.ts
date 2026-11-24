@@ -253,6 +253,31 @@ export interface PersonalityReading {
   version: number;
 }
 
+/** The monthly identity report, assembled from what is true now (docs/12 §16). */
+export interface IdentityReport {
+  month: string;
+  created_at: string;
+  seen_at: string | null;
+  summary: string | null;
+  personality: PersonalityChange[];
+  relationship: {
+    familiarity?: number;
+    trust?: number;
+    turns: number;
+    conversations: number;
+  };
+  memory: {
+    episodes_formed: number;
+    beliefs_formed: number;
+    merged: number;
+    faded: number;
+    forgotten_by_you: number;
+    remembered_now: number;
+  };
+  goals: { finished: string[]; dropped: string[]; started: string[] };
+  reactions: { trait: string; wanted: "more" | "less"; times: number }[];
+}
+
 /** One change to a trait, and why (docs/10 §5.5, §13). */
 export interface PersonalityChange {
   id: string;
