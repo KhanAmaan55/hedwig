@@ -82,6 +82,7 @@ of what exists in code. Update it as each milestone lands.
 | Nightly checked backups, offline restore, `hedwig doctor` | **Implemented** (SEC-03, [05](05-data-model-and-database.md) §7) | `src/hedwig/core/store/backups.py`, `src/hedwig/doctor.py` |
 | Project memory: goals with a journal; finished projects recalled when named | **Implemented** (MEM-06, [08](08-state-management.md) §13, [ADR-0025](adr/0025-projects-are-goals-with-a-journal.md)) | `src/hedwig/goals/`, Goals tab *Journal* |
 | Local documents: notes recalled with the file named, secrets skipped | **Implemented** (KNW-01, [13](13-knowledge-and-tools.md) §14) | `src/hedwig/knowledge/documents.py`, Data tab *Your documents* |
+| PDF and Word documents, cited by page or heading | **Implemented** (KNW-04, [13](13-knowledge-and-tools.md) §15) | `src/hedwig/knowledge/formats.py` |
 | Personality drift from the user's reactions, guarded and revertable | **Implemented** (PER-02, [10](10-personality-engine.md) §13) | `src/hedwig/personality/feedback.py`, Mind tab *Recent changes* |
 | Memory correction: the user's word replaces, the old version stays as history | **Implemented** (MEM-03, [06](06-memory-architecture.md) §18) | `src/hedwig/memory/store.py`, inspector *Correct* |
 | Corrections in conversation: "No, she lives in Lisbon" proposes a correction the user confirms | **Implemented** (MEM-07, [06](06-memory-architecture.md) §19) | `src/hedwig/memory/corrections.py`, conversation pane |
